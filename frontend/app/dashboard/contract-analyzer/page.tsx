@@ -3,7 +3,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 
-const MermaidDiagram = dynamic(() => import('@/components/MermaidDiagram'), { ssr: false });
+const ContractFlowDiagram = dynamic(() => import('@/components/ContractFlowDiagram'), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -472,7 +472,7 @@ export default function ContractAnalyzerPage() {
               </div>
             )}
 
-            {/* ── Tab: Diagram */}
+            {/* ── Tab: Diagram (Interactive UML-style) */}
             {activeTab === 'diagram' && (
               <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between mb-2">
@@ -487,10 +487,10 @@ export default function ContractAnalyzerPage() {
                   </button>
                 </div>
                 <p className="text-xs font-mono text-text-tertiary">
-                  Nodes marked ⚠ indicate vulnerability points. Follow red paths to trace attack vectors.
+                  Drag nodes to rearrange · Scroll to zoom · Red paths = attack vectors
                 </p>
-                <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-4 overflow-auto">
-                  <MermaidDiagram chart={result.mermaid_diagram} />
+                <div className="rounded-lg border border-[color:var(--color-border)] bg-[#0a0a14] overflow-hidden">
+                  <ContractFlowDiagram mermaidChart={result.mermaid_diagram} />
                 </div>
                 {/* Raw mermaid source toggle */}
                 <details className="group">
