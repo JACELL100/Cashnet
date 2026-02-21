@@ -349,7 +349,7 @@ export default function LiquidityPoolPage() {
           { label: `${pool?.token_a ?? 'PAL'} Reserve`, value: pool ? fmtToken(pool.reserve_a)   : '—', color: '#00d4ff' },
           { label: `${pool?.token_b ?? 'BAD'} Reserve`, value: pool ? fmtToken(pool.reserve_b)   : '—', color: '#22c55e' },
           { label: 'Spot Price',               value: pool ? `${fmt(pool.price_a_per_b, 4)} PAL/BAD` : '—', color: '#f0a500' },
-          { label: 'Fee',                      value: pool ? `${pool.fee_pct.toFixed(2)}%`        : '—', color: '#ff3860' },
+          { label: 'Fee',                      value: pool ? `${(pool.fee_pct ?? 0).toFixed(2)}%`    : '—', color: '#ff3860' },
         ].map((k) => (
           <div key={k.label} className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-4">
             <div className="text-xs font-mono text-text-tertiary mb-1">{k.label}</div>
