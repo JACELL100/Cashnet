@@ -4,24 +4,17 @@ echo Rust-eze Simulation Lab - Backend Setup
 echo ========================================
 echo.
 
-echo [1/5] Creating virtual environment...
+echo [1/3] Activating root virtual environment...
 cd ..
-python -m venv venv
+call ..\venv\Scripts\activate.bat 2>nul
 if errorlevel 1 (
-    echo ERROR: Failed to create virtual environment
-    pause
-    exit /b 1
+    call ..\.venv\Scripts\activate.bat 2>nul
 )
-echo ✓ Virtual environment created
-echo.
-
-echo [2/5] Activating virtual environment...
-call venv\Scripts\activate.bat
 echo ✓ Virtual environment activated
 echo.
 
-echo [3/5] Installing dependencies...
-pip install -r requirements.txt
+echo [2/3] Installing dependencies...
+pip install -r requirements.txt -q
 if errorlevel 1 (
     echo ERROR: Failed to install dependencies
     pause
@@ -30,16 +23,7 @@ if errorlevel 1 (
 echo ✓ Dependencies installed
 echo.
 
-echo [4/5] Checking environment variables...
-if not exist "..\\.env.local" (
-    echo WARNING: .env.local not found in parent directory
-    echo Please ensure the .env.local file exists with proper configuration
-    pause
-)
-echo ✓ Environment check complete
-echo.
-
-echo [5/5] Starting FastAPI server...
+echo [3/3] Starting FastAPI server...
 echo.
 echo ========================================
 echo Server starting at http://localhost:8000
@@ -47,6 +31,6 @@ echo API Docs: http://localhost:8000/docs
 echo ========================================
 echo.
 
-python main.py
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 pause

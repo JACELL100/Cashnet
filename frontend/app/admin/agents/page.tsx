@@ -303,21 +303,21 @@ export default function AgentsPage() {
                   {agent.name}
                 </h3>
                 <p className="text-[10px] text-text-tertiary font-mono truncate">
-                  {agent.type.replace('_', ' ')}
+                  {(agent.type ?? '').replace(/_/g, ' ')}
                 </p>
               </div>
             </div>
             <div className="flex items-center justify-between">
               <Badge variant={AGENT_RISK_BADGE[agent.risk] || 'medium'}>
-                {agent.risk.toUpperCase()}
+                {(agent.risk ?? '').toUpperCase()}
               </Badge>
               <span
                 className={`text-xs font-mono font-bold ${
                   agent.pnl >= 0 ? 'text-success' : 'text-danger'
                 }`}
               >
-                {agent.pnl >= 0 ? '+' : ''}
-                {agent.pnl.toFixed(0)}
+                {(agent.pnl ?? 0) >= 0 ? '+' : ''}
+                {(agent.pnl ?? 0).toFixed(0)}
               </span>
             </div>
             <label className="flex items-center gap-2 text-xs cursor-pointer">
@@ -516,51 +516,51 @@ export default function AgentsPage() {
               },
               {
                 header: 'Type',
-                accessor: (row: SimAgent) => row.type.replace('_', ' '),
+                accessor: (row: SimAgent) => (row.type ?? '').replace(/_/g, ' '),
                 className: 'font-mono text-xs capitalize',
               },
               {
                 header: 'Capital',
-                accessor: (row: SimAgent) => `$${(row.capital / 1000).toFixed(1)}k`,
+                accessor: (row: SimAgent) => `$${((row.capital ?? 0) / 1000).toFixed(1)}k`,
                 className: 'text-xs',
               },
               {
                 header: 'Value',
-                accessor: (row: SimAgent) => `$${(row.current_value / 1000).toFixed(1)}k`,
+                accessor: (row: SimAgent) => `$${((row.current_value ?? 0) / 1000).toFixed(1)}k`,
                 className: 'text-xs',
               },
               {
                 header: 'PnL',
                 accessor: (row: SimAgent) => (
-                  <span className={row.pnl >= 0 ? 'text-success' : 'text-danger'}>
-                    {row.pnl >= 0 ? '+' : ''}
-                    {row.pnl.toFixed(0)}
+                  <span className={(row.pnl ?? 0) >= 0 ? 'text-success' : 'text-danger'}>
+                    {(row.pnl ?? 0) >= 0 ? '+' : ''}
+                    {(row.pnl ?? 0).toFixed(0)}
                   </span>
                 ),
                 className: 'font-mono text-xs font-bold',
               },
               {
                 header: 'Trades',
-                accessor: (row: SimAgent) => String(row.stats.trades_count),
+                accessor: (row: SimAgent) => String(row.stats?.trades_count ?? 0),
                 className: 'text-xs',
               },
               {
                 header: 'Win %',
                 accessor: (row: SimAgent) =>
-                  `${(row.win_rate * 100).toFixed(0)}%`,
+                  `${((row.win_rate ?? 0) * 100).toFixed(0)}%`,
                 className: 'text-xs',
               },
               {
                 header: 'Volume',
                 accessor: (row: SimAgent) =>
-                  `$${(row.stats.total_volume / 1000).toFixed(1)}k`,
+                  `$${((row.stats?.total_volume ?? 0) / 1000).toFixed(1)}k`,
                 className: 'text-xs',
               },
               {
                 header: 'Status',
                 accessor: (row: SimAgent) => (
                   <Badge variant={row.active ? 'success' : 'medium'}>
-                    {row.state.toUpperCase()}
+                    {(row.state ?? '').toUpperCase()}
                   </Badge>
                 ),
               },

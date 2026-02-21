@@ -2,14 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const loginWithGoogleCredential = useAuthStore((s) => s.loginWithGoogleCredential);
   const addToast = useUIStore((s) => s.addToast);
   const [loading, setLoading] = useState(false);
@@ -22,14 +20,8 @@ export default function AdminLoginPage() {
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
       const { role } = await loginWithGoogleCredential(idToken);
-      if (role !== 'ADMIN') {
-        useAuthStore.getState().logout();
-        setAccessDenied(true);
-        setLoading(false);
-        return;
-      }
-      addToast({ message: 'Welcome, Admin', severity: 'success' });
-      router.push('/admin');
+      addToast({ message: `Welcome, ${role}`, severity: 'success' });
+      window.location.href = '/admin';
     } catch (err: any) {
       setLoading(false);
       if (err?.code === 'access_denied') {

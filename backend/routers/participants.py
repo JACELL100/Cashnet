@@ -63,6 +63,26 @@ async def get_participant(wallet: str, db: Session = Depends(get_db)):
     return participant
 
 
+@router.put("/{wallet}/score")
+async def update_participant_score(wallet: str, payload: dict, db: Session = Depends(get_db)):
+    """Update credit score for a participant (300-850)"""
+    participant = db.query(Participant).filter(
+        Participant.wallet == wallet
+    ).first()
+
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    score = payload.get("score")
+    if score is None or not isinstance(score, int) or not (300 <= score <= 850):
+        raise HTTPException(status_code=422, detail="Score must be an integer between 300 and 850")
+
+    participant.score = score
+    db.commit()
+    db.refresh(participant)
+    return {"wallet": wallet, "score": participant.score}
+
+
 @router.delete("/{wallet}")
 async def delete_participant(wallet: str, db: Session = Depends(get_db)):
     """Delete a participant"""

@@ -45,3 +45,21 @@ def init_db():
     import models  # Import here to avoid circular imports
     Base.metadata.create_all(bind=engine)
     print("✅ Database tables created successfully")
+
+    # Safe column migrations — add columns that may be missing from older DB instances
+    _safe_add_columns()
+
+
+def _safe_add_columns():
+    """Add any columns that were added to models after initial DB creation."""
+    migrations = [
+        "ALTER TABLE adminandauditor ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE",
+        "ALTER TABLE borrowers ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(__import__('sqlalchemy').text(sql))
+                conn.commit()
+            except Exception:
+                conn.rollback()  # Column already exists or other benign error
