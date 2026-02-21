@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import KPICard from '@/components/KPICard';
 import Terminal from '@/components/Terminal';
 import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
 import { useSimulationStore } from '@/store/simulationStore';
 import { useUIStore } from '@/store/uiStore';
-import { generateAgents, generateActivityFeed } from '@/lib/mockData';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface DashboardKPI {
   label: string;
@@ -16,18 +17,41 @@ interface DashboardKPI {
   color: 'accent' | 'danger' | 'warn' | 'success';
 }
 
+interface AgentInfo {
+  id: string;
+  name: string;
+  type: string;
+  active: boolean;
+  risk: string;
+  capital: number;
+  pnl: number;
+  winRate: number;
+}
+
+interface HealthItem {
+  name: string;
+  health: number;
+}
+
 export default function DashboardPage() {
   const isRunning = useSimulationStore((state) => state.isRunning);
-  const simTime = useSimulationStore((state) => state.simTime);
   const crashed = useSimulationStore((state) => state.crashed);
   const setCascadeTriggered = useSimulationStore((state) => state.setCascadeTriggered);
   const addToast = useUIStore((state) => state.addToast);
 
   const [kpis, setKpis] = useState<DashboardKPI[]>([
-    { label: 'Total Value Locked', value: 125000000, unit: '$', color: 'accent' },
-    { label: 'Stress Level', value: 42, unit: '%', color: 'warn' },
-    { label: 'Liquidation Risk', value: 3.2, unit: '%', color: 'danger' },
-    { label: 'Active Agents', value: 5, unit: '', color: 'success' },
+    { label: 'Total Value Locked', value: 0, unit: '$', color: 'accent' },
+    { label: 'Stress Level', value: 0, unit: '%', color: 'warn' },
+    { label: 'Liquidation Risk', value: 0, unit: '%', color: 'danger' },
+    { label: 'Active Agents', value: 0, unit: '', color: 'success' },
+  ]);
+
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [healthMatrix, setHealthMatrix] = useState<HealthItem[]>([
+    { name: 'AMM', health: 0 },
+    { name: 'Lending', health: 0 },
+    { name: 'Oracle', health: 0 },
+    { name: 'Systemic', health: 0 },
   ]);
 
   const [terminalLines, setTerminalLines] = useState([
@@ -35,36 +59,117 @@ export default function DashboardPage() {
     { text: 'Waiting for simulation start...', type: 'info' as const, timestamp: Date.now() },
   ]);
 
-  const agents = generateAgents();
-  const activityFeed = generateActivityFeed();
-
-  // Simulation loop
-  useEffect(() => {
-    if (!isRunning) return;
-
-    const interval = setInterval(() => {
-      setKpis((prev) =>
-        prev.map((kpi) => ({
-          ...kpi,
-          value: kpi.value * (1 + (Math.random() - 0.5) * 0.02),
-        }))
-      );
-
-      const agentActions = [
-        { text: `Agent ${Math.floor(Math.random() * 6)} executed trade`, type: 'success' as const },
-        { text: `Price update: ETH/USD $${(Math.random() * 4000 + 2000).toFixed(2)}`, type: 'info' as const },
-        { text: `Pool rebalance triggered`, type: 'info' as const },
-      ];
-
-      const randomAction = agentActions[Math.floor(Math.random() * agentActions.length)];
-      setTerminalLines((prev) => [
-        ...prev.slice(-19),
-        { ...randomAction, timestamp: Date.now() },
+  // Fetch simulation data from backend
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [simRes, agentsRes, threatsRes, lendingRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/simulation/status`),
+        fetch(`${API_URL}/api/agents`),
+        fetch(`${API_URL}/api/threats/scores`),
+        fetch(`${API_URL}/api/lending/metrics`),
       ]);
-    }, 2000);
 
+      // --- Simulation status → KPIs ---
+      if (simRes.status === 'fulfilled' && simRes.value.ok) {
+        const sim = await simRes.value.json();
+        const d = sim.data ?? {};
+        const pool = d.pool ?? {};
+        const tvl = (pool.reserve_a ?? 0) + (pool.reserve_b ?? 0);
+        const activeCount = d.active_agents ?? d.agents?.length ?? 0;
+
+        setKpis((prev) => [
+          { ...prev[0], value: tvl },
+          { ...prev[1], value: d.utilization ?? prev[1].value },
+          { ...prev[2], value: prev[2].value },
+          { ...prev[3], value: activeCount },
+        ]);
+      }
+
+      // --- Lending metrics → Liquidation risk KPI ---
+      if (lendingRes.status === 'fulfilled' && lendingRes.value.ok) {
+        const lending = await lendingRes.value.json();
+        const ld = lending.data ?? {};
+        setKpis((prev) => [
+          prev[0],
+          { ...prev[1], value: ld.utilization_rate ?? prev[1].value },
+          { ...prev[2], value: ld.at_risk_count ?? prev[2].value },
+          prev[3],
+        ]);
+      }
+
+      // --- Agents ---
+      if (agentsRes.status === 'fulfilled' && agentsRes.value.ok) {
+        const agentsJson = await agentsRes.value.json();
+        const agentList = (agentsJson.data ?? []).map((a: any) => ({
+          id: a.id ?? a.wallet ?? '',
+          name: a.name ?? a.role ?? a.id ?? 'Agent',
+          type: a.type ?? a.role ?? 'unknown',
+          active: a.active ?? a.status === 'active',
+          risk: a.risk_level ?? (a.pnl < 0 ? 'high' : a.pnl > 500 ? 'low' : 'medium'),
+          capital: a.capital ?? 0,
+          pnl: a.pnl ?? 0,
+          winRate: a.win_rate ?? a.winRate ?? 0,
+        }));
+        setAgents(agentList);
+      }
+
+      // --- Threat scores → Health Matrix ---
+      if (threatsRes.status === 'fulfilled' && threatsRes.value.ok) {
+        const threats = await threatsRes.value.json();
+        const scores = threats.data ?? [];
+        const map: Record<string, string> = {
+          'MEV': 'AMM',
+          'Flash Loan': 'Oracle',
+          'Liquidity': 'AMM',
+          'Cascade': 'Lending',
+          'Price': 'Oracle',
+          'Systemic': 'Systemic',
+        };
+        const agg: Record<string, number[]> = {};
+        for (const s of scores) {
+          const bucket = map[s.axis] ?? s.axis;
+          if (!agg[bucket]) agg[bucket] = [];
+          agg[bucket].push(100 - (s.score ?? 0) * 10);
+        }
+        setHealthMatrix([
+          { name: 'AMM', health: Math.round(avg(agg['AMM'])) },
+          { name: 'Lending', health: Math.round(avg(agg['Lending'])) },
+          { name: 'Oracle', health: Math.round(avg(agg['Oracle'])) },
+          { name: 'Systemic', health: Math.round(avg(agg['Systemic'])) },
+        ]);
+      }
+    } catch {
+      /* silently retry on next tick */
+    }
+  }, []);
+
+  // Fetch activity feed for terminal
+  const fetchActivity = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/sim/activity-feed?limit=5`);
+      if (!res.ok) return;
+      const json = await res.json();
+      const items = json.data ?? [];
+      if (items.length > 0) {
+        const newLines = items.map((a: any) => ({
+          text: a.description ?? a.message ?? JSON.stringify(a),
+          type: (a.type === 'fraud' || a.type === 'alert') ? 'error' as const : 'info' as const,
+          timestamp: a.timestamp ? new Date(a.timestamp).getTime() : Date.now(),
+        }));
+        setTerminalLines((prev) => [...prev, ...newLines].slice(-20));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Initial load + polling
+  useEffect(() => {
+    fetchDashboardData();
+    const interval = setInterval(() => {
+      fetchDashboardData();
+      if (isRunning) fetchActivity();
+    }, 3000);
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [fetchDashboardData, fetchActivity, isRunning]);
 
   const handleCrashTest = () => {
     setCascadeTriggered(true);
@@ -93,8 +198,8 @@ export default function DashboardPage() {
             {crashed
               ? 'System crashed - Critical status'
               : isRunning
-              ? 'Simulation running - Real-time monitoring'
-              : 'Idle - Ready to start'}
+                ? 'Simulation running - Real-time monitoring'
+                : 'Idle - Ready to start'}
           </p>
         </div>
         <button
@@ -125,12 +230,7 @@ export default function DashboardPage() {
           Protocol Health Matrix
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { name: 'AMM', health: 85 },
-            { name: 'Lending', health: 72 },
-            { name: 'Oracle', health: 98 },
-            { name: 'Stablecoin', health: 64 },
-          ].map((item) => (
+          {healthMatrix.map((item) => (
             <div key={item.name} className="flex flex-col">
               <span className="text-xs font-mono text-text-tertiary uppercase mb-2">
                 {item.name}
@@ -138,13 +238,12 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <div className="flex-1 h-2 bg-[color:var(--color-bg-accent)] rounded overflow-hidden">
                   <div
-                    className={`h-full transition-all ${
-                      item.health > 80
-                        ? 'bg-success'
-                        : item.health > 50
+                    className={`h-full transition-all ${item.health > 80
+                      ? 'bg-success'
+                      : item.health > 50
                         ? 'bg-warn'
                         : 'bg-danger'
-                    }`}
+                      }`}
                     style={{ width: `${item.health}%` }}
                   />
                 </div>
@@ -174,6 +273,11 @@ export default function DashboardPage() {
             Active Agents
           </h3>
           <div className="space-y-2">
+            {agents.length === 0 && (
+              <div className="text-xs font-mono text-text-tertiary text-center py-4">
+                [no agents — start simulation]
+              </div>
+            )}
             {agents
               .filter((a) => a.active)
               .map((agent) => (
@@ -189,7 +293,7 @@ export default function DashboardPage() {
                       {agent.type}
                     </div>
                   </div>
-                  <Badge variant={agent.risk === 'high' ? 'danger' : agent.risk === 'medium' ? 'warn' : 'success'}>
+                  <Badge variant={agent.risk === 'high' ? 'critical' : agent.risk === 'medium' ? 'high' : 'success'}>
                     {agent.risk.toUpperCase()}
                   </Badge>
                 </div>
@@ -207,17 +311,24 @@ export default function DashboardPage() {
           columns={[
             { header: 'Agent', accessor: 'name' },
             { header: 'Type', accessor: 'type' },
-            { header: 'Capital', accessor: (row) => `$${(row.capital / 1000).toFixed(0)}k` },
-            { header: 'PnL', accessor: (row) => (
-              <span className={row.pnl >= 0 ? 'text-success' : 'text-danger'}>
-                {row.pnl >= 0 ? '+' : ''}{row.pnl}
-              </span>
-            ) },
-            { header: 'Win Rate', accessor: (row) => `${(row.winRate * 100).toFixed(0)}%` },
+            { header: 'Capital', accessor: (row: any) => `$${(row.capital / 1000).toFixed(0)}k` },
+            {
+              header: 'PnL', accessor: (row: any) => (
+                <span className={row.pnl >= 0 ? 'text-success' : 'text-danger'}>
+                  {row.pnl >= 0 ? '+' : ''}{row.pnl.toFixed(2)}
+                </span>
+              )
+            },
+            { header: 'Win Rate', accessor: (row: any) => `${(row.winRate * 100).toFixed(0)}%` },
           ]}
           data={agents}
         />
       </div>
     </div>
   );
+}
+
+function avg(arr?: number[]): number {
+  if (!arr || arr.length === 0) return 50;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }

@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
-import { useLendingStore } from '@/store/lendingStore';
+import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useSimulationStore } from '@/store/simulationStore';
 import { useUIStore } from '@/store/uiStore';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function LendingPage() {
   const borrowers = useLendingStore((state) => state.borrowers);
@@ -15,14 +17,68 @@ export default function LendingPage() {
   const cascadeEvents = useLendingStore((state) => state.cascadeEvents);
   const addCascadeEvent = useLendingStore((state) => state.addCascadeEvent);
   const updateBorrower = useLendingStore((state) => state.updateBorrower);
-  
+  const setBorrowers = useLendingStore((state) => state.setBorrowers);
+  const setMetrics = useLendingStore((state) => state.setMetrics);
+
   const isRunning = useSimulationStore((state) => state.isRunning);
   const setCascadeTriggered = useSimulationStore((state) => state.setCascadeTriggered);
   const addToast = useUIStore((state) => state.addToast);
 
   const [configOpen, setConfigOpen] = useState(false);
 
-  const handleLiquidate = (borrowerId: string) => {
+  // Fetch borrowers + metrics from API
+  const fetchLendingData = useCallback(async () => {
+    try {
+      const [borrowersRes, metricsRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/lending/borrowers`),
+        fetch(`${API_URL}/api/lending/metrics`),
+      ]);
+
+      if (borrowersRes.status === 'fulfilled' && borrowersRes.value.ok) {
+        const json = await borrowersRes.value.json();
+        const items = (json.data ?? []).map((b: any) => ({
+          id: b.id ?? b.wallet,
+          wallet: b.wallet,
+          collateral: b.collateral_value ?? 0,
+          borrowed: b.debt_value ?? 0,
+          healthFactor: b.health_factor ?? 999,
+          liquidationPrice: b.collateral_value && b.debt_value
+            ? Math.round(b.debt_value * 1.5 / (b.collateral_value / 2000))
+            : 0,
+          status: b.at_risk
+            ? 'danger' as const
+            : b.health_factor < 1.8
+              ? 'warning' as const
+              : 'healthy' as const,
+        }));
+        setBorrowers(items);
+      }
+
+      if (metricsRes.status === 'fulfilled' && metricsRes.value.ok) {
+        const json = await metricsRes.value.json();
+        const m = json.data ?? {};
+        setMetrics({
+          totalDeposits: m.total_collateral ?? 0,
+          totalBorrows: m.total_debt ?? 0,
+          utilizationRate: (m.utilization_rate ?? 0) / 100, // API returns %, store uses 0-1
+        });
+      }
+    } catch { /* retry on next tick */ }
+  }, [setBorrowers, setMetrics]);
+
+  // Initial load + polling
+  useEffect(() => {
+    fetchLendingData();
+    const interval = setInterval(fetchLendingData, 4000);
+    return () => clearInterval(interval);
+  }, [fetchLendingData]);
+
+  const handleLiquidate = async (borrowerId: string) => {
+    try {
+      await fetch(`${API_URL}/api/lending/liquidate?borrower_id=${borrowerId}`, {
+        method: 'POST',
+      });
+    } catch { /* ignore */ }
     updateBorrower(borrowerId, { status: 'danger', healthFactor: 0.8 });
     addCascadeEvent({
       timestamp: Date.now(),
@@ -96,7 +152,7 @@ export default function LendingPage() {
             </div>
             <div className="space-y-2">
               <label className="form-label text-xs">Borrowing Cap</label>
-              <input type="number" className="form-input text-xs" value="10000000" />
+              <input type="number" className="form-input text-xs" defaultValue="10000000" />
             </div>
           </div>
         </div>
@@ -107,13 +163,13 @@ export default function LendingPage() {
         <div className="card">
           <div className="text-xs text-text-tertiary font-mono uppercase mb-2">Total Deposits</div>
           <div className="text-2xl font-bold font-mono text-accent">
-            ${(totalDeposits / 1000000).toFixed(1)}M
+            ${totalDeposits >= 1000000 ? (totalDeposits / 1000000).toFixed(1) + 'M' : (totalDeposits / 1000).toFixed(0) + 'k'}
           </div>
         </div>
         <div className="card">
           <div className="text-xs text-text-tertiary font-mono uppercase mb-2">Total Borrows</div>
           <div className="text-2xl font-bold font-mono text-warn">
-            ${(totalBorrows / 1000000).toFixed(1)}M
+            ${totalBorrows >= 1000000 ? (totalBorrows / 1000000).toFixed(1) + 'M' : (totalBorrows / 1000).toFixed(0) + 'k'}
           </div>
         </div>
         <div className="card">
@@ -163,16 +219,20 @@ export default function LendingPage() {
         <div className="lg:col-span-2 card space-y-4">
           <h3 className="text-sm font-mono font-bold text-text-primary uppercase">Borrower Health Heatmap</h3>
           <div className="grid grid-cols-3 gap-2">
+            {sortedBorrowers.length === 0 && (
+              <div className="col-span-3 text-center py-8 text-text-tertiary text-sm font-mono">
+                [no borrower positions — start simulation]
+              </div>
+            )}
             {sortedBorrowers.map((b) => (
               <div
                 key={b.id}
-                className={`p-3 rounded text-center border ${
-                  b.status === 'healthy'
+                className={`p-3 rounded text-center border ${b.status === 'healthy'
                     ? 'bg-[rgba(0,212,99,0.1)] border-success'
                     : b.status === 'warning'
-                    ? 'bg-[rgba(255,182,68,0.1)] border-warn'
-                    : 'bg-[rgba(255,56,96,0.1)] border-danger'
-                }`}
+                      ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                      : 'bg-[rgba(255,56,96,0.1)] border-danger'
+                  }`}
               >
                 <div className="text-xs font-mono font-bold text-text-primary mb-1">
                   {b.wallet.slice(0, 8)}...
@@ -199,17 +259,17 @@ export default function LendingPage() {
         <DataTable
           columns={[
             { header: 'Wallet', accessor: 'wallet', className: 'font-mono text-xs' },
-            { header: 'Collateral', accessor: (row) => `$${(row.collateral / 1000).toFixed(0)}k`, className: 'text-xs' },
-            { header: 'Borrowed', accessor: (row) => `$${(row.borrowed / 1000).toFixed(0)}k`, className: 'text-xs' },
+            { header: 'Collateral', accessor: (row: any) => `$${(row.collateral / 1000).toFixed(0)}k`, className: 'text-xs' },
+            { header: 'Borrowed', accessor: (row: any) => `$${(row.borrowed / 1000).toFixed(0)}k`, className: 'text-xs' },
             {
               header: 'Health Factor',
-              accessor: (row) => (
+              accessor: (row: any) => (
                 <span className={
                   row.healthFactor > 1.5
                     ? 'text-success'
                     : row.healthFactor > 1
-                    ? 'text-warn'
-                    : 'text-danger'
+                      ? 'text-warn'
+                      : 'text-danger'
                 }>
                   {row.healthFactor.toFixed(2)}
                 </span>
@@ -218,12 +278,12 @@ export default function LendingPage() {
             },
             {
               header: 'Liquidation Price',
-              accessor: (row) => `$${row.liquidationPrice.toFixed(0)}`,
+              accessor: (row: any) => `$${row.liquidationPrice.toFixed(0)}`,
               className: 'font-mono text-xs',
             },
             {
               header: 'Action',
-              accessor: (row) => (
+              accessor: (row: any) => (
                 <button
                   onClick={() => handleLiquidate(row.id)}
                   className={`text-xs font-mono ${row.status === 'danger' ? 'text-danger hover:underline' : 'text-text-tertiary'}`}

@@ -242,13 +242,27 @@ async def get_liquidity_events(db: Session = Depends(get_db)):
 
 @router.get("/lending/borrowers")
 async def get_borrowers(db: Session = Depends(get_db)):
-    """Get all borrowers with health factors"""
+    """Get all borrowers with health factors from live simulation."""
+    positions = simulation_runner.lending.positions
+    if positions:
+        return {
+            "success": True,
+            "data": [
+                {
+                    "id": wallet,
+                    "wallet": wallet,
+                    "collateral_value": round(pos.collateral, 2),
+                    "debt_value": round(pos.debt, 2),
+                    "health_factor": round(pos.health_factor, 4),
+                    "at_risk": pos.is_liquidatable,
+                }
+                for wallet, pos in positions.items()
+            ],
+        }
+
+    # Fallback to DB participants if no simulation running
     from models import Participant
-    
-    borrowers = db.query(Participant).filter(
-        Participant.role == "BORROWER"
-    ).all()
-    
+    borrowers = db.query(Participant).filter(Participant.role == "BORROWER").all()
     return {
         "success": True,
         "data": [
@@ -258,25 +272,36 @@ async def get_borrowers(db: Session = Depends(get_db)):
                 "collateral_value": 10000.0,
                 "debt_value": 4000.0,
                 "health_factor": 2.5,
-                "at_risk": False
+                "at_risk": False,
             }
             for b in borrowers
-        ]
+        ],
     }
 
 
 @router.get("/lending/metrics")
 async def get_lending_metrics():
-    """Get overall lending metrics"""
+    """Get overall lending metrics from live simulation."""
+    ls = simulation_runner.lending
+    positions = list(ls.positions.values())
+    avg_hf = (
+        sum(p.health_factor for p in positions) / len(positions)
+        if positions
+        else 0.0
+    )
+    utilization = (
+        (ls.total_debt / ls.total_collateral * 100) if ls.total_collateral else 0.0
+    )
     return {
         "success": True,
         "data": {
-            "total_collateral": 500000.0,
-            "total_debt": 200000.0,
-            "utilization_rate": 40.0,
-            "avg_health_factor": 2.8,
-            "at_risk_count": 3
-        }
+            "total_collateral": round(ls.total_collateral, 2),
+            "total_debt": round(ls.total_debt, 2),
+            "utilization_rate": round(utilization, 2),
+            "avg_health_factor": round(avg_hf, 4),
+            "at_risk_count": len(ls.get_liquidatable()),
+            "liquidation_count": ls.liquidation_count,
+        },
     }
 
 
@@ -571,15 +596,37 @@ async def verify_event(event_id: str, db: Session = Depends(get_db)):
 
 @router.get("/audit/export")
 async def export_report(format: str = "json"):
-    """Export audit report"""
-    return {
-        "success": True,
-        "data": {
-            "format": format,
-            "download_url": f"/downloads/audit_report.{format}",
-            "message": "Report generated successfully"
-        }
+    """Export a full audit report as inline JSON."""
+    from datetime import datetime
+
+    summary = simulation_runner.get_summary()
+    trade_log = simulation_runner.get_trade_log(500)
+    fraud_alerts = simulation_runner.fraud_monitor.get_alerts(limit=200)
+    pool_state = simulation_runner.pool.to_dict()
+    lending_state = simulation_runner.lending.to_dict()
+    lending_state["positions"] = [
+        p.to_dict() for p in simulation_runner.lending.positions.values()
+    ]
+
+    report = {
+        "generated_at": datetime.utcnow().isoformat(),
+        "format": format,
+        "simulation_summary": summary,
+        "pool_state": pool_state,
+        "lending_state": lending_state,
+        "trade_log": trade_log,
+        "fraud_alerts": fraud_alerts,
     }
+
+    if format == "json":
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            content=report,
+            headers={"Content-Disposition": "attachment; filename=audit_report.json"},
+        )
+
+    # Fallback: return data envelope
+    return {"success": True, "data": report}
 
 
 @router.post("/audit/compare")
