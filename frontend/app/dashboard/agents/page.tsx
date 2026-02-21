@@ -134,6 +134,21 @@ interface MLMarketForecast {
   warnings:             string[];
 }
 
+interface ThreatScore {
+  axis: string;
+  score: number;
+  status: 'safe' | 'warning' | 'critical';
+}
+
+interface ScenarioInfo {
+  type: string;
+  name: string;
+  description: string;
+  severity: string;
+  estimated_damage: string;
+  real_world_date: string;
+}
+
 // ── Agent type visual config ───────────────────────────────────────────────
 const AGENT_ICONS: Record<string, string> = {
   retail_trader: '🛒',
@@ -179,6 +194,12 @@ export default function AgentsPage() {
   const [mlLoading, setMlLoading] = useState(false);
   const [mlPanel, setMlPanel] = useState(false);
 
+  // Scenarios & Live Threats
+  const [scenarios, setScenarios] = useState<ScenarioInfo[]>([]);
+  const [threatScores, setThreatScores] = useState<ThreatScore[]>([]);
+  const [scenarioRunning, setScenarioRunning] = useState(false);
+  const [showScenarios, setShowScenarios] = useState(false);
+
   // ── Polling ─────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     const [statusData, agentData, feedData, alertData] = await Promise.all([
@@ -207,13 +228,33 @@ export default function AgentsPage() {
     }
   }, []);
 
+  const fetchScenarios = useCallback(async () => {
+    const [scenarioData, scoresData] = await Promise.all([
+      api<ScenarioInfo[]>('/api/scenarios/available'),
+      api<ThreatScore[]>('/api/threats/radar'),
+    ]);
+    if (Array.isArray(scenarioData)) setScenarios(scenarioData);
+    if (Array.isArray(scoresData)) setThreatScores(scoresData);
+  }, []);
+
+  const runScenario = async (scenarioType: string) => {
+    setScenarioRunning(true);
+    await api('/api/scenarios/run', {
+      method: 'POST',
+      body: JSON.stringify({ scenario_type: scenarioType, intensity: 1.0, tick_delay: 0.3 }),
+    });
+    setScenarioRunning(false);
+    await fetchAll();
+  };
+
   useEffect(() => {
     fetchAll();
+    fetchScenarios();
     pollRef.current = setInterval(fetchAll, 1500);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [fetchAll]);
+  }, [fetchAll, fetchScenarios]);
 
   // ── Controls ─────────────────────────────────────────────────────────────
   const startSim = async () => {
@@ -486,6 +527,103 @@ export default function AgentsPage() {
           />
         </div>
       )}
+
+      {/* ── Live Threat Radar ─────────────────────────────────────────── */}
+      {threatScores.length > 0 && (
+        <div className="card p-4 bg-gradient-to-br from-red-900/10 via-transparent to-orange-900/10 border border-red-900/20">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-mono font-bold text-text-primary uppercase flex items-center gap-2">
+              <span className="text-lg animate-pulse">🔴</span> Live Threat Radar
+            </h3>
+            <a href="/dashboard/threats" className="text-xs font-mono text-accent hover:underline">
+              Full Analysis →
+            </a>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {threatScores.map((score) => (
+              <div key={score.axis} className="bg-[color:var(--color-bg-accent)] rounded-lg p-3">
+                <div className="text-[10px] text-text-tertiary font-mono uppercase mb-1">{score.axis}</div>
+                <div className="flex items-center gap-2">
+                  <div className={`text-lg font-bold font-mono ${
+                    score.status === 'critical' ? 'text-red-400' :
+                    score.status === 'warning' ? 'text-orange-400' : 'text-green-400'
+                  }`}>{score.score}%</div>
+                  {score.status === 'critical' && <span className="text-red-400 animate-pulse">🚨</span>}
+                </div>
+                <div className="h-1.5 bg-black/30 rounded-full overflow-hidden mt-1">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      score.status === 'critical' ? 'bg-red-500' :
+                      score.status === 'warning' ? 'bg-orange-400' : 'bg-green-500'
+                    }`}
+                    style={{ width: `${score.score}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Quick Scenarios Panel ─────────────────────────────────────── */}
+      <div className="card overflow-hidden">
+        <button
+          onClick={() => setShowScenarios(!showScenarios)}
+          className="w-full p-4 flex items-center justify-between bg-gradient-to-r from-purple-900/20 via-transparent to-red-900/20 hover:from-purple-900/30 hover:to-red-900/30 transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🎭</span>
+            <div className="text-left">
+              <h3 className="font-mono font-bold text-text-primary text-sm">Real-World Attack Scenarios</h3>
+              <p className="text-xs font-mono text-text-tertiary">FTX, Luna, Flash Loan exploits & more</p>
+            </div>
+          </div>
+          <span className="text-text-tertiary text-xl">{showScenarios ? '▼' : '▶'}</span>
+        </button>
+        
+        {showScenarios && (
+          <div className="p-4 bg-[color:var(--color-bg-accent)]/30 border-t border-[color:var(--color-border)]">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {scenarios.slice(0, 6).map((scenario) => {
+                const icons: Record<string, string> = {
+                  fxtc_collapse: '🏛️',
+                  luna_death_spiral: '🌙',
+                  flash_loan_exploit: '⚡',
+                  oracle_manipulation: '🔮',
+                  rug_pull: '🏃',
+                  cascade_armageddon: '💥',
+                };
+                return (
+                  <button
+                    key={scenario.type}
+                    onClick={() => runScenario(scenario.type)}
+                    disabled={scenarioRunning}
+                    className={`p-3 rounded-lg text-left transition-all border ${
+                      scenario.severity === 'critical'
+                        ? 'bg-red-900/20 border-red-500/30 hover:bg-red-900/30'
+                        : 'bg-orange-900/20 border-orange-500/30 hover:bg-orange-900/30'
+                    } ${scenarioRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xl">{icons[scenario.type] ?? '⚠️'}</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                        scenario.severity === 'critical' ? 'bg-red-500/30 text-red-300' : 'bg-orange-500/30 text-orange-300'
+                      }`}>{scenario.severity.toUpperCase()}</span>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-text-primary truncate">{scenario.name}</div>
+                    <div className="text-[10px] font-mono text-red-300">{scenario.estimated_damage}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 text-center">
+              <a href="/dashboard/threats" className="text-xs font-mono text-accent hover:underline">
+                View Full Threat Intelligence Center →
+              </a>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ── Activity Feed + Alerts ────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
