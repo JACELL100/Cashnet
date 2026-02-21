@@ -137,6 +137,26 @@ export const auditApi = {
     }),
 };
 
+/* === PARTICIPANTS API === */
+export const participantApi = {
+  getAll: () => apiRequest<any[]>('/participants/'),
+  getOne: (wallet: string) => apiRequest<any>(`/participants/${wallet}`),
+  register: (wallet: string, role: string) =>
+    apiRequest('/participants/register', {
+      method: 'POST',
+      body: JSON.stringify({ wallet, role }),
+    }),
+  delete: (wallet: string) =>
+    apiRequest(`/participants/${wallet}`, { method: 'DELETE' }),
+  getAdminsAuditors: () => apiRequest<any[]>('/auth/adminandauditor'),
+  getBorrowers: () => apiRequest<any[]>('/api/auth/borrowers'),
+  updateScore: (wallet: string, score: number) =>
+    apiRequest(`/participants/${wallet}/score`, {
+      method: 'PUT',
+      body: JSON.stringify({ score }),
+    }),
+};
+
 /* === WALLET API === */
 export const walletApi = {
   connect: () => apiRequest('/api/wallet/connect', { method: 'POST' }),
