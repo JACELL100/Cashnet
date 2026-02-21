@@ -7,6 +7,7 @@ SimulationRunner — Orchestrates all agents together
 - Integrates REAL market data from CoinDesk API
 - Feeds events into the FraudMonitor
 - Logs everything for the backend & frontend
+- Records simulation events on blockchain (when enabled)
 """
 
 import asyncio
@@ -32,6 +33,7 @@ from agents.attacker_agent import AttackerAgent
 from agents.borrower_agent import BorrowerAgent
 from agents.fraud_monitor import FraudMonitor
 from agents.market_data import MarketDataService, market_data_service, PriceData
+from agents.blockchain_integrator import get_blockchain_integrator, BlockchainIntegrator
 
 
 class SimulationRunner:
@@ -51,6 +53,9 @@ class SimulationRunner:
         self.lending = LendingState()
         self.mempool = Mempool()
         self.fraud_monitor = FraudMonitor()
+        
+        # Blockchain integrator (for on-chain recording)
+        self.blockchain_integrator: Optional[BlockchainIntegrator] = None
         
         # Real market data service
         self.market_data = market_data_service
@@ -215,6 +220,17 @@ class SimulationRunner:
         self.tick_delay = tick_delay
         self.start_time = time.time()
         self.end_time = None
+        
+        # Initialize blockchain integrator
+        try:
+            # Pass activity_feed.append as callback for live event streaming
+            self.blockchain_integrator = await get_blockchain_integrator(
+                activity_feed_callback=self.activity_feed.append
+            )
+            print(f"✅ Blockchain integration ready (Real TXs: {self.blockchain_integrator.enable_real_txs})")
+        except Exception as e:
+            print(f"⚠️  Blockchain integrator failed to initialize: {e}")
+            self.blockchain_integrator = None
 
         # Create agents
         if custom_agents is not None:
@@ -236,6 +252,7 @@ class SimulationRunner:
             "status": "running",
             "agents": len(self.agents),
             "max_steps": self.max_steps,
+            "blockchain_enabled": self.blockchain_integrator is not None,
         }
 
     async def _run_loop(self):
@@ -365,8 +382,38 @@ class SimulationRunner:
         # 4. Log actions
         for action in all_actions:
             self.trade_log.append(action.to_dict())
+        
+        # 5. Record high-value swaps to blockchain (if enabled)
+        if self.blockchain_integrator:
+            for action in all_actions:
+                if action.action_type == "swap" and action.metadata.get("amount_in", 0) > 1000:
+                    # Record significant swaps (>1000 tokens) to blockchain
+                    try:
+                        await self.blockchain_integrator.record_swap(
+                            agent_id=action.agent_id,
+                            token_in=action.metadata.get("token_in", "PALLADIUM"),
+                            amount_in=action.metadata.get("amount_in", 0),
+                            amount_out=action.metadata.get("amount_out", 0),
+                            price_impact=action.metadata.get("price_impact", 0),
+                            execute_on_chain=False,  # Set to True to execute real swaps
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Failed to record swap on blockchain: {e}")
+                
+                elif action.action_type == "liquidate":
+                    # Record liquidations to blockchain
+                    try:
+                        await self.blockchain_integrator.record_liquidation(
+                            liquidator_id=action.agent_id,
+                            target_wallet=action.metadata.get("target", "unknown"),
+                            debt_covered=action.metadata.get("debt_covered", 0),
+                            collateral_seized=action.metadata.get("collateral_seized", 0),
+                            bonus_pct=action.metadata.get("bonus_pct", 0),
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Failed to record liquidation on blockchain: {e}")
 
-        # 5. Clear processed mempool transactions periodically
+        # 6. Clear processed mempool transactions periodically
         if self.current_step % 5 == 0:
             self.mempool.pop_all()
 
@@ -507,6 +554,11 @@ class SimulationRunner:
 
         # Get real market data
         market_info = self.market_data.to_dict() if self._market_prices else None
+        
+        # Get blockchain stats
+        blockchain_stats = None
+        if self.blockchain_integrator:
+            blockchain_stats = self.blockchain_integrator.get_stats()
 
         return {
             "status": self.status,
@@ -520,6 +572,7 @@ class SimulationRunner:
             "pool": self.pool.to_dict(),
             "lending": self.lending.to_dict(),
             "market_data": market_info,
+            "blockchain": blockchain_stats,
         }
 
     def get_agents(self) -> List[Dict[str, Any]]:
