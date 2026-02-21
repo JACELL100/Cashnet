@@ -34,8 +34,11 @@ const connectors = connectorsForWallets(
   }
 );
 
-// Configure wagmi without MetaMask (wagmi 2.x compatible)
+// Configure wagmi (wagmi 2.x compatible)
+// ssr: true defers hydration state-updates to useEffect, preventing
+// "Cannot update a component while rendering a different component"
 const config = createConfig({
+  ssr: true,
   connectors,
   chains: [mainnet, sepolia, polygon, optimism, arbitrum],
   transports: {

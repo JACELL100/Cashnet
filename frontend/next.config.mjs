@@ -9,6 +9,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+
+  // COOP / COEP headers are set in middleware.ts (handles HEAD requests too)
+
   images: {
     unoptimized: true,
   },
@@ -32,6 +35,8 @@ const nextConfig = {
       ...config.resolve.fallback,
       '@react-native-async-storage/async-storage': false,
       'pino-pretty': false,
+      fs: false,
+      path: false,
     };
     
     config.externals.push({
