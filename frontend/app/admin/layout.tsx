@@ -3,8 +3,20 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { ToastContainer } from '@/components/Toast';
+
+/** Decode JWT exp claim (returns ms timestamp, or null if invalid) */
+function getTokenExpiry(token?: string | null): number | null {
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
 
 const adminNav = [
   { href: '/admin', label: 'Overview', icon: '⊡' },
@@ -24,16 +36,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const logout = useAuthStore((s) => s.logout);
+  const refreshSession = useAuthStore((s) => s.refreshSession);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Don't guard auth pages
   const isAuthPage = pathname === '/admin/login' || pathname === '/admin/signup';
 
+  // Silent re-auth: refresh token before it expires, kick to login if Firebase session gone
   useEffect(() => {
     if (isAuthPage) return;
+
+    const tryRefresh = async (forceIfExpired = false) => {
+      const token = user?.token;
+      const expiry = getTokenExpiry(token);
+      const now = Date.now();
+      const thirtyMin = 30 * 60 * 1000;
+      // Refresh if expired or expiring within 30 min
+      if (!expiry || expiry - now < thirtyMin || forceIfExpired) {
+        const firebaseUser = auth.currentUser;
+        if (firebaseUser) {
+          const ok = await refreshSession(() => firebaseUser.getIdToken(true));
+          if (!ok) { logout(); router.push('/admin/login'); }
+        } else {
+          // Firebase session gone — wait briefly for onAuthStateChanged before kicking out
+          return;
+        }
+      }
+    };
+
+    // Guard: must be authed as ADMIN
     if (!isAuthenticated || !user) { router.push('/admin/login'); return; }
-    if (user.role !== 'ADMIN') { router.push('/admin/login'); }
-  }, [isAuthenticated, user, router, isAuthPage]);
+    if (user.role !== 'ADMIN') { router.push('/admin/login'); return; }
+
+    // Check immediately on mount
+    tryRefresh();
+
+    // Re-check every 10 minutes while the tab is open
+    const interval = setInterval(() => tryRefresh(), 10 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated, user, router, isAuthPage, logout, refreshSession]);
 
   if (isAuthPage) return <>{children}</>;
 

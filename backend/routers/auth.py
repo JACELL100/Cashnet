@@ -60,9 +60,9 @@ class UserOut(BaseModel):
 
 # â”€â”€â”€ JWT helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-def create_jwt(payload: dict) -> str:
+def create_jwt(payload: dict, days: int = 7) -> str:
     data = payload.copy()
-    data["exp"] = datetime.utcnow() + timedelta(hours=12)
+    data["exp"] = datetime.utcnow() + timedelta(days=days)
     return jwt.encode(data, settings.jwt_secret, algorithm="HS256")
 
 # â”€â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -85,17 +85,14 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     name: str = decoded.get("name", email)
     picture: str = decoded.get("picture", "")
 
-    # 2. Check provisioned table
-    record = db.query(AdminAuditor).filter(AdminAuditor.uid == uid).first()
+    # 2. Check provisioned table — email is the canonical key; uid is back-filled on first login
+    record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
 
-    # Also try email match in case uid wasn't stored yet (first-time provisioned by email)
-    if not record:
-        record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
-        if record:
-            # Back-fill the UID now that we know it
-            record.uid = uid
-            db.commit()
-            db.refresh(record)
+    # Back-fill / update the real UID whenever it changes or was a placeholder
+    if record and record.uid != uid:
+        record.uid = uid
+        db.commit()
+        db.refresh(record)
 
     if not record:
         raise HTTPException(

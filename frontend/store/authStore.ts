@@ -27,6 +27,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (role: UserRole) => Promise<void>;
   loginWithGoogleCredential: (credential: string) => Promise<{ role: UserRole }>;
+  refreshSession: (getFirebaseIdToken: () => Promise<string>) => Promise<boolean>;
   signup: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
@@ -166,11 +167,33 @@ export const useAuthStore = create<AuthState>()(
             token: data.token,
           };
 
-          set({ user, isAuthenticated: true, loading: false });
+          set({ user, token: data.token, isAuthenticated: true, loading: false });
           return { role };
         } catch (error) {
           set({ loading: false });
           throw error;
+        }
+      },
+
+      /** Silently refresh the backend JWT using a fresh Firebase ID token */
+      refreshSession: async (getFirebaseIdToken: () => Promise<string>) => {
+        try {
+          const idToken = await getFirebaseIdToken();
+          const res = await fetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: idToken }),
+          });
+          if (!res.ok) throw new Error('Refresh failed');
+          const data = await res.json();
+          const role = data.role as UserRole;
+          set((state) => ({
+            user: state.user ? { ...state.user, token: data.token } : null,
+            token: data.token,
+          }));
+          return true;
+        } catch {
+          return false;
         }
       },
 
