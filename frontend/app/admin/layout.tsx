@@ -38,6 +38,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const logout = useAuthStore((s) => s.logout);
   const refreshSession = useAuthStore((s) => s.refreshSession);
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Don't guard auth pages
@@ -45,6 +46,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Silent re-auth: refresh token before it expires, kick to login if Firebase session gone
   useEffect(() => {
+    if (!hasHydrated) return;
     if (isAuthPage) return;
 
     const tryRefresh = async (forceIfExpired = false) => {
@@ -76,7 +78,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const interval = setInterval(() => tryRefresh(), 10 * 60 * 1000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated, user, router, isAuthPage, logout, refreshSession]);
+  }, [hasHydrated, isAuthenticated, user, router, isAuthPage, logout, refreshSession]);
+
+  if (!hasHydrated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <div className="text-center">
+          <div className="text-4xl font-bold text-[#ff3860] font-mono mb-4">AD</div>
+          <p className="text-text-secondary font-mono">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isAuthPage) return <>{children}</>;
 

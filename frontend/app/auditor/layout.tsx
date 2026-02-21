@@ -24,12 +24,25 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
   const logout = useAuthStore((s) => s.logout);
 
   const isAuthPage = pathname === '/auditor/login' || pathname === '/auditor/signup';
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (isAuthPage) return;
     if (!isAuthenticated || !user) { router.push('/auditor/login'); return; }
     if (user.role !== 'AUDITOR') { router.push('/auditor/login'); }
-  }, [isAuthenticated, user, router, isAuthPage]);
+  }, [hasHydrated, isAuthenticated, user, router, isAuthPage]);
+
+  if (!hasHydrated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <div className="text-center">
+          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">AU</div>
+          <p className="text-text-secondary font-mono">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isAuthPage) return <>{children}</>;
 

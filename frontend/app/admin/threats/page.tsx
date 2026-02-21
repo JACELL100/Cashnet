@@ -1,21 +1,46 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Badge from '@/components/Badge';
-import { useThreatStore } from '@/store/threatStore';
-import { generateThreatScores, generateThreatAlerts } from '@/lib/mockData';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function ThreatsPage() {
-  const [threatScores] = useState(() => generateThreatScores());
-  const [alerts] = useState(() => generateThreatAlerts());
+  const [threatScores, setThreatScores] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<any[]>([]);
   const [radarRotation, setRadarRotation] = useState(0);
 
+  const fetchThreatData = useCallback(async () => {
+    try {
+      const [scoresRes, alertsRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/threats/scores`),
+        fetch(`${API_URL}/api/threats/alerts`),
+      ]);
+
+      if (scoresRes.status === 'fulfilled' && scoresRes.value.ok) {
+        const json = await scoresRes.value.json();
+        setThreatScores(json.data ?? json ?? []);
+      }
+      if (alertsRes.status === 'fulfilled' && alertsRes.value.ok) {
+        const json = await alertsRes.value.json();
+        setAlerts(json.data ?? json ?? []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
-    const interval = setInterval(() => {
+    fetchThreatData();
+    const dataInterval = setInterval(fetchThreatData, 5000);
+    const radarInterval = setInterval(() => {
       setRadarRotation((prev) => (prev + 2) % 360);
     }, 50);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      clearInterval(dataInterval);
+      clearInterval(radarInterval);
+    };
+  }, [fetchThreatData]);
 
   const criticalAlerts = alerts.filter((a) => a.severity === 'critical');
   const highAlerts = alerts.filter((a) => a.severity === 'high');
@@ -103,13 +128,12 @@ export default function ThreatsPage() {
             {threatScores.map((score) => (
               <div
                 key={score.axis}
-                className={`p-4 rounded border ${
-                  score.status === 'critical'
+                className={`p-4 rounded border ${score.status === 'critical'
                     ? 'bg-[rgba(255,56,96,0.1)] border-danger'
                     : score.status === 'warning'
-                    ? 'bg-[rgba(255,182,68,0.1)] border-warn'
-                    : 'bg-[rgba(0,212,99,0.1)] border-success'
-                }`}
+                      ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                      : 'bg-[rgba(0,212,99,0.1)] border-success'
+                  }`}
               >
                 <div className="font-mono font-bold text-text-primary text-sm mb-2">
                   {score.axis}
@@ -117,13 +141,12 @@ export default function ThreatsPage() {
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-2 bg-[color:var(--color-bg-accent)] rounded overflow-hidden">
                     <div
-                      className={`h-full ${
-                        score.status === 'critical'
+                      className={`h-full ${score.status === 'critical'
                           ? 'bg-danger'
                           : score.status === 'warning'
-                          ? 'bg-warn'
-                          : 'bg-success'
-                      }`}
+                            ? 'bg-warn'
+                            : 'bg-success'
+                        }`}
                       style={{ width: `${score.score}%` }}
                     />
                   </div>
@@ -165,13 +188,12 @@ export default function ThreatsPage() {
           {alerts.map((alert) => (
             <div
               key={alert.id}
-              className={`p-4 rounded border ${
-                alert.severity === 'critical'
+              className={`p-4 rounded border ${alert.severity === 'critical'
                   ? 'bg-[rgba(255,56,96,0.1)] border-danger'
                   : alert.severity === 'high'
-                  ? 'bg-[rgba(255,182,68,0.1)] border-warn'
-                  : 'bg-[rgba(0,212,255,0.1)] border-accent'
-              }`}
+                    ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                    : 'bg-[rgba(0,212,255,0.1)] border-accent'
+                }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -190,8 +212,8 @@ export default function ThreatsPage() {
                     alert.severity === 'critical'
                       ? 'critical'
                       : alert.severity === 'high'
-                      ? 'high'
-                      : 'medium'
+                        ? 'high'
+                        : 'medium'
                   }
                 >
                   {alert.severity.toUpperCase()}
@@ -225,10 +247,10 @@ export default function ThreatsPage() {
                   pattern.riskLevel === 'critical'
                     ? 'critical'
                     : pattern.riskLevel === 'high'
-                    ? 'high'
-                    : pattern.riskLevel === 'medium'
-                    ? 'medium'
-                    : 'success'
+                      ? 'high'
+                      : pattern.riskLevel === 'medium'
+                        ? 'medium'
+                        : 'success'
                 }
               >
                 {pattern.riskLevel.toUpperCase()}
@@ -250,11 +272,10 @@ export default function ThreatsPage() {
           ].map((contract) => (
             <div
               key={contract.name}
-              className={`p-3 rounded border flex items-center justify-between ${
-                contract.status === 'normal'
+              className={`p-3 rounded border flex items-center justify-between ${contract.status === 'normal'
                   ? 'bg-[rgba(0,212,99,0.1)] border-success'
                   : 'bg-[rgba(255,182,68,0.1)] border-warn'
-              }`}
+                }`}
             >
               <span className="font-mono font-bold text-text-primary text-sm">
                 {contract.name}
