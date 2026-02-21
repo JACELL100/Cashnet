@@ -144,3 +144,74 @@ export const walletApi = {
   getBalance: (address: string) =>
     apiRequest(`/api/wallet/balance/${address}`),
 };
+
+/* === TESTING API === */
+export const testingApi = {
+  // Liquidity Tests
+  liquidity: {
+    getPoolState: () => apiRequest('/api/liquidity/pool'),
+    getSlippageCurve: () => apiRequest('/api/liquidity/slippage-curve'),
+    getDepthChart: () => apiRequest('/api/liquidity/depth-chart'),
+    stressTest: (scenario: string, magnitude: number) =>
+      apiRequest('/pool/stress-test', {
+        method: 'POST',
+        body: JSON.stringify({ scenario, magnitude }),
+      }),
+  },
+  // Lending Tests
+  lending: {
+    getBorrowers: () => apiRequest('/api/lending/borrowers'),
+    getHealthFactor: (wallet: string) =>
+      apiRequest(`/lending/health-factor/${wallet}`),
+    getMetrics: () => apiRequest('/api/lending/metrics'),
+    liquidate: (wallet: string) =>
+      apiRequest(`/lending/liquidate/${wallet}`, { method: 'POST' }),
+    cascadeSimulation: (priceDropPct: number) =>
+      apiRequest('/lending/cascade-simulation', {
+        method: 'POST',
+        body: JSON.stringify({ price_drop_percentage: priceDropPct }),
+      }),
+  },
+  // Agent Tests
+  agents: {
+    listAgents: () => apiRequest('/api/agents'),
+    getActivityFeed: () => apiRequest('/api/agents/activity-feed'),
+  },
+  // Simulation Tests
+  simulation: {
+    start: (opts: { max_steps: number; tick_delay: number }) =>
+      apiRequest('/api/simulation/start', {
+        method: 'POST',
+        body: JSON.stringify(opts),
+      }),
+    getStatus: () => apiRequest('/api/simulation/status'),
+    pause: () => apiRequest('/api/simulation/pause', { method: 'POST' }),
+    resume: () => apiRequest('/api/simulation/resume', { method: 'POST' }),
+    stop: () => apiRequest('/api/simulation/stop', { method: 'POST' }),
+  },
+  // Fraud/Threat Tests
+  threats: {
+    getAlerts: () => apiRequest('/api/threats/alerts'),
+    getThreatScores: () => apiRequest('/api/threats/scores'),
+    simulateScenario: (scenarioType: string) =>
+      apiRequest('/api/threats/simulate', {
+        method: 'POST',
+        body: JSON.stringify({ scenario_type: scenarioType }),
+      }),
+  },
+  // Credit Tests
+  credit: {
+    getLeaderboard: () => apiRequest('/api/credit/leaderboard'),
+    getScore: (wallet: string) => apiRequest(`/api/credit/scores/${wallet}`),
+    getHistory: (wallet: string) =>
+      apiRequest(`/api/credit/scores/${wallet}/history`),
+    getDynamicRates: () => apiRequest('/api/credit/dynamic-rates'),
+  },
+  // Market Data Tests
+  market: {
+    getAllPrices: () => apiRequest('/agents-sim/market/prices'),
+    getPrice: (symbol: string) =>
+      apiRequest(`/agents-sim/market/price/${symbol}`),
+    getCondition: () => apiRequest('/agents-sim/market/condition'),
+  },
+};

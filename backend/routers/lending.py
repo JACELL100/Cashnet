@@ -11,7 +11,7 @@ from schemas import (
     RepayRequest,
     HealthFactorResponse
 )
-from agents.simulation_runner import simulation_runner
+# No longer using simulation_runner
 
 router = APIRouter(prefix="/lending", tags=["Lending & Borrowing"])
 
@@ -34,123 +34,82 @@ def check_system_paused():
 
 
 @router.post("/deposit-collateral")
-async def deposit_collateral(
-    request: DepositCollateralRequest,
-    db: Session = Depends(get_db)
-):
-    """Deposit collateral to enable borrowing"""
-    check_system_paused()
-    try:
-        
-        pos = simulation_runner.lending.positions.get(request.wallet)
-        if pos:
-            pos.collateral += request.amount
-            simulation_runner.lending._recompute()
-        
-        return {
-            "status": "success",
-            "wallet": request.wallet,
-            "collateral_deposited": request.amount,
-            "message": f"Deposited {request.amount} collateral",
-            "new_total_collateral": pos.collateral if pos else None
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def deposit_collateral(request: DepositCollateralRequest):
+    """Deposit collateral (Disabled on backend)"""
+    return {
+        "status": "error",
+        "wallet": request.wallet,
+        "message": "L1 Integration Active: You must execute 'depositCollateral()' directly via Web3 in the frontend using MetaMask."
+    }
 
 
 @router.post("/borrow")
-async def borrow_tokens(
-    request: BorrowRequest,
-    db: Session = Depends(get_db)
-):
-    """Borrow tokens against collateral"""
-    check_system_paused()
-    try:
-        pos = simulation_runner.lending.positions.get(request.wallet)
-        if not pos:
-            raise HTTPException(status_code=404, detail="Borrower position not found in simulation.")
-        
-        # Check if the borrow would push them over their max LTV
-        if not simulation_runner.lending.can_borrow(request.amount, request.wallet):
-            raise HTTPException(status_code=400, detail="Borrow cap exceeded or credit limit reached.")
-            
-        pos.debt += request.amount
-        simulation_runner.lending._recompute()
-        health_factor = pos.health_factor
-        
-        if health_factor < 1.0:
-            # Revert
-            pos.debt -= request.amount
-            simulation_runner.lending._recompute()
-            raise HTTPException(
-                status_code=400,
-                detail="Insufficient collateral. Health factor would drop too low."
-            )
-        
-        return {
-            "status": "success",
-            "wallet": request.wallet,
-            "borrowed_amount": request.amount,
-            "health_factor": round(health_factor, 4),
-            "message": f"Borrowed {request.amount} tokens"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def borrow_tokens(request: BorrowRequest):
+    """Borrow tokens (Disabled on backend)"""
+    return {
+        "status": "error",
+        "wallet": request.wallet,
+        "message": "L1 Integration Active: You must execute 'borrow()' directly via Web3 in the frontend using MetaMask."
+    }
 
 
 @router.post("/repay")
-async def repay_loan(
-    request: RepayRequest,
-    db: Session = Depends(get_db)
-):
-    """Repay borrowed tokens"""
-    check_system_paused()
-    try:
-        pos = simulation_runner.lending.positions.get(request.wallet)
-        if pos:
-            repay_amount = min(request.amount, pos.debt)
-            pos.debt -= repay_amount
-            pos.credit_profile.successful_repay_volume += repay_amount
-            simulation_runner.lending._recompute()
-        
-        return {
-            "status": "success",
-            "wallet": request.wallet,
-            "repaid_amount": request.amount,
-            "message": f"Repaid {request.amount} tokens"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+async def repay_loan(request: RepayRequest):
+    """Repay borrowed tokens (Disabled on backend)"""
+    return {
+        "status": "error",
+        "wallet": request.wallet,
+        "message": "L1 Integration Active: You must execute 'repay()' directly via Web3 in the frontend using MetaMask."
+    }
 
 
 @router.get("/health-factor/{wallet}", response_model=HealthFactorResponse)
 async def get_health_factor(wallet: str):
-    """Get dynamic health factor for a borrower from the simulation engine"""
+    """Get dynamic health factor for a borrower from the Sepolia contracts"""
     try:
-        pos = simulation_runner.lending.positions.get(wallet)
-        if not pos:
-            # Return sensible defaults for wallets not actively tracked in sim
-            return {
-                "wallet": wallet,
-                "collateral_value": 0.0,
-                "debt_value": 0.0,
-                "health_factor": 999.0,
-                "liquidation_threshold": 1.05,
-                "at_risk": False
-            }
+        if "LendingPool" not in blockchain_service.contracts:
+            raise Exception("Contracts not loaded")
         
+        # Read collateral from Vault
+        collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
+        collateral_eth = collateral_wei / 1e18
+        
+        # Read debt from LendingPool.loans mapping
+        loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
+        debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
+        
+        # Read max LTV from CreditRegistry
+        max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
+        
+        # Calculate health factor (mock eth price is 2000 in the contract)
+        collateral_value_usd = collateral_eth * 2000
+        
+        if debt_tokens == 0:
+            health_factor = 999.0
+            is_liquidatable = False
+        else:
+            health_factor = (collateral_value_usd * (max_ltv / 100.0)) / debt_tokens
+            liquidation_threshold = (collateral_value_usd * ((max_ltv + 5) / 100.0))
+            is_liquidatable = debt_tokens > liquidation_threshold
+            
         return {
             "wallet": wallet,
-            "collateral_value": round(pos.collateral, 2),
-            "debt_value": round(pos.debt, 2),
-            "health_factor": round(pos.health_factor, 4),
-            "liquidation_threshold": round(pos.liquidation_threshold, 4),
-            "at_risk": pos.is_liquidatable
+            "collateral_value": round(collateral_value_usd, 2),
+            "debt_value": round(debt_tokens, 2),
+            "health_factor": round(health_factor, 4),
+            "liquidation_threshold": round(max_ltv / 100.0, 4),
+            "at_risk": is_liquidatable
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error fetching health factor from chain: {e}")
+        return {
+            "wallet": wallet,
+            "collateral_value": 0.0,
+            "debt_value": 0.0,
+            "health_factor": 999.0,
+            "liquidation_threshold": 0.0,
+            "at_risk": False
+        }
 
 
 @router.post("/liquidate/{wallet}")

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useLendingStore } from '@/store/lendingStore';
+import { useLendingActions } from '@/hooks/useLendingActions';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -24,6 +25,17 @@ export default function LenderPage() {
 
   const setBorrowers = useLendingStore((state) => state.setBorrowers);
   const setMetrics = useLendingStore((state) => state.setMetrics);
+
+  // MetaMask contract actions
+  const {
+    depositCollateral, borrow, approveRepay, repay, liquidate, reset,
+    isConnected, isSigning, isConfirming, isConfirmed, txHash, error,
+  } = useLendingActions();
+
+  // Form state for action inputs
+  const [depositAmt, setDepositAmt] = useState('0.01');
+  const [borrowAmt, setBorrowAmt] = useState('100');
+  const [repayAmt, setRepayAmt] = useState('50');
 
   // Fetch borrowers + metrics from API
   const fetchLendingData = useCallback(async () => {
@@ -106,7 +118,104 @@ export default function LenderPage() {
     <div className="space-y-8 animate-fadeUp">
       <div>
         <h1 className="text-2xl font-bold font-mono text-text-primary">Lender Dashboard</h1>
-        <p className="text-sm text-text-tertiary font-mono mt-1">Liquidity overview · Loan portfolio · Borrower health</p>
+        <p className="text-sm text-text-tertiary font-mono mt-1">Liquidity overview · Loan portfolio · Borrower health · <span className="text-[#22c55e]">Live on Sepolia</span></p>
+      </div>
+
+      {/* ── Transaction Status Bar ── */}
+      {(isSigning || isConfirming || isConfirmed || error) && (
+        <div className={`rounded-lg border p-3 font-mono text-xs flex items-center gap-2 ${error ? 'border-red-500/40 bg-red-500/10 text-red-400'
+          : isConfirmed ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
+            : 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300'
+          }`}>
+          {isSigning && '⏳ Waiting for MetaMask approval...'}
+          {isConfirming && '⛏️ Transaction submitted, confirming on Sepolia...'}
+          {isConfirmed && (
+            <>
+              ✅ Transaction confirmed!{' '}
+              <a
+                href={`https://sepolia.etherscan.io/tx/${txHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-[#b367ff]"
+              >
+                View on Etherscan ↗
+              </a>
+            </>
+          )}
+          {error && `❌ ${(error as any)?.shortMessage || error.message}`}
+          <button onClick={reset} className="ml-auto text-text-tertiary hover:text-text-primary">✕</button>
+        </div>
+      )}
+
+      {/* ── Quick Actions (MetaMask) ── */}
+      <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+        <h2 className="text-sm font-mono font-bold text-text-primary mb-4">Quick Actions {!isConnected && <span className="text-red-400 font-normal">(connect wallet first)</span>}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Deposit */}
+          <div className="space-y-2">
+            <label className="text-xs font-mono text-text-tertiary">Deposit Collateral (Sepolia ETH)</label>
+            <div className="flex gap-2">
+              <input
+                type="number" step="0.001" min="0"
+                value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)}
+                className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-2 py-1.5 text-xs font-mono text-text-primary outline-none focus:border-[#b367ff]"
+              />
+              <button
+                onClick={() => depositCollateral(depositAmt)}
+                disabled={!isConnected || isSigning}
+                className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-[#b367ff] hover:bg-[#a050f0] text-white disabled:opacity-40 transition-all"
+              >
+                Deposit
+              </button>
+            </div>
+          </div>
+          {/* Borrow */}
+          <div className="space-y-2">
+            <label className="text-xs font-mono text-text-tertiary">Borrow Tokens (PLDM)</label>
+            <div className="flex gap-2">
+              <input
+                type="number" step="1" min="0"
+                value={borrowAmt} onChange={(e) => setBorrowAmt(e.target.value)}
+                className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-2 py-1.5 text-xs font-mono text-text-primary outline-none focus:border-[#00d4ff]"
+              />
+              <button
+                onClick={() => borrow(borrowAmt)}
+                disabled={!isConnected || isSigning}
+                className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-[#00d4ff] hover:bg-[#00b8e6] text-black disabled:opacity-40 transition-all"
+              >
+                Borrow
+              </button>
+            </div>
+          </div>
+          {/* Repay */}
+          <div className="space-y-2">
+            <label className="text-xs font-mono text-text-tertiary">Repay Loan (PLDM)</label>
+            <div className="flex gap-2">
+              <input
+                type="number" step="1" min="0"
+                value={repayAmt} onChange={(e) => setRepayAmt(e.target.value)}
+                className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-2 py-1.5 text-xs font-mono text-text-primary outline-none focus:border-[#22c55e]"
+              />
+              <div className="flex gap-1">
+                <button
+                  onClick={() => approveRepay(repayAmt)}
+                  disabled={!isConnected || isSigning}
+                  className="px-2 py-1.5 rounded text-[10px] font-mono font-bold border border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e20] disabled:opacity-40 transition-all"
+                  title="First approve the LendingPool to spend your PLDM tokens"
+                >
+                  Approve
+                </button>
+                <button
+                  onClick={() => repay(repayAmt)}
+                  disabled={!isConnected || isSigning}
+                  className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-[#22c55e] hover:bg-[#1aab4e] text-black disabled:opacity-40 transition-all"
+                >
+                  Repay
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -202,13 +311,14 @@ export default function LenderPage() {
                 <th className="text-left py-2 pr-6">Borrowed amount</th>
                 <th className="text-left py-2 pr-6">Collateral amount</th>
                 <th className="text-left py-2 pr-6">Health Factor</th>
-                <th className="text-left py-2">Status</th>
+                <th className="text-left py-2 pr-6">Status</th>
+                <th className="text-left py-2">Action</th>
               </tr>
             </thead>
             <tbody>
               {sortedBorrowers.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-text-tertiary italic">
+                  <td colSpan={6} className="py-8 text-center text-text-tertiary italic">
                     [No active borrowers — Start the simulation engine]
                   </td>
                 </tr>
@@ -234,6 +344,17 @@ export default function LenderPage() {
                     <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold transition-colors" style={{ color: statusColor[l.status] || '#22c55e', border: `1px solid ${statusColor[l.status] || '#22c55e'}`, background: `${statusColor[l.status] || '#22c55e'}1a` }}>
                       {l.status}
                     </span>
+                  </td>
+                  <td className="py-3">
+                    {(l.status === 'danger' || l.status === 'warning') && (
+                      <button
+                        onClick={() => liquidate(l.wallet)}
+                        disabled={!isConnected || isSigning}
+                        className="px-2 py-1 rounded text-[10px] font-mono font-bold bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 disabled:opacity-40 transition-all"
+                      >
+                        Liquidate
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
