@@ -6,6 +6,7 @@ import Badge from '@/components/Badge';
 import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useSimulationStore } from '@/store/simulationStore';
 import { useUIStore } from '@/store/uiStore';
+import { useLendingActions } from '@/hooks/useLendingActions';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -78,20 +79,18 @@ export default function LendingPage() {
     return () => clearInterval(interval);
   }, [fetchLendingData]);
 
+  const { liquidate, isConnected, isSigning } = useLendingActions();
+
   const handleLiquidate = async (borrowerId: string) => {
-    try {
-      await fetch(`${API_URL}/api/lending/liquidate?borrower_id=${borrowerId}`, {
-        method: 'POST',
-      });
-    } catch { /* ignore */ }
-    updateBorrower(borrowerId, { status: 'danger', healthFactor: 0.8 });
+    if (!isConnected) return alert('Connect your wallet first');
+    liquidate(borrowerId);
     addCascadeEvent({
       timestamp: Date.now(),
       borrower: borrowerId,
-      event: 'Liquidation executed',
+      event: 'Liquidation triggered via MetaMask',
     });
     addToast({
-      message: 'Liquidation event triggered',
+      message: 'Liquidation transaction sent to MetaMask',
       severity: 'warning',
     });
   };

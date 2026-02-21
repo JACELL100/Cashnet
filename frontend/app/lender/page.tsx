@@ -110,6 +110,14 @@ export default function LenderPage() {
     return () => clearInterval(interval);
   }, [fetchLendingData]);
 
+  // Clear forms after successful transaction
+  useEffect(() => {
+    if (isConfirmed) {
+      setDepositAmt(''); setBorrowAmt(''); setRepayAmt('');
+      fetchLendingData();
+    }
+  }, [isConfirmed, fetchLendingData]);
+
   // Derived KPIs
   // In a real app, this would be scoped to the logged-in user.
   // For now, we simulate "My Liquidity" as 15% of the total pool.
@@ -170,76 +178,7 @@ export default function LenderPage() {
         </div>
       )}
 
-      {/* ── Quick Actions (MetaMask) ── */}
-      <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
-        <h2 className="text-sm font-mono font-bold text-text-primary mb-4">Quick Actions {!isConnected && <span className="text-red-400 font-normal">(connect wallet first)</span>}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Deposit */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono text-text-tertiary">Deposit Collateral (Sepolia ETH)</label>
-            <div className="flex gap-2">
-              <input
-                type="number" step="0.001" min="0"
-                value={depositAmt} onChange={(e) => setDepositAmt(e.target.value)}
-                className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-2 py-1.5 text-xs font-mono text-text-primary outline-none focus:border-[#b367ff]"
-              />
-              <button
-                onClick={() => depositCollateral(depositAmt)}
-                disabled={!isConnected || isSigning}
-                className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-[#b367ff] hover:bg-[#a050f0] text-white disabled:opacity-40 transition-all"
-              >
-                Deposit
-              </button>
-            </div>
-          </div>
-          {/* Borrow */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono text-text-tertiary">Borrow Tokens (PLDM)</label>
-            <div className="flex gap-2">
-              <input
-                type="number" step="1" min="0"
-                value={borrowAmt} onChange={(e) => setBorrowAmt(e.target.value)}
-                className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-2 py-1.5 text-xs font-mono text-text-primary outline-none focus:border-[#00d4ff]"
-              />
-              <button
-                onClick={() => borrow(borrowAmt)}
-                disabled={!isConnected || isSigning}
-                className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-[#00d4ff] hover:bg-[#00b8e6] text-black disabled:opacity-40 transition-all"
-              >
-                Borrow
-              </button>
-            </div>
-          </div>
-          {/* Repay */}
-          <div className="space-y-2">
-            <label className="text-xs font-mono text-text-tertiary">Repay Loan (PLDM)</label>
-            <div className="flex gap-2">
-              <input
-                type="number" step="1" min="0"
-                value={repayAmt} onChange={(e) => setRepayAmt(e.target.value)}
-                className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-2 py-1.5 text-xs font-mono text-text-primary outline-none focus:border-[#22c55e]"
-              />
-              <div className="flex gap-1">
-                <button
-                  onClick={() => approveRepay(repayAmt)}
-                  disabled={!isConnected || isSigning}
-                  className="px-2 py-1.5 rounded text-[10px] font-mono font-bold border border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e20] disabled:opacity-40 transition-all"
-                  title="First approve the LendingPool to spend your PLDM tokens"
-                >
-                  Approve
-                </button>
-                <button
-                  onClick={() => repay(repayAmt)}
-                  disabled={!isConnected || isSigning}
-                  className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-[#22c55e] hover:bg-[#1aab4e] text-black disabled:opacity-40 transition-all"
-                >
-                  Repay
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

@@ -2,6 +2,7 @@
 API adapter routes to match frontend expectations
 Maps frontend API calls to backend endpoints
 """
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
@@ -53,7 +54,45 @@ async def resume_simulation():
 
 @router.post("/simulation/stop")
 async def stop_simulation(db: Session = Depends(get_db)):
-    return {"success": True, "data": {"status": "stopped"}}
+    """Stop the simulation engine"""
+    from models import Simulation
+    from datetime import datetime
+    
+    # Stop continuous attack if running
+    try:
+        from agents.scenario_router import _continuous_attack_task, _attack_running
+        import agents.scenario_router as scenario_router
+        
+        if scenario_router._attack_running:
+            print("🛑 Stopping continuous attack...")
+            scenario_router._attack_running = False
+            
+        if scenario_router._continuous_attack_task and not scenario_router._continuous_attack_task.done():
+            scenario_router._continuous_attack_task.cancel()
+            try:
+                await scenario_router._continuous_attack_task
+            except asyncio.CancelledError:
+                pass
+            print("✅ Continuous attack stopped")
+    except Exception as e:
+        print(f"⚠️  Error stopping attack: {e}")
+    
+    result = await simulation_runner.stop()
+    
+    # Also update DB
+    sim = db.query(Simulation).filter(
+        Simulation.status.in_(["running", "paused"])
+    ).first()
+    if sim:
+        sim.status = "completed"
+        sim.end_time = datetime.utcnow()
+        sim.agents_count = len(simulation_runner.agents)
+        sim.transactions_count = len(simulation_runner.trade_log)
+        sim.alerts_count = len(simulation_runner.fraud_monitor.alerts)
+        db.commit()
+    
+    return {"success": True, "data": result}
+
 
 
 @router.get("/simulation/summary")
