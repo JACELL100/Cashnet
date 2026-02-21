@@ -55,8 +55,6 @@ export const useAuthStore = create<AuthState>()(
       loginWithWallet: async (walletAddress: string, signature: string, name?: string, email?: string, role?: UserRole) => {
         set({ loading: true, error: null });
         try {
-          console.log('[STORE] loginWithWallet called with:', { walletAddress, signature: signature.substring(0, 10) + '...', name, email, role });
-          
           // Verify signature with backend (nonce already obtained by caller)
           const verifyResponse = await fetch(`${API_BASE_URL}/api/auth/verify`, {
             method: 'POST',
@@ -70,16 +68,13 @@ export const useAuthStore = create<AuthState>()(
             }),
           });
 
-          console.log('[STORE] Verify response status:', verifyResponse.status);
-
           if (!verifyResponse.ok) {
             const errorText = await verifyResponse.text();
-            console.error('[STORE] Verify error response:', errorText);
+            console.error('[STORE] Verify error:', errorText);
             throw new Error('Signature verification failed');
           }
 
           const authData = await verifyResponse.json();
-          console.log('[STORE] Auth data received:', authData);
 
           // Create user object with the selected role (or from backend if provided)
           const userRole: UserRole = authData.role || role || 'BORROWER';
@@ -94,16 +89,12 @@ export const useAuthStore = create<AuthState>()(
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${walletAddress}`,
           };
 
-          console.log('[STORE] Setting user state:', user);
-
           set({
             user,
             token: authData.token,
             isAuthenticated: true,
             loading: false,
           });
-          
-          console.log('[STORE] User state updated successfully');
         } catch (error) {
           console.error('[STORE] Login error:', error);
           set({

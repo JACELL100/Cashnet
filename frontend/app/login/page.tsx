@@ -74,8 +74,6 @@ export default function LoginPage() {
     }
 
     try {
-      console.log('[AUTH] Starting authentication for wallet:', address, 'as', selectedRole);
-      
       // Get nonce from backend
       const nonceResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/nonce`, {
         method: 'POST',
@@ -83,39 +81,23 @@ export default function LoginPage() {
         body: JSON.stringify({ wallet_address: address }),
       });
 
-      console.log('[AUTH] Nonce response status:', nonceResponse.status);
-
       if (!nonceResponse.ok) {
-        const errorText = await nonceResponse.text();
-        console.error('[AUTH] Nonce error:', errorText);
         throw new Error('Failed to get authentication nonce');
       }
 
       const nonceData = await nonceResponse.json();
-      console.log('[AUTH] Nonce data received:', nonceData);
       const { message } = nonceData;
 
       // Request signature from user
-      console.log('[AUTH] Requesting signature for message:', message);
       const signature = await signMessageAsync({ message });
-      console.log('[AUTH] Signature received:', signature);
 
       // Authenticate with backend with selected role
-      console.log('[AUTH] Calling loginWithWallet with role:', selectedRole);
       await loginWithWallet(address, signature, undefined, undefined, selectedRole);
-      console.log('[AUTH] loginWithWallet completed');
 
       // Get updated user state after authentication
       const authState = useAuthStore.getState();
-      console.log('[AUTH] Auth state after login:', {
-        isAuthenticated: authState.isAuthenticated,
-        hasUser: !!authState.user,
-        hasToken: !!authState.token,
-        user: authState.user,
-      });
       
       if (authState.isAuthenticated && authState.user) {
-        console.log('[AUTH] Auth successful, setting user ID and preparing redirect');
         setUserId(authState.user.id);
         addToast({
           message: `Welcome, ${authState.user.name || currentRole.title}!`,
@@ -124,14 +106,12 @@ export default function LoginPage() {
         
         // Role-based redirect
         const dashboardPath = roleConfig[authState.user.role].dashboardPath;
-        console.log('[AUTH] Redirecting to:', dashboardPath);
         
-        setTimeout(() => {
-          console.log('[AUTH] Executing redirect now...');
+        // Use requestAnimationFrame for immediate redirect after state update
+        requestAnimationFrame(() => {
           router.replace(dashboardPath);
-        }, 300);
+        });
       } else {
-        console.error('[AUTH] User state not updated properly:', authState);
         throw new Error('Authentication succeeded but user state not updated');
       }
     } catch (error) {

@@ -6,7 +6,8 @@ Real-world DeFi attack scenario simulation endpoints
 from __future__ import annotations
 
 import asyncio
-from typing import List, Optional
+import uuid
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -22,13 +23,17 @@ from agents.simulation_runner import simulation_runner
 
 router = APIRouter(prefix="/api/scenarios", tags=["Scenario Simulations"])
 
+# ─── In-memory job store ──────────────────────────────────────────────────────
+# job_id -> {"status": "running"|"done"|"error", "result": dict|None}
+_jobs: Dict[str, dict] = {}
+
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
 
 class ScenarioRunRequest(BaseModel):
     scenario_type: str
-    intensity: float = 1.0  # 0.1 to 2.0
-    tick_delay: float = 0.3
+    intensity: float = 1.0   # 0.1 to 2.0
+    tick_delay: float = 0.05  # reduced from 0.3 — faster simulation
 
 
 class ScenarioInfo(BaseModel):
@@ -85,20 +90,12 @@ async def get_scenario_status():
     return ScenarioStatus(**status)
 
 
-@router.post("/run", response_model=ScenarioResultOut)
+@router.post("/run")
 async def run_scenario(body: ScenarioRunRequest):
     """
-    Execute a real-world attack scenario.
-    
-    Example scenarios:
-    - fxtc_collapse: FTX-style exchange collapse with customer fund misappropriation
-    - luna_death_spiral: Terra/Luna algorithmic stablecoin death spiral
-    - flash_loan_exploit: Euler-style flash loan attack
-    - oracle_manipulation: Mango Markets style oracle price manipulation
-    - rug_pull: Classic DeFi exit scam
-    - cascade_armageddon: 3AC-style multi-protocol cascade failure
+    Start a real-world attack scenario as a background job.
+    Returns immediately with a job_id. Poll /job/{job_id} for result.
     """
-    # Validate scenario type
     try:
         scenario_type = ScenarioType(body.scenario_type)
     except ValueError:
@@ -108,45 +105,58 @@ async def run_scenario(body: ScenarioRunRequest):
             detail=f"Invalid scenario type. Valid options: {valid_types}"
         )
 
-    # Validate intensity
     if not 0.1 <= body.intensity <= 2.0:
         raise HTTPException(
             status_code=400,
             detail="Intensity must be between 0.1 and 2.0"
         )
 
-    # Get engine with current simulation state
-    engine = get_scenario_engine(
-        simulation_runner.pool,
-        simulation_runner.lending,
-        simulation_runner.mempool,
-    )
+    job_id = str(uuid.uuid4())[:8]
+    _jobs[job_id] = {"status": "running", "result": None}
 
-    # Wire up event callback to simulation feed
-    def scenario_event_callback(event):
-        simulation_runner.activity_feed.append({
-            "agent_id": "scenario_engine",
-            "agent_name": f"🎭 {body.scenario_type.upper()}",
-            "agent_type": "scenario",
-            "event_type": event.event_type,
-            "data": {
-                "description": event.description,
-                "severity": event.severity,
-                **event.data,
-            },
-            "timestamp": event.timestamp,
-        })
-    
-    engine.event_callback = scenario_event_callback
+    async def _run():
+        try:
+            engine = get_scenario_engine(
+                simulation_runner.pool,
+                simulation_runner.lending,
+                simulation_runner.mempool,
+            )
 
-    # Run the scenario
-    result = await engine.run_scenario(
-        scenario_type=scenario_type,
-        intensity=body.intensity,
-        tick_delay=body.tick_delay,
-    )
+            def scenario_event_callback(event):
+                simulation_runner.activity_feed.append({
+                    "agent_id": "scenario_engine",
+                    "agent_name": f"🎭 {body.scenario_type.upper()}",
+                    "agent_type": "scenario",
+                    "event_type": event.event_type,
+                    "data": {
+                        "description": event.description,
+                        "severity": event.severity,
+                        **event.data,
+                    },
+                    "timestamp": event.timestamp,
+                })
 
-    return ScenarioResultOut(**result.to_dict())
+            engine.event_callback = scenario_event_callback
+            result = await engine.run_scenario(
+                scenario_type=scenario_type,
+                intensity=body.intensity,
+                tick_delay=max(body.tick_delay, 0.05),  # clamp minimum to 50ms
+            )
+            _jobs[job_id] = {"status": "done", "result": result.to_dict()}
+        except Exception as e:
+            _jobs[job_id] = {"status": "error", "result": {"error": str(e)}}
+
+    asyncio.create_task(_run())
+    return {"job_id": job_id, "status": "running"}
+
+
+@router.get("/job/{job_id}")
+async def get_job_result(job_id: str):
+    """Poll the result of a running scenario job."""
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
 
 
 @router.get("/lessons/{scenario_type}")
@@ -162,9 +172,9 @@ async def get_scenario_lessons(scenario_type: str):
         simulation_runner.lending,
         simulation_runner.mempool,
     )
-    
+
     lessons = engine._get_lessons_learned(st)
-    
+
     return {
         "scenario_type": scenario_type,
         "lessons": lessons,
@@ -180,7 +190,7 @@ async def get_fxtc_case_study():
     return {
         "title": "FTX Exchange Collapse - November 2022",
         "summary": "The largest cryptocurrency exchange collapse in history, resulting in $8B+ in customer fund losses",
-        
+
         "timeline": [
             {
                 "date": "November 2, 2022",
@@ -188,7 +198,7 @@ async def get_fxtc_case_study():
                 "impact": "Reveals $5.8B in illiquid FTT tokens as collateral"
             },
             {
-                "date": "November 6, 2022", 
+                "date": "November 6, 2022",
                 "event": "Binance announces FTT token dump",
                 "impact": "FTT price drops 10%, triggering bank run"
             },
@@ -208,7 +218,7 @@ async def get_fxtc_case_study():
                 "impact": "$32B valuation goes to zero"
             },
         ],
-        
+
         "key_fraud_mechanisms": [
             {
                 "mechanism": "Customer Fund Misappropriation",
@@ -231,7 +241,7 @@ async def get_fxtc_case_study():
                 "amount": "$5.8B in FTT"
             },
         ],
-        
+
         "red_flags_missed": [
             "No independent board oversight",
             "Related-party transactions with Alameda",
@@ -240,7 +250,7 @@ async def get_fxtc_case_study():
             "Accounting firm was tiny unknown firm",
             "Celebrity endorsements instead of audits",
         ],
-        
+
         "lessons_for_defi": [
             "Proof of Reserves must include liabilities",
             "Multi-sig custody prevents unilateral transfers",
@@ -248,12 +258,12 @@ async def get_fxtc_case_study():
             "Atomic swaps eliminate counterparty risk",
             "Self-custody is the only true security",
         ],
-        
+
         "simulation_parameters": {
-            "initial_exchange_balance": 10_000_000_000,  # $10B
-            "hidden_debt_ratio": 0.8,  # 80% secretly loaned out
-            "bank_run_trigger_threshold": 0.2,  # 20% withdrawal triggers halt
+            "initial_exchange_balance": 10_000_000_000,
+            "hidden_debt_ratio": 0.8,
+            "bank_run_trigger_threshold": 0.2,
             "cascade_contagion_factor": 1.5,
-            "final_recovery_rate": 0.15,  # 15 cents on the dollar
+            "final_recovery_rate": 0.15,
         }
     }

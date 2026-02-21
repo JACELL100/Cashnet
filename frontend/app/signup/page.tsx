@@ -100,8 +100,6 @@ export default function SignupPage() {
     }
 
     try {
-      console.log('[SIGNUP] Starting signup for wallet:', address, 'as', selectedRole);
-      
       // Get nonce from backend
       const nonceResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/nonce`, {
         method: 'POST',
@@ -125,7 +123,6 @@ export default function SignupPage() {
       const authState = useAuthStore.getState();
       
       if (authState.isAuthenticated && authState.user) {
-        console.log('[SIGNUP] Auth successful, setting user ID and preparing redirect');
         setUserId(authState.user.id);
         addToast({
           message: `Welcome to cashnet, ${authState.user.name || currentRole.title}!`,
@@ -134,14 +131,12 @@ export default function SignupPage() {
         
         // Role-based redirect
         const dashboardPath = roleConfig[authState.user.role].dashboardPath;
-        console.log('[SIGNUP] Redirecting to:', dashboardPath);
         
-        setTimeout(() => {
-          console.log('[SIGNUP] Executing redirect now...');
+        // Use requestAnimationFrame for immediate redirect after state update
+        requestAnimationFrame(() => {
           router.replace(dashboardPath);
-        }, 300);
+        });
       } else {
-        console.error('[SIGNUP] User state not updated properly:', authState);
         throw new Error('Authentication succeeded but user state not updated');
       }
     } catch (error) {

@@ -37,13 +37,11 @@ export default function DashboardLayout({
 
     // Check if user is authenticated
     if (!isAuthenticated || !user) {
-      console.log('[DASHBOARD] User not authenticated, redirecting to landing');
-      router.push('/');
+      router.replace('/');
       return;
     }
     
     // Set the current user ID in simulation store for user-specific data
-    console.log('[DASHBOARD] User authenticated, setting user ID:', user.id);
     setUserId(user.id);
 
     // Redirect to role-specific dashboard if on generic /dashboard
@@ -52,32 +50,13 @@ export default function DashboardLayout({
     
     // Only redirect if user is on the exact /dashboard path and their role has a different default
     if (pathname === '/dashboard' && defaultPath !== '/dashboard') {
-      console.log('[DASHBOARD] Redirecting to role-specific dashboard:', defaultPath);
       router.replace(defaultPath);
     }
   }, [isAuthenticated, user, hasHydrated, router, setUserId, pathname]);
 
-  // Show loading state while waiting for hydration
-  if (!hasHydrated) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-accent font-mono mb-4">RE</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-accent font-mono mb-4">RE</div>
-          <p className="text-text-secondary font-mono">Redirecting...</p>
-        </div>
-      </div>
-    );
+  // Show loading state while waiting for hydration (minimal, non-blocking)
+  if (!hasHydrated || !isAuthenticated || !user) {
+    return null; // Return null for instant loading - Next.js will handle the transition
   }
 
   return (
