@@ -1,16 +1,72 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSignMessage } from 'wagmi';
 import { useUIStore } from '@/store/uiStore';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, UserRole } from '@/store/authStore';
 import { useSimulationStore } from '@/store/simulationStore';
+
+const roleConfig: Record<UserRole, { title: string; icon: string; description: string; color: string; dashboardPath: string; features: string[] }> = {
+  ADMIN: {
+    title: 'Administrator',
+    icon: '⚙',
+    description: 'Full platform access',
+    color: 'text-purple-400 border-purple-400/50 bg-purple-400/10',
+    dashboardPath: '/dashboard',
+    features: [
+      'Full system administration',
+      'User management & permissions',
+      'Platform configuration',
+      'All module access',
+    ],
+  },
+  AUDITOR: {
+    title: 'Auditor',
+    icon: '◆',
+    description: 'Audit & compliance',
+    color: 'text-amber-400 border-amber-400/50 bg-amber-400/10',
+    dashboardPath: '/dashboard/audit',
+    features: [
+      'Transaction audit trails',
+      'Compliance verification',
+      'Smart contract reviews',
+      'Risk assessment reports',
+    ],
+  },
+  LENDER: {
+    title: 'Lender',
+    icon: '≈',
+    description: 'Provide liquidity',
+    color: 'text-emerald-400 border-emerald-400/50 bg-emerald-400/10',
+    dashboardPath: '/dashboard/lending',
+    features: [
+      'Liquidity pool management',
+      'Interest rate optimization',
+      'Portfolio analytics',
+      'Yield strategies',
+    ],
+  },
+  BORROWER: {
+    title: 'Borrower',
+    icon: '⎇',
+    description: 'Access credit',
+    color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
+    dashboardPath: '/dashboard/credit',
+    features: [
+      'Credit score tracking',
+      'Loan management',
+      'Collateral monitoring',
+      'Payment scheduling',
+    ],
+  },
+};
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const addToast = useUIStore((state) => state.addToast);
   const loginWithWallet = useAuthStore((state) => state.loginWithWallet);
   const setUserId = useSimulationStore((state) => state.setUserId);
@@ -18,8 +74,20 @@ export default function SignupPage() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
+  // Get role from query params
+  const roleParam = searchParams.get('role') as UserRole | null;
+  const [selectedRole, setSelectedRole] = useState<UserRole>(roleParam || 'BORROWER');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+
+  // Redirect to landing page if no role is selected
+  useEffect(() => {
+    if (!roleParam) {
+      router.replace('/');
+    }
+  }, [roleParam, router]);
+
+  const currentRole = roleConfig[selectedRole];
 
   // Handle wallet connection and signup
   const handleSignup = async () => {
@@ -32,6 +100,8 @@ export default function SignupPage() {
     }
 
     try {
+      console.log('[SIGNUP] Starting signup for wallet:', address, 'as', selectedRole);
+      
       // Get nonce from backend
       const nonceResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/nonce`, {
         method: 'POST',
@@ -48,8 +118,8 @@ export default function SignupPage() {
       // Request signature from user
       const signature = await signMessageAsync({ message });
 
-      // Authenticate with backend (signup + login in one step)
-      await loginWithWallet(address, signature, name || undefined, email || undefined);
+      // Authenticate with backend (signup + login in one step) with role
+      await loginWithWallet(address, signature, name || undefined, email || undefined, selectedRole);
 
       // Get updated user state after authentication
       const authState = useAuthStore.getState();
@@ -58,14 +128,17 @@ export default function SignupPage() {
         console.log('[SIGNUP] Auth successful, setting user ID and preparing redirect');
         setUserId(authState.user.id);
         addToast({
-          message: `Welcome to cashnet, ${authState.user.name || 'User'}!`,
+          message: `Welcome to cashnet, ${authState.user.name || currentRole.title}!`,
           severity: 'success',
         });
-        console.log('[SIGNUP] Toast shown, initiating redirect to /dashboard');
-        // Use setTimeout to ensure state is fully updated and persisted before redirect
+        
+        // Role-based redirect
+        const dashboardPath = roleConfig[authState.user.role].dashboardPath;
+        console.log('[SIGNUP] Redirecting to:', dashboardPath);
+        
         setTimeout(() => {
           console.log('[SIGNUP] Executing redirect now...');
-          router.replace('/dashboard');
+          router.replace(dashboardPath);
         }, 300);
       } else {
         console.error('[SIGNUP] User state not updated properly:', authState);
@@ -92,26 +165,25 @@ export default function SignupPage() {
         </Link>
 
         <div className="space-y-8">
+          {/* Role Badge */}
+          <div className={`inline-flex items-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
+            <span className="text-2xl">{currentRole.icon}</span>
+            <div>
+              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
+              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
+            </div>
+          </div>
+
           {/* Features */}
           <div>
-            <h3 className="text-text-primary font-mono font-bold mb-4">What you get:</h3>
+            <h3 className="text-text-primary font-mono font-bold mb-4">What you get as {currentRole.title}:</h3>
             <ul className="space-y-3 text-text-secondary text-sm font-mono">
-              <li className="flex items-start gap-2">
-                <span className="text-accent">✓</span>
-                <span>Non-custodial wallet authentication</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-accent">✓</span>
-                <span>Access to DeFi simulation lab</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-accent">✓</span>
-                <span>Risk analysis & monitoring</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-accent">✓</span>
-                <span>Secure transaction approval</span>
-              </li>
+              {currentRole.features.map((feature, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <span className="text-accent">✓</span>
+                  <span>{feature}</span>
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -138,14 +210,23 @@ export default function SignupPage() {
             <span className="font-mono text-base font-bold text-text-primary">cashnet</span>
           </Link>
 
+          {/* Role Badge (Mobile) */}
+          <div className={`md:hidden flex items-center justify-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
+            <span className="text-2xl">{currentRole.icon}</span>
+            <div>
+              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
+              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
+            </div>
+          </div>
+
           {/* Heading */}
           <div className="text-center space-y-2">
-            <div className="text-5xl mb-2">🦊</div>
+            <div className="text-5xl mb-2">{currentRole.icon}</div>
             <h1 className="text-3xl font-bold font-mono text-text-primary">
               Get Started
             </h1>
             <p className="text-text-secondary text-sm font-mono">
-              Connect MetaMask or any wallet to join cashnet
+              Join cashnet as {currentRole.title.toLowerCase()}
             </p>
             <div className="text-xs text-text-secondary font-mono mt-3 p-3 bg-[color:var(--color-bg-primary)] rounded border border-[color:var(--color-border)] text-left">
               💡 <strong>MetaMask:</strong> Choose "Browser" for extension or "WalletConnect" for mobile QR
@@ -331,12 +412,22 @@ export default function SignupPage() {
             <p className="text-text-secondary text-sm font-mono">
               Already have an account?{' '}
               <Link
-                href="/login"
+                href={`/login?role=${selectedRole}`}
                 className="text-accent hover:text-accent-light transition-colors font-bold"
               >
                 Sign in
               </Link>
             </p>
+          </div>
+
+          {/* Change Role Link */}
+          <div className="text-center">
+            <Link
+              href="/"
+              className="text-text-tertiary text-xs font-mono hover:text-text-secondary transition-colors"
+            >
+              ← Change role
+            </Link>
           </div>
         </div>
       </div>

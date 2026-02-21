@@ -80,8 +80,13 @@ const Header: React.FC<HeaderProps> = ({
           </Badge>
 
           {/* Role Badge */}
-          <Badge variant="purple">
-            {user?.plan?.toUpperCase() || role.toUpperCase()}
+          <Badge variant={
+            user?.role === 'ADMIN' ? 'purple' :
+            user?.role === 'AUDITOR' ? 'high' :
+            user?.role === 'LENDER' ? 'success' :
+            'cyan'
+          }>
+            {user?.role || role.toUpperCase()}
           </Badge>
 
           {/* User Info Dropdown */}

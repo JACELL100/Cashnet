@@ -1,22 +1,67 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSignMessage } from 'wagmi';
 import { useUIStore } from '@/store/uiStore';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, UserRole } from '@/store/authStore';
 import { useSimulationStore } from '@/store/simulationStore';
+
+const roleConfig: Record<UserRole, { title: string; icon: string; description: string; color: string; dashboardPath: string }> = {
+  ADMIN: {
+    title: 'Administrator',
+    icon: '⚙',
+    description: 'Full platform access',
+    color: 'text-purple-400 border-purple-400/50 bg-purple-400/10',
+    dashboardPath: '/dashboard',
+  },
+  AUDITOR: {
+    title: 'Auditor',
+    icon: '◆',
+    description: 'Audit & compliance',
+    color: 'text-amber-400 border-amber-400/50 bg-amber-400/10',
+    dashboardPath: '/dashboard/audit',
+  },
+  LENDER: {
+    title: 'Lender',
+    icon: '≈',
+    description: 'Provide liquidity',
+    color: 'text-emerald-400 border-emerald-400/50 bg-emerald-400/10',
+    dashboardPath: '/dashboard/lending',
+  },
+  BORROWER: {
+    title: 'Borrower',
+    icon: '⎇',
+    description: 'Access credit',
+    color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
+    dashboardPath: '/dashboard/credit',
+  },
+};
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const addToast = useUIStore((state) => state.addToast);
   const loginWithWallet = useAuthStore((state) => state.loginWithWallet);
   const setUserId = useSimulationStore((state) => state.setUserId);
 
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
+
+  // Get role from query params
+  const roleParam = searchParams.get('role') as UserRole | null;
+  const [selectedRole, setSelectedRole] = useState<UserRole>(roleParam || 'BORROWER');
+
+  // Redirect to landing page if no role is selected
+  useEffect(() => {
+    if (!roleParam) {
+      router.replace('/');
+    }
+  }, [roleParam, router]);
+
+  const currentRole = roleConfig[selectedRole];
 
   // Handle wallet connection and authentication
   const handleAuthenticate = async () => {
@@ -29,7 +74,7 @@ export default function LoginPage() {
     }
 
     try {
-      console.log('[AUTH] Starting authentication for wallet:', address);
+      console.log('[AUTH] Starting authentication for wallet:', address, 'as', selectedRole);
       
       // Get nonce from backend
       const nonceResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/nonce`, {
@@ -55,9 +100,9 @@ export default function LoginPage() {
       const signature = await signMessageAsync({ message });
       console.log('[AUTH] Signature received:', signature);
 
-      // Authenticate with backend
-      console.log('[AUTH] Calling loginWithWallet...');
-      await loginWithWallet(address, signature);
+      // Authenticate with backend with selected role
+      console.log('[AUTH] Calling loginWithWallet with role:', selectedRole);
+      await loginWithWallet(address, signature, undefined, undefined, selectedRole);
       console.log('[AUTH] loginWithWallet completed');
 
       // Get updated user state after authentication
@@ -73,14 +118,17 @@ export default function LoginPage() {
         console.log('[AUTH] Auth successful, setting user ID and preparing redirect');
         setUserId(authState.user.id);
         addToast({
-          message: `Welcome, ${authState.user.name || 'User'}!`,
+          message: `Welcome, ${authState.user.name || currentRole.title}!`,
           severity: 'success',
         });
-        console.log('[AUTH] Toast shown, initiating redirect to /dashboard');
-        // Use setTimeout to ensure state is fully updated and persisted before redirect
+        
+        // Role-based redirect
+        const dashboardPath = roleConfig[authState.user.role].dashboardPath;
+        console.log('[AUTH] Redirecting to:', dashboardPath);
+        
         setTimeout(() => {
           console.log('[AUTH] Executing redirect now...');
-          router.replace('/dashboard');
+          router.replace(dashboardPath);
         }, 300);
       } else {
         console.error('[AUTH] User state not updated properly:', authState);
@@ -107,6 +155,15 @@ export default function LoginPage() {
         </Link>
 
         <div className="space-y-8">
+          {/* Role Badge */}
+          <div className={`inline-flex items-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
+            <span className="text-2xl">{currentRole.icon}</span>
+            <div>
+              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
+              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
+            </div>
+          </div>
+
           {/* Quote */}
           <div>
             <blockquote className="text-text-secondary italic font-mono text-sm">
@@ -117,7 +174,7 @@ export default function LoginPage() {
 
           {/* Mini Terminal */}
           <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4 text-xs font-mono space-y-1">
-            <div className="text-accent">→ wallet authentication ready</div>
+            <div className="text-accent">→ logging in as {selectedRole.toLowerCase()}</div>
             <div className="text-success">✓ signature verification enabled</div>
             <div className="text-warn">⚠ connect your wallet to continue</div>
           </div>
@@ -145,13 +202,22 @@ export default function LoginPage() {
             <span className="font-mono text-base font-bold text-text-primary">cashnet</span>
           </Link>
 
+          {/* Role Badge (Mobile) */}
+          <div className={`md:hidden flex items-center justify-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
+            <span className="text-2xl">{currentRole.icon}</span>
+            <div>
+              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
+              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
+            </div>
+          </div>
+
           {/* Heading */}
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-bold font-mono text-text-primary">
               Sign In
             </h1>
             <p className="text-text-secondary text-sm font-mono">
-              Connect your wallet to access cashnet
+              Connect your wallet to access cashnet as {currentRole.title.toLowerCase()}
             </p>
           </div>
 
@@ -303,12 +369,22 @@ export default function LoginPage() {
             <p className="text-text-secondary text-sm font-mono">
               New to cashnet?{' '}
               <Link
-                href="/signup"
+                href={`/signup?role=${selectedRole}`}
                 className="text-accent hover:text-accent-light transition-colors font-bold"
               >
                 Get started
               </Link>
             </p>
+          </div>
+
+          {/* Change Role Link */}
+          <div className="text-center">
+            <Link
+              href="/"
+              className="text-text-tertiary text-xs font-mono hover:text-text-secondary transition-colors"
+            >
+              ← Change role
+            </Link>
           </div>
         </div>
       </div>

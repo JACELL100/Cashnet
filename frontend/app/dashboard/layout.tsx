@@ -1,13 +1,21 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import CascadeBanner from '@/components/CascadeBanner';
 import { ToastContainer } from '@/components/Toast';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthStore, UserRole } from '@/store/authStore';
 import { useSimulationStore } from '@/store/simulationStore';
+
+// Role-based default dashboard paths
+const roleDefaultPaths: Record<UserRole, string> = {
+  ADMIN: '/dashboard',
+  AUDITOR: '/dashboard/audit',
+  LENDER: '/dashboard/lending',
+  BORROWER: '/dashboard/credit',
+};
 
 export default function DashboardLayout({
   children,
@@ -15,6 +23,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const user = useAuthStore((state) => state.user);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
@@ -28,14 +37,25 @@ export default function DashboardLayout({
 
     // Check if user is authenticated
     if (!isAuthenticated || !user) {
-      console.log('[DASHBOARD] User not authenticated, redirecting to login');
-      router.push('/login');
+      console.log('[DASHBOARD] User not authenticated, redirecting to landing');
+      router.push('/');
       return;
     }
+    
     // Set the current user ID in simulation store for user-specific data
     console.log('[DASHBOARD] User authenticated, setting user ID:', user.id);
     setUserId(user.id);
-  }, [isAuthenticated, user, hasHydrated, router, setUserId]);
+
+    // Redirect to role-specific dashboard if on generic /dashboard
+    const userRole = user.role || 'BORROWER';
+    const defaultPath = roleDefaultPaths[userRole];
+    
+    // Only redirect if user is on the exact /dashboard path and their role has a different default
+    if (pathname === '/dashboard' && defaultPath !== '/dashboard') {
+      console.log('[DASHBOARD] Redirecting to role-specific dashboard:', defaultPath);
+      router.replace(defaultPath);
+    }
+  }, [isAuthenticated, user, hasHydrated, router, setUserId, pathname]);
 
   // Show loading state while waiting for hydration
   if (!hasHydrated) {
