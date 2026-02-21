@@ -255,6 +255,7 @@ async def get_borrowers(db: Session = Depends(get_db)):
                     "debt_value": round(pos.debt, 2),
                     "health_factor": round(pos.health_factor, 4),
                     "at_risk": pos.is_liquidatable,
+                    "credit_score": pos.credit_profile.current_score,
                 }
                 for wallet, pos in positions.items()
             ],
@@ -289,19 +290,18 @@ async def get_lending_metrics():
         if positions
         else 0.0
     )
-    utilization = (
-        (ls.total_debt / ls.total_collateral * 100) if ls.total_collateral else 0.0
-    )
+    
+    data = ls.to_dict()
+    data["avg_health_factor"] = round(avg_hf, 4)
+    data["at_risk_count"] = len(ls.get_liquidatable())
+    
+    # Rename some fields to match legacy frontend expectations,
+    # and keep the new ones (borrow_apr, total_supplied)
+    data["utilization_rate"] = data.get("utilization_ratio", 0) * 100
+    
     return {
         "success": True,
-        "data": {
-            "total_collateral": round(ls.total_collateral, 2),
-            "total_debt": round(ls.total_debt, 2),
-            "utilization_rate": round(utilization, 2),
-            "avg_health_factor": round(avg_hf, 4),
-            "at_risk_count": len(ls.get_liquidatable()),
-            "liquidation_count": ls.liquidation_count,
-        },
+        "data": data
     }
 
 

@@ -24,12 +24,25 @@ export default function LenderLayout({ children }: { children: React.ReactNode }
   const logout = useAuthStore((s) => s.logout);
 
   const isAuthPage = pathname === '/lender/login' || pathname === '/lender/signup';
+  const hasHydrated = useAuthStore((s) => s._hasHydrated);
 
   useEffect(() => {
+    if (!hasHydrated) return;
     if (isAuthPage) return;
     if (!isAuthenticated || !user) { router.push('/lender/login'); return; }
     if (user.role !== 'LENDER') { router.push('/lender/login'); }
-  }, [isAuthenticated, user, router, isAuthPage]);
+  }, [hasHydrated, isAuthenticated, user, router, isAuthPage]);
+
+  if (!hasHydrated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <div className="text-center">
+          <div className="text-4xl font-bold text-[#b367ff] font-mono mb-4">LN</div>
+          <p className="text-text-secondary font-mono">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isAuthPage) return <>{children}</>;
 

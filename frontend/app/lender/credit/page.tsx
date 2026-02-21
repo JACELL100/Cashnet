@@ -1,15 +1,74 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
-import { generateCreditScores, generateScoreFactors, generateDynamicRates } from '@/lib/mockData';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function CreditPage() {
-  const [leaderboard] = useState(() => generateCreditScores());
-  const [factors] = useState(() => generateScoreFactors());
-  const [rates] = useState(() => generateDynamicRates());
-  const [selectedWallet, setSelectedWallet] = useState(leaderboard[0]?.wallet);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [rates, setRates] = useState<any[]>([]);
+  const [factors, setFactors] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
+  const [selectedWallet, setSelectedWallet] = useState<string | undefined>();
+
+  const fetchGlobalData = useCallback(async () => {
+    try {
+      const [lbRes, ratesRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/credit/leaderboard`),
+        fetch(`${API_URL}/api/credit/dynamic-rates`),
+      ]);
+
+      if (lbRes.status === 'fulfilled' && lbRes.value.ok) {
+        const json = await lbRes.value.json();
+        const data = json.data ?? json ?? [];
+        setLeaderboard(data);
+        if (data.length > 0 && !selectedWallet) {
+          setSelectedWallet(data[0].wallet);
+        }
+      }
+      if (ratesRes.status === 'fulfilled' && ratesRes.value.ok) {
+        const json = await ratesRes.value.json();
+        setRates(json.data ?? json ?? []);
+      }
+    } catch {
+      // ignore
+    }
+  }, [selectedWallet]);
+
+  const fetchWalletData = useCallback(async (wallet: string) => {
+    try {
+      const [scoreRes, histRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/credit/scores/${wallet}`),
+        fetch(`${API_URL}/api/credit/scores/${wallet}/history`),
+      ]);
+
+      if (scoreRes.status === 'fulfilled' && scoreRes.value.ok) {
+        const json = await scoreRes.value.json();
+        const data = json.data ?? json;
+        setFactors(Array.isArray(data.factors) ? data.factors : Array.isArray(data) ? data : []);
+      }
+      if (histRes.status === 'fulfilled' && histRes.value.ok) {
+        const json = await histRes.value.json();
+        setHistory(json.data ?? json ?? []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGlobalData();
+    const interval = setInterval(fetchGlobalData, 10000);
+    return () => clearInterval(interval);
+  }, [fetchGlobalData]);
+
+  useEffect(() => {
+    if (selectedWallet) {
+      fetchWalletData(selectedWallet);
+    }
+  }, [selectedWallet, fetchWalletData]);
 
   const selectedScore = leaderboard.find((s) => s.wallet === selectedWallet);
 
@@ -49,15 +108,15 @@ export default function CreditPage() {
                 >
                   <td className="font-mono text-xs font-bold">{idx + 1}</td>
                   <td className="font-mono text-xs truncate">{score.wallet.slice(0, 12)}...</td>
-                  <td className="font-mono text-xs font-bold text-accent">{score.score}</td>
+                  <td className="font-mono text-xs font-bold text-accent">{score.score ?? 0}</td>
                   <td>
-                    <Badge variant={score.tier === 'platinum' ? 'purple' : score.tier === 'gold' ? 'warn' : 'medium'}>
-                      {score.tier.toUpperCase()}
+                    <Badge variant={score.tier === 'platinum' ? 'purple' : score.tier === 'gold' ? 'high' : 'medium'}>
+                      {score.tier?.toUpperCase() || 'N/A'}
                     </Badge>
                   </td>
-                  <td className="font-mono text-xs capitalize">{score.type}</td>
-                  <td className={`font-mono text-xs font-bold ${score.delta >= 0 ? 'text-success' : 'text-danger'}`}>
-                    {score.delta >= 0 ? '+' : ''}{score.delta}
+                  <td className="font-mono text-xs capitalize">{score.type || 'unknown'}</td>
+                  <td className={`font-mono text-xs font-bold ${(score.delta ?? 0) >= 0 ? 'text-success' : 'text-danger'}`}>
+                    {(score.delta ?? 0) >= 0 ? '+' : ''}{score.delta ?? 0}
                   </td>
                 </tr>
               ))}
@@ -75,7 +134,7 @@ export default function CreditPage() {
               Score Composition
             </h4>
             <div className="space-y-3">
-              {factors.map((factor) => (
+              {(Array.isArray(factors) ? factors : []).map((factor) => (
                 <div key={factor.name}>
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="font-mono text-text-secondary">{factor.name}</span>
@@ -98,15 +157,18 @@ export default function CreditPage() {
               30-Day History
             </h4>
             <div className="h-32 bg-[color:var(--color-bg-accent)] rounded flex items-end gap-0.5">
-              {[...Array(30)].map((_, idx) => (
-                <div
-                  key={idx}
-                  className="flex-1 bg-accent opacity-60 rounded-t"
-                  style={{
-                    height: `${40 + Math.sin(idx / 5) * 30}%`,
-                  }}
-                />
-              ))}
+              {(history.length > 0 ? history : [...Array(30)]).map((histItem, idx) => {
+                const height = typeof histItem === 'number' ? histItem : (histItem?.score || 40 + Math.sin(idx / 5) * 30);
+                return (
+                  <div
+                    key={idx}
+                    className="flex-1 bg-accent opacity-60 rounded-t"
+                    style={{
+                      height: `${height}%`,
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
 

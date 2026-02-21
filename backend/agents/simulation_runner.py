@@ -29,6 +29,7 @@ from agents.arbitrage_bot import ArbitrageBot
 from agents.liquidator_bot import LiquidatorBot
 from agents.mev_bot import MEVBot
 from agents.attacker_agent import AttackerAgent
+from agents.borrower_agent import BorrowerAgent
 from agents.fraud_monitor import FraudMonitor
 from agents.market_data import MarketDataService, market_data_service, PriceData
 
@@ -125,7 +126,45 @@ class SimulationRunner:
             capital=50_000,
             attack_cooldown_ticks=20,
         ))
+        
+        # 3 Actively Managed Borrower Positions
+        agents.append(BorrowerAgent(name="Borrower_A1", wallet="0xBorrower_A1", capital=10_000))
+        agents.append(BorrowerAgent(name="Borrower_B2", wallet="0xBorrower_B2", capital=5_000))
+        agents.append(BorrowerAgent(name="Borrower_C3", wallet="0xBorrower_C3", capital=20_000))
 
+        return agents
+
+    def _create_custom_agents(self, config: List[Dict[str, Any]]) -> List[BaseAgent]:
+        """Spawn agents based on a custom frontend configuration."""
+        agents: List[BaseAgent] = []
+        for a_conf in config:
+            a_type = a_conf.get("type")
+            name = a_conf.get("name", "Agent")
+            capital = a_conf.get("capital", 50000.0)
+            risk = a_conf.get("risk", "medium")
+            speed = a_conf.get("speed", "normal")
+            
+            agent = None
+            if a_type == AgentType.RETAIL_TRADER.value:
+                agent = RetailTrader(name=name, capital=capital)
+            elif a_type == AgentType.WHALE.value:
+                agent = WhaleAgent(name=name, capital=capital)
+            elif a_type == AgentType.ARBITRAGE_BOT.value:
+                agent = ArbitrageBot(name=name, capital=capital, spread_threshold_pct=a_conf.get("spread_threshold", 0.3))
+            elif a_type == AgentType.LIQUIDATOR_BOT.value:
+                agent = LiquidatorBot(name=name, capital=capital)
+            elif a_type == AgentType.MEV_BOT.value:
+                agent = MEVBot(name=name, capital=capital)
+            elif a_type == AgentType.ATTACKER.value:
+                agent = AttackerAgent(name=name, capital=capital)
+            elif a_type == "borrower":
+                agent = BorrowerAgent(name=name, wallet=f"0x{name}", capital=capital)
+                
+            if agent:
+                agent.risk = risk
+                agent.speed = speed
+                agents.append(agent)
+                
         return agents
 
     def _inject_shared_state(self):
@@ -178,7 +217,11 @@ class SimulationRunner:
         self.end_time = None
 
         # Create agents
-        self.agents = custom_agents or self._create_default_agents()
+        if custom_agents is not None:
+            self.agents = custom_agents
+        else:
+            self.agents = self._create_default_agents()
+            
         self._inject_shared_state()
 
         for agent in self.agents:
@@ -225,7 +268,10 @@ class SimulationRunner:
     async def _tick(self):
         """Execute one simulation step: fetch market data, all agents act, then world updates."""
 
-        # 0. Fetch real market data periodically
+        # 0. Core world state updates (interest rate accrual)
+        self.lending.accrue_interest(self.tick_delay)
+        
+        # 1. Fetch real market data periodically
         now = time.time()
         if now - self._last_market_fetch >= self._market_fetch_interval:
             try:
@@ -376,6 +422,78 @@ class SimulationRunner:
                 agent.capital = capital
                 return agent.to_dict()
         return None
+
+    def trigger_stress_event(self, event_type: str, magnitude: float = 1.0) -> Dict[str, Any]:
+        """Trigger an immediate stress event impacting pool or lending protocol."""
+        result = {}
+        if event_type == "price_crash":
+            # Simulate a 10-50% price crash of collateral
+            crash_pct = 10 * magnitude
+            self.lending.apply_price_change(-crash_pct)
+            
+            # Crash the pool price as well
+            if self.pool.reserve_a > 100:
+                self.pool.execute_swap(self.pool.reserve_a * (crash_pct / 100), "TOKEN_A")
+                
+            self._on_agent_event({
+                "agent_id": "system_stress",
+                "agent_type": "system",
+                "agent_name": "God Mode",
+                "event_type": "stress_event",
+                "data": {
+                    "type": "price_crash",
+                    "magnitude": magnitude,
+                    "impact_pct": -crash_pct,
+                },
+                "timestamp": time.time(),
+            })
+            result = {"type": "price_crash", "impact_pct": -crash_pct}
+
+        elif event_type == "liquidity_drain":
+            # Yank liquidity from the pool
+            remove_pct = 20 * magnitude
+            removed = self.pool.remove_liquidity(remove_pct)
+            self._on_agent_event({
+                "agent_id": "system_stress",
+                "agent_type": "system",
+                "agent_name": "God Mode",
+                "event_type": "stress_event",
+                "data": {
+                    "type": "liquidity_drain",
+                    "magnitude": magnitude,
+                    "removed_pct": remove_pct,
+                },
+                "timestamp": time.time(),
+            })
+            result = {"type": "liquidity_drain", "removed_pct": remove_pct}
+            
+        elif event_type == "mempool_flood":
+            # Flood the mempool with fake high gas transactions
+            for i in range(int(50 * magnitude)):
+                self.mempool.submit(PendingTx(
+                    tx_id=f"flood_{time.time()}_{i}",
+                    agent_id="system_stress",
+                    action="spam_tx",
+                    token_in="TOKEN_A",
+                    token_out="TOKEN_B",
+                    amount=random.uniform(500, 2000),
+                    gas_price=random.uniform(100, 300) * magnitude
+                ))
+            self._on_agent_event({
+                "agent_id": "system_stress",
+                "agent_type": "system",
+                "agent_name": "God Mode",
+                "event_type": "stress_event",
+                "data": {
+                    "type": "mempool_flood",
+                    "magnitude": magnitude,
+                    "tx_count": int(50 * magnitude),
+                },
+                "timestamp": time.time(),
+            })
+            result = {"type": "mempool_flood", "tx_count": int(50 * magnitude)}
+            
+        return result
 
     # ------------------------------------------------------------------
     # State queries (for API)
