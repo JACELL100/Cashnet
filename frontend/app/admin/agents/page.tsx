@@ -139,17 +139,6 @@ export default function AgentsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Agent Configuration State ──────────────────────────────
-  const [agentConfigs, setAgentConfigs] = useState([
-    { id: 'retail', name: 'Retail Army', type: 'retail_trader', capital: 25000, risk: 'medium', speed: 'normal', active: true, count: 3 },
-    { id: 'whale', name: 'MegaWhale', type: 'whale', capital: 500000, risk: 'high', speed: 'normal', active: true, count: 1 },
-    { id: 'arb', name: 'ArbBot', type: 'arbitrage_bot', capital: 100000, risk: 'medium', speed: 'fast', spread: 0.3, active: true, count: 1 },
-    { id: 'liq', name: 'LiqBot', type: 'liquidator_bot', capital: 200000, risk: 'low', speed: 'fast', active: true, count: 1 },
-    { id: 'mev', name: 'SandwichBot', type: 'mev_bot', capital: 150000, risk: 'high', speed: 'fast', active: true, count: 1 },
-    { id: 'attacker', name: 'FlashAttacker', type: 'attacker', capital: 50000, risk: 'high', speed: 'fast', active: true, count: 1 },
-    { id: 'borrower', name: 'LeverageChad', type: 'borrower', capital: 20000, risk: 'high', speed: 'normal', active: true, count: 3 },
-  ]);
-
   // ── Polling ─────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     const [statusData, agentData, feedData, alertData] = await Promise.all([
@@ -175,41 +164,9 @@ export default function AgentsPage() {
   // ── Controls ─────────────────────────────────────────────────────────────
   const startSim = async () => {
     setIsLoading(true);
-
-    // Build agent payload
-    const payloadAgents: any[] = [];
-    agentConfigs.filter(c => c.active).forEach(c => {
-      for (let i = 0; i < c.count; i++) {
-        payloadAgents.push({
-          type: c.type,
-          name: c.count > 1 ? `${c.name}_${i + 1}` : c.name,
-          capital: c.capital,
-          risk: c.risk,
-          speed: c.speed,
-          spread_threshold: c.spread || undefined
-        });
-      }
-    });
-
-    await api('/api/simulation/start', {
-      method: 'POST',
-      body: JSON.stringify({
-        max_steps: 400,
-        tick_delay: 0.5,
-        agents_config: payloadAgents.length > 0 ? payloadAgents : undefined // fall back to defaults if empty
-      })
-    });
-
+    await api('/api/simulation/start', { method: 'POST', body: JSON.stringify({ max_steps: 200, tick_delay: 0.5 }) });
     await fetchAll();
     setIsLoading(false);
-  };
-
-  const triggerStress = async (type: string, magnitude: number) => {
-    await api('/api/simulation/stress', {
-      method: 'POST',
-      body: JSON.stringify({ event_type: type, magnitude })
-    });
-    await fetchAll();
   };
 
   const pauseSim = async () => {
@@ -247,13 +204,14 @@ export default function AgentsPage() {
   const totalPnl = agents.reduce((s, a) => s + a.pnl, 0);
 
   const terminalLines = feed.map((e) => ({
-    text: `[${e.agent_name || e.agent_id}] ${e.event_type}: ${typeof e.data === 'object'
+    text: `[${e.agent_name || e.agent_id}] ${e.event_type}: ${
+      typeof e.data === 'object'
         ? Object.entries(e.data)
-          .filter(([k]) => k !== 'receipt')
-          .map(([k, v]) => `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`)
-          .join(' | ')
+            .filter(([k]) => k !== 'receipt')
+            .map(([k, v]) => `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`)
+            .join(' | ')
         : String(e.data)
-      }`,
+    }`,
     type: (e.event_type.includes('attack') || e.event_type.includes('flash')
       ? 'danger'
       : e.event_type.includes('panic') || e.event_type.includes('liquidat')
@@ -278,7 +236,7 @@ export default function AgentsPage() {
 
       {/* ── Real Market Data Banner ───────────────────────────────────── */}
       {simStatus?.market_data && (
-        <div className="card p-4 bg-gradient-to-r from-[rgba(0,212,99,0.08)] to-[rgba(56,189,248,0.08)] border border-[color:var(--color-accent)] rounded-lg">
+        <div className="card p-4 bg-gradient-to-r from-[rgba(0,212,99,0.08)] to-[rgba(56,189,248,0.08)] border border-(--color-accent) rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-lg">📡</span>
@@ -291,20 +249,21 @@ export default function AgentsPage() {
               <SentimentBadge sentiment={simStatus.market_data.condition.sentiment} />
               <Badge variant={
                 simStatus.market_data.condition.volatility === 'extreme' ? 'critical' :
-                  simStatus.market_data.condition.volatility === 'high' ? 'high' : 'medium'
+                simStatus.market_data.condition.volatility === 'high' ? 'high' : 'medium'
               }>
                 {simStatus.market_data.condition.volatility.toUpperCase()} VOL
               </Badge>
             </div>
           </div>
-
+          
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
             {Object.entries(simStatus.market_data.prices).map(([symbol, price]) => (
-              <div key={symbol} className="bg-[color:var(--color-bg-primary)] rounded p-2">
+              <div key={symbol} className="bg-(--color-bg-primary) rounded p-2">
                 <div className="flex items-center justify-between">
                   <span className="font-mono font-bold text-xs text-text-primary">{symbol}</span>
-                  <span className={`text-[10px] font-mono font-bold ${(price as PriceInfo).change_pct_24h >= 0 ? 'text-success' : 'text-danger'
-                    }`}>
+                  <span className={`text-[10px] font-mono font-bold ${
+                    (price as PriceInfo).change_pct_24h >= 0 ? 'text-success' : 'text-danger'
+                  }`}>
                     {(price as PriceInfo).change_pct_24h >= 0 ? '▲' : '▼'}
                     {Math.abs((price as PriceInfo).change_pct_24h).toFixed(1)}%
                   </span>
@@ -315,7 +274,7 @@ export default function AgentsPage() {
               </div>
             ))}
           </div>
-
+          
           <div className="flex items-center justify-between mt-3 text-[10px] font-mono text-text-tertiary">
             <span>Trend: <span className="text-accent">{simStatus.market_data.condition.trend.toUpperCase()}</span></span>
             <span>Risk Level: <span className={simStatus.market_data.condition.risk_level > 0.6 ? 'text-danger' : 'text-accent'}>
@@ -331,10 +290,11 @@ export default function AgentsPage() {
         {agents.map((agent) => (
           <div
             key={agent.id}
-            className={`card p-3 space-y-2 border-l-2 transition-all ${agent.active
-                ? 'border-l-[color:var(--color-accent)]'
-                : 'border-l-[color:var(--color-text-tertiary)] opacity-60'
-              }`}
+            className={`card p-3 space-y-2 border-l-2 transition-all ${
+              agent.active
+                ? 'border-l-(--color-accent)'
+                : 'border-l-(--color-text-tertiary) opacity-60'
+            }`}
           >
             <div className="flex items-center gap-2">
               <span className="text-lg">{AGENT_ICONS[agent.type] || '🤖'}</span>
@@ -352,8 +312,9 @@ export default function AgentsPage() {
                 {(agent.risk ?? '').toUpperCase()}
               </Badge>
               <span
-                className={`text-xs font-mono font-bold ${(agent.pnl ?? 0) >= 0 ? 'text-success' : 'text-danger'
-                  }`}
+                className={`text-xs font-mono font-bold ${
+                  agent.pnl >= 0 ? 'text-success' : 'text-danger'
+                }`}
               >
                 {(agent.pnl ?? 0) >= 0 ? '+' : ''}
                 {(agent.pnl ?? 0).toFixed(0)}
@@ -376,119 +337,6 @@ export default function AgentsPage() {
             Press START to spawn agents
           </div>
         )}
-      </div>
-
-      {/* ── Configuration & Control Panel ─────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Agent Config Builder */}
-        <div className="card p-4 space-y-4 lg:col-span-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-mono font-bold text-text-primary uppercase">
-              Agent Configuration
-            </h3>
-            {isRunning && <Badge variant="medium">LOCKED WHILE RUNNING</Badge>}
-          </div>
-
-          <div className={`space-y-3 ${isRunning ? 'opacity-50 pointer-events-none' : ''}`}>
-            {agentConfigs.map((c, i) => (
-              <div key={c.id} className="flex flex-wrap items-center gap-4 p-2 border border-[color:var(--color-border)] rounded bg-[color:var(--color-bg-primary)]">
-                <label className="flex items-center gap-2 min-w-[120px]">
-                  <input type="checkbox" checked={c.active} onChange={(e) => {
-                    const next = [...agentConfigs];
-                    next[i].active = e.target.checked;
-                    setAgentConfigs(next);
-                  }} />
-                  <span className="text-xs font-mono font-bold text-text-primary">{c.name}</span>
-                </label>
-
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <span className="text-text-tertiary">Count:</span>
-                  <input type="number" min="1" max="10" value={c.count} onChange={(e) => {
-                    const next = [...agentConfigs];
-                    next[i].count = parseInt(e.target.value) || 1;
-                    setAgentConfigs(next);
-                  }} className="w-12 bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded px-1 text-text-primary" />
-                </div>
-
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <span className="text-text-tertiary">Cap $:</span>
-                  <input type="number" step="1000" value={c.capital} onChange={(e) => {
-                    const next = [...agentConfigs];
-                    next[i].capital = parseFloat(e.target.value) || 0;
-                    setAgentConfigs(next);
-                  }} className="w-20 bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded px-1 text-text-primary" />
-                </div>
-
-                <select className="text-xs font-mono bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded p-1 text-text-primary"
-                  value={c.risk} onChange={(e) => {
-                    const next = [...agentConfigs];
-                    next[i].risk = e.target.value;
-                    setAgentConfigs(next);
-                  }}>
-                  <option value="low">Low Risk</option>
-                  <option value="medium">Med Risk</option>
-                  <option value="high">High Risk</option>
-                </select>
-
-                <select className="text-xs font-mono bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded p-1 text-text-primary"
-                  value={c.speed} onChange={(e) => {
-                    const next = [...agentConfigs];
-                    next[i].speed = e.target.value;
-                    setAgentConfigs(next);
-                  }}>
-                  <option value="slow">Slow</option>
-                  <option value="normal">Normal</option>
-                  <option value="fast">Fast</option>
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Stress Event Injector */}
-        <div className="card p-4 space-y-4">
-          <h3 className="text-sm font-mono font-bold text-text-primary uppercase flex items-center gap-2">
-            <span className="text-danger">⚠</span> Stress Injector
-          </h3>
-          <p className="text-xs font-mono text-text-tertiary">
-            Trigger chaotic events into the live simulation to test agent resilience and fraud monitors.
-          </p>
-
-          <div className="space-y-3">
-            <button
-              disabled={!isRunning}
-              onClick={() => triggerStress('price_crash', 1.5)}
-              className={`w-full py-2 px-3 text-xs font-mono font-bold border rounded transition-colors ${isRunning
-                  ? 'border-[color:var(--color-danger)] text-danger bg-[rgba(255,56,96,0.1)] hover:bg-[rgba(255,56,96,0.2)]'
-                  : 'border-[color:var(--color-border)] text-text-tertiary opacity-50'
-                }`}
-            >
-              📉 Flash Crash (-15% Price)
-            </button>
-            <button
-              disabled={!isRunning}
-              onClick={() => triggerStress('liquidity_drain', 1.0)}
-              className={`w-full py-2 px-3 text-xs font-mono font-bold border rounded transition-colors ${isRunning
-                  ? 'border-[color:var(--color-warn)] text-[color:var(--color-warn)] bg-[rgba(255,178,56,0.1)] hover:bg-[rgba(255,178,56,0.2)]'
-                  : 'border-[color:var(--color-border)] text-text-tertiary opacity-50'
-                }`}
-            >
-              💧 Rug Pull (Drain 20% Liquidity)
-            </button>
-            <button
-              disabled={!isRunning}
-              onClick={() => triggerStress('mempool_flood', 2.0)}
-              className={`w-full py-2 px-3 text-xs font-mono font-bold border rounded transition-colors ${isRunning
-                  ? 'border-accent text-accent bg-[rgba(0,212,255,0.1)] hover:bg-[rgba(0,212,255,0.2)]'
-                  : 'border-[color:var(--color-border)] text-text-tertiary opacity-50'
-                }`}
-            >
-              🌊 Flood Mempool (Spam Txs)
-            </button>
-          </div>
-          {!isRunning && <p className="text-[10px] font-mono text-center text-text-tertiary pt-2">Start simulation to enable stress triggers.</p>}
-        </div>
       </div>
 
       {/* ── Playback Controls + Status ────────────────────────────────── */}
@@ -525,12 +373,13 @@ export default function AgentsPage() {
             <span className="text-text-secondary">
               Status:{' '}
               <span
-                className={`font-bold ${isRunning
+                className={`font-bold ${
+                  isRunning
                     ? 'text-success'
                     : isPaused
-                      ? 'text-[color:var(--color-warn)]'
+                      ? 'text-(--color-warn)'
                       : 'text-text-tertiary'
-                  }`}
+                }`}
               >
                 {simStatus?.status?.toUpperCase() || 'IDLE'}
               </span>
@@ -547,7 +396,7 @@ export default function AgentsPage() {
             </span>
             <span className="text-text-secondary">
               Alerts:{' '}
-              <span className="text-[color:var(--color-danger)] font-bold">
+              <span className="text-(--color-danger) font-bold">
                 {simStatus?.total_alerts || 0}
               </span>
             </span>
@@ -556,7 +405,7 @@ export default function AgentsPage() {
 
         {/* Progress bar */}
         {(isRunning || isPaused) && (
-          <div className="w-full bg-[color:var(--color-bg-accent)] rounded-full h-2">
+          <div className="w-full bg-(--color-bg-accent) rounded-full h-2">
             <div
               className="h-2 rounded-full transition-all duration-500"
               style={{
@@ -590,7 +439,7 @@ export default function AgentsPage() {
           <Terminal title="Agent Activity Feed" lines={terminalLines} maxLines={18} />
         </div>
 
-        <div className="card space-y-4 max-h-[420px] overflow-y-auto">
+        <div className="card space-y-4 max-h-105 overflow-y-auto">
           <h3 className="text-sm font-mono font-bold text-text-primary uppercase">
             Fraud Alerts ({alerts.length})
           </h3>
@@ -600,12 +449,13 @@ export default function AgentsPage() {
           {alerts.slice(-15).reverse().map((alert) => (
             <div
               key={alert.id}
-              className={`p-2 rounded border-l-2 ${alert.severity === 'CRITICAL'
-                  ? 'border-l-[color:var(--color-danger)] bg-[rgba(255,56,96,0.08)]'
+              className={`p-2 rounded border-l-2 ${
+                alert.severity === 'CRITICAL'
+                  ? 'border-l-(--color-danger) bg-[rgba(255,56,96,0.08)]'
                   : alert.severity === 'HIGH'
-                    ? 'border-l-[color:var(--color-warn)] bg-[rgba(255,178,56,0.08)]'
-                    : 'border-l-[color:var(--color-text-tertiary)] bg-[color:var(--color-bg-accent)]'
-                }`}
+                    ? 'border-l-(--color-warn) bg-[rgba(255,178,56,0.08)]'
+                    : 'border-l-(--color-text-tertiary) bg-(--color-bg-accent)'
+              }`}
             >
               <div className="flex items-center justify-between mb-1">
                 <Badge
@@ -736,7 +586,7 @@ export default function AgentsPage() {
             <div key={item.step} className="flex flex-col items-center gap-1 p-2">
               <span className="text-2xl">{item.icon}</span>
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold font-mono text-xs bg-[color:var(--color-bg-accent)] ${item.color}`}
+                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold font-mono text-xs bg-(--color-bg-accent) ${item.color}`}
               >
                 {item.step}
               </div>
@@ -763,13 +613,15 @@ function StatBox({
 }) {
   return (
     <div
-      className={`card p-3 ${danger ? 'border border-[color:var(--color-danger)] bg-[rgba(255,56,96,0.06)]' : ''
-        }`}
+      className={`card p-3 ${
+        danger ? 'border border-(--color-danger) bg-[rgba(255,56,96,0.06)]' : ''
+      }`}
     >
       <div className="text-[10px] text-text-tertiary font-mono uppercase">{label}</div>
       <div
-        className={`text-lg font-bold font-mono ${danger ? 'text-[color:var(--color-danger)]' : 'text-accent'
-          }`}
+        className={`text-lg font-bold font-mono ${
+          danger ? 'text-(--color-danger)' : 'text-accent'
+        }`}
       >
         {value}
       </div>
@@ -787,7 +639,7 @@ function MiniStat({
   color: string;
 }) {
   return (
-    <div className="p-2 bg-[color:var(--color-bg-accent)] rounded">
+    <div className="p-2 bg-(--color-bg-accent) rounded">
       <div className="text-[10px] text-text-tertiary font-mono">{label}</div>
       <div className={`text-base font-bold font-mono text-${color}`}>{value}</div>
     </div>
@@ -802,9 +654,9 @@ function SentimentBadge({ sentiment }: { sentiment: string }) {
     bullish: { emoji: '🐂', color: 'success', label: 'BULLISH' },
     extreme_greed: { emoji: '🤑', color: 'success', label: 'EXTREME GREED' },
   };
-
+  
   const c = config[sentiment] || config.neutral;
-
+  
   return (
     <Badge variant={c.color as 'critical' | 'high' | 'medium' | 'success'}>
       {c.emoji} {c.label}

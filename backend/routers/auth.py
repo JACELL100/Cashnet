@@ -1,8 +1,9 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import firebase_admin
 from firebase_admin import auth as firebase_auth, credentials as fb_creds
-from jose import jwt
+from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import base64, json
@@ -11,6 +12,9 @@ from database import get_db
 from models import AdminAuditor, AdminAuditorRoleEnum
 from config import settings
 import os
+
+# HTTP Bearer token scheme for protected endpoints
+security = HTTPBearer()
 
 if not firebase_admin._apps:
     try:
@@ -159,3 +163,64 @@ def list_admin_auditors(db: Session = Depends(get_db)):
         {"uid": r.uid, "email": r.email, "name": r.name, "role": r.role.value, "created_at": r.created_at}
         for r in records
     ]
+
+
+# ─── Authentication Dependencies ──────────────────────────────────────────────
+
+def get_current_admin_or_auditor(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> AdminAuditor:
+    """
+    Dependency to verify JWT token and return current admin/auditor user.
+    Used for protected endpoints that require authentication.
+    """
+    token = credentials.credentials
+    
+    try:
+        # Decode JWT token
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=["HS256"]
+        )
+        uid: str = payload.get("uid")
+        email: str = payload.get("email")
+        
+        if uid is None or email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+        
+        # Look up user in database
+        user = db.query(AdminAuditor).filter(AdminAuditor.uid == uid).first()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        return user
+        
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+
+def get_current_admin(
+    current_user: AdminAuditor = Depends(get_current_admin_or_auditor)
+) -> AdminAuditor:
+    """
+    Dependency to ensure the current user is an ADMIN.
+    """
+    if current_user.role != AdminAuditorRoleEnum.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+

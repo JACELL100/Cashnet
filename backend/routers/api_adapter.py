@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers import participants, pool, lending, alerts, simulations
 from typing import Dict, Any, Optional
-from agents.simulation_runner import simulation_runner
+# simulation_runner removed for L1-only mode
+from agents.fraud_monitor import FraudMonitor
+
+# Standalone fraud monitor (persists across requests, no simulation loop needed)
+_fraud_monitor = FraudMonitor()
 
 router = APIRouter(prefix="/api", tags=["API Adapter"])
 
@@ -18,75 +22,43 @@ router = APIRouter(prefix="/api", tags=["API Adapter"])
 
 @router.post("/simulation/start")
 async def start_simulation(db: Session = Depends(get_db)):
-    """Start the multi-agent simulation engine"""
-    from models import Simulation
-    
-    # Also persist to DB
-    sim = Simulation(name="Agent Simulation", status="running")
-    db.add(sim)
-    db.commit()
-    db.refresh(sim)
-    
-    result = await simulation_runner.start(max_steps=200, tick_delay=0.5)
+    """Mock start to satisfy frontend, we run on L1 now"""
     return {
         "success": True,
         "data": {
-            "id": sim.id,
-            "status": "running",
-            "start_time": sim.start_time.isoformat(),
-            **result,
+            "id": 1,
+            "status": "running on L1",
+            "message": "Connected to Sepolia"
         }
     }
 
 
 @router.get("/simulation/status")
 async def get_simulation_status():
-    """Get current simulation engine status"""
-    data = simulation_runner.get_status()
-    return {"success": True, "data": data}
+    return {
+        "success": True, 
+        "data": {"status": "running", "tick": 0, "agents_count": 0, "transactions": 0, "alerts": 0}
+    }
 
 
 @router.post("/simulation/pause")
 async def pause_simulation():
-    """Pause the simulation engine"""
-    result = await simulation_runner.pause()
-    return {"success": True, "data": result}
+    return {"success": True, "data": {"status": "paused"}}
 
 
 @router.post("/simulation/resume")
 async def resume_simulation():
-    """Resume the simulation engine"""
-    result = await simulation_runner.resume()
-    return {"success": True, "data": result}
+    return {"success": True, "data": {"status": "running"}}
 
 
 @router.post("/simulation/stop")
 async def stop_simulation(db: Session = Depends(get_db)):
-    """Stop the simulation engine"""
-    from models import Simulation
-    from datetime import datetime
-    
-    result = await simulation_runner.stop()
-    
-    # Also update DB
-    sim = db.query(Simulation).filter(
-        Simulation.status.in_(["running", "paused"])
-    ).first()
-    if sim:
-        sim.status = "completed"
-        sim.end_time = datetime.utcnow()
-        sim.agents_count = len(simulation_runner.agents)
-        sim.transactions_count = len(simulation_runner.trade_log)
-        sim.alerts_count = len(simulation_runner.fraud_monitor.alerts)
-        db.commit()
-    
-    return {"success": True, "data": result}
+    return {"success": True, "data": {"status": "stopped"}}
 
 
 @router.get("/simulation/summary")
 async def get_simulation_summary():
-    """Get full simulation summary with agent stats and fraud data"""
-    return {"success": True, "data": simulation_runner.get_summary()}
+    return {"success": True, "data": {}}
 
 
 # ============================================================================
@@ -95,12 +67,7 @@ async def get_simulation_summary():
 
 @router.get("/agents")
 async def list_agents():
-    """List all simulation agents with live state"""
-    agents = simulation_runner.get_agents()
-    if agents:
-        return {"success": True, "data": agents}
-    
-    # Fallback to DB participants if no simulation running
+    # Fallback to DB participants
     from models import Participant
     from database import SessionLocal
     db = SessionLocal()
@@ -125,34 +92,17 @@ async def list_agents():
 
 @router.get("/agents/{agent_id}")
 async def get_agent(agent_id: str):
-    """Get specific agent details from simulation"""
-    agent = simulation_runner.get_agent(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return {"success": True, "data": agent}
+    return {"success": False, "detail": "L1 Mode: Agent tracking disabled"}
 
 
 @router.put("/agents/{agent_id}")
 async def update_agent(agent_id: str, data: Dict[str, Any]):
-    """Update an agent (toggle active, update capital, etc.)"""
-    if "active" in data:
-        result = simulation_runner.toggle_agent(agent_id, data["active"])
-        if result:
-            return {"success": True, "data": result}
-    if "capital" in data:
-        result = simulation_runner.update_agent_capital(agent_id, data["capital"])
-        if result:
-            return {"success": True, "data": result}
-    raise HTTPException(status_code=404, detail="Agent not found")
+    return {"success": True, "data": {"message": "Agent update mocked"}}
 
 
 @router.get("/agents/activity-feed")
 async def get_activity_feed():
-    """Get recent agent activity from simulation"""
-    feed = simulation_runner.get_activity_feed(50)
-    if feed:
-        return {"success": True, "data": feed}
-    
+    """Get recent agent activity"""
     # Fallback to DB transactions
     from models import Transaction
     from database import SessionLocal
@@ -261,48 +211,51 @@ async def get_borrowers(db: Session = Depends(get_db)):
             ],
         }
 
-    # Fallback to DB participants if no simulation running
-    from models import Participant
-    borrowers = db.query(Participant).filter(Participant.role == "BORROWER").all()
     return {
         "success": True,
-        "data": [
-            {
-                "id": str(b.id),
-                "wallet": b.wallet,
-                "collateral_value": 10000.0,
-                "debt_value": 4000.0,
-                "health_factor": 2.5,
-                "at_risk": False,
-            }
-            for b in borrowers
-        ],
+        "data": []
     }
 
 
 @router.get("/lending/metrics")
 async def get_lending_metrics():
-    """Get overall lending metrics from live simulation."""
-    ls = simulation_runner.lending
-    positions = list(ls.positions.values())
-    avg_hf = (
-        sum(p.health_factor for p in positions) / len(positions)
-        if positions
-        else 0.0
-    )
+    """Get overall lending metrics directly from Sepolia Smart Contracts."""
+    from blockchain_service import blockchain_service
+    from config import settings
     
-    data = ls.to_dict()
-    data["avg_health_factor"] = round(avg_hf, 4)
-    data["at_risk_count"] = len(ls.get_liquidatable())
-    
-    # Rename some fields to match legacy frontend expectations,
-    # and keep the new ones (borrow_apr, total_supplied)
-    data["utilization_rate"] = data.get("utilization_ratio", 0) * 100
-    
-    return {
-        "success": True,
-        "data": data
-    }
+    try:
+        # Get from contracts
+        total_borrowed_wei = blockchain_service.call_contract_function("LendingPool", "totalBorrowed")
+        borrow_apr = blockchain_service.call_contract_function("LendingPool", "getCurrentInterestRate")
+        
+        # Get collateral in pool (Token A balance)
+        pool_collateral_wei = blockchain_service.call_contract_function("TokenA", "balanceOf", settings.lending_pool_address)
+        
+        total_borrowed = total_borrowed_wei / 1e18
+        pool_collateral = pool_collateral_wei / 1e18
+        
+        utilization = (total_borrowed / (total_borrowed + pool_collateral)) * 100 if (total_borrowed + pool_collateral) > 0 else 0
+        
+        return {
+            "success": True,
+            "data": {
+                "total_collateral": pool_collateral,
+                "total_debt": total_borrowed,
+                "total_supplied": pool_collateral + total_borrowed,
+                "utilization_rate": utilization,
+                "utilization_ratio": utilization / 100,
+                "borrow_apr": borrow_apr / 100,
+                "avg_health_factor": 0,
+                "at_risk_count": 0,
+                "liquidation_count": 0
+            }
+        }
+    except Exception as e:
+        print(f"Error fetching metrics from blockchain: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 @router.get("/lending/cascade-events")
@@ -329,32 +282,26 @@ async def get_cascade_events(db: Session = Depends(get_db)):
 
 
 @router.post("/lending/liquidate")
-async def trigger_liquidation(borrower_id: str, db: Session = Depends(get_db)):
-    """Trigger liquidation for a borrower"""
-    from models import Transaction, Participant
+async def trigger_liquidation(user_wallet: str):
+    """Trigger liquidation for a borrower on-chain"""
+    from blockchain_service import blockchain_service
     
-    borrower = db.query(Participant).filter(Participant.id == int(borrower_id)).first()
-    
-    if not borrower:
-        raise HTTPException(status_code=404, detail="Borrower not found")
-    
-    # Create liquidation transaction
-    tx = Transaction(
-        hash=f"0xliquidation{borrower_id}",
-        type="LIQUIDATE",
-        wallet=borrower.wallet,
-        amount=5000.0
-    )
-    db.add(tx)
-    db.commit()
-    
-    return {
-        "success": True,
-        "data": {
-            "message": "Liquidation triggered",
-            "borrower_id": borrower_id
+    try:
+        tx_hash = blockchain_service.send_transaction("LendingPool", "liquidate", user_wallet)
+        
+        return {
+            "success": True,
+            "data": {
+                "message": "Liquidation transaction submitted to Sepolia",
+                "target_wallet": user_wallet,
+                "tx_hash": tx_hash
+            }
         }
-    }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 # ============================================================================
@@ -363,29 +310,21 @@ async def trigger_liquidation(borrower_id: str, db: Session = Depends(get_db)):
 
 @router.get("/threats/scores")
 async def get_threat_scores():
-    """Get threat scores from simulation fraud monitor"""
-    scores = simulation_runner.fraud_monitor.get_threat_scores()
+    """Get threat scores from Python fraud monitor"""
+    scores = _fraud_monitor.get_threat_scores()
     if scores:
         return {"success": True, "data": scores}
     
-    # Default scores
     return {
         "success": True,
-        "data": [
-            {"axis": "MEV", "score": 5, "status": "safe"},
-            {"axis": "Flash Loan", "score": 5, "status": "safe"},
-            {"axis": "Liquidity", "score": 5, "status": "safe"},
-            {"axis": "Cascade", "score": 5, "status": "safe"},
-            {"axis": "Price", "score": 5, "status": "safe"},
-            {"axis": "Systemic", "score": 5, "status": "safe"},
-        ]
+        "data": []
     }
 
 
 @router.get("/threats/alerts")
 async def get_alerts():
     """Get threat alerts from fraud monitor + DB"""
-    fraud_alerts = simulation_runner.fraud_monitor.get_alerts(limit=50)
+    fraud_alerts = _fraud_monitor.get_alerts(limit=50)
     if fraud_alerts:
         return {"success": True, "data": fraud_alerts}
     
@@ -483,43 +422,33 @@ async def get_credit_leaderboard(db: Session = Depends(get_db)):
 
 @router.get("/credit/scores/{wallet}")
 async def get_score_details(wallet: str, db: Session = Depends(get_db)):
-    """Get detailed credit score for a wallet"""
-    from models import Participant
+    """Get detailed credit score for a wallet directly from CreditRegistry contract"""
+    from blockchain_service import blockchain_service
     
-    participant = db.query(Participant).filter(
-        Participant.wallet == wallet
-    ).first()
-    
-    if not participant:
-        raise HTTPException(status_code=404, detail="Wallet not found")
-    
-    return {
-        "success": True,
-        "data": {
-            "wallet": wallet,
-            "score": participant.score,
-            "factors": {
-                "payment_history": 85,
-                "credit_utilization": 70,
-                "account_age": 90,
-                "derogatory_marks": 95
+    try:
+        score = blockchain_service.call_contract_function("CreditRegistry", "creditScores", wallet)
+        
+        return {
+            "success": True,
+            "data": {
+                "wallet": wallet,
+                "score": score,
+                "factors": {}
             }
         }
-    }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 @router.get("/credit/scores/{wallet}/history")
 async def get_score_history(wallet: str):
     """Get credit score history"""
-    # Mock historical data
     return {
         "success": True,
-        "data": [
-            {"date": "2026-02-01", "score": 450},
-            {"date": "2026-02-08", "score": 470},
-            {"date": "2026-02-15", "score": 490},
-            {"date": "2026-02-21", "score": 500}
-        ]
+        "data": []
     }
 
 
@@ -599,23 +528,10 @@ async def export_report(format: str = "json"):
     """Export a full audit report as inline JSON."""
     from datetime import datetime
 
-    summary = simulation_runner.get_summary()
-    trade_log = simulation_runner.get_trade_log(500)
-    fraud_alerts = simulation_runner.fraud_monitor.get_alerts(limit=200)
-    pool_state = simulation_runner.pool.to_dict()
-    lending_state = simulation_runner.lending.to_dict()
-    lending_state["positions"] = [
-        p.to_dict() for p in simulation_runner.lending.positions.values()
-    ]
-
     report = {
         "generated_at": datetime.utcnow().isoformat(),
         "format": format,
-        "simulation_summary": summary,
-        "pool_state": pool_state,
-        "lending_state": lending_state,
-        "trade_log": trade_log,
-        "fraud_alerts": fraud_alerts,
+        "message": "L1 integration active. Exporter disabled."
     }
 
     if format == "json":
@@ -711,33 +627,24 @@ async def get_wallet_balance(address: str):
 
 @router.get("/sim/trade-log")
 async def get_trade_log(limit: int = 100):
-    """Get the trade action log from the live simulation."""
-    return {"success": True, "data": simulation_runner.get_trade_log(limit)}
+    return {"success": True, "data": []}
 
 
 @router.get("/sim/activity-feed")
 async def get_sim_activity_feed(limit: int = 50):
-    """Get the live simulation activity feed."""
-    return {"success": True, "data": simulation_runner.get_activity_feed(limit)}
+    return {"success": True, "data": []}
 
 
 @router.get("/sim/fraud/stats")
 async def get_sim_fraud_stats():
-    """Get fraud monitor statistics from the live simulation."""
-    return {"success": True, "data": simulation_runner.fraud_monitor.get_stats()}
+    return {"success": True, "data": {}}
 
 
 @router.get("/sim/pool")
 async def get_sim_pool():
-    """Get live simulation pool state."""
-    return {"success": True, "data": simulation_runner.pool.to_dict()}
+    return {"success": True, "data": {}}
 
 
 @router.get("/sim/lending")
 async def get_sim_lending():
-    """Get live simulation lending state."""
-    data = simulation_runner.lending.to_dict()
-    data["positions"] = [
-        p.to_dict() for p in simulation_runner.lending.positions.values()
-    ]
-    return {"success": True, "data": data}
+    return {"success": True, "data": {}}

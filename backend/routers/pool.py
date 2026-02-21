@@ -2,7 +2,7 @@
 Liquidity Pool routes — all operations hit the deployed LiquidityPool contract on Sepolia.
 No simulation, no in-memory state: every read is an on-chain call, every write is a signed tx.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
@@ -14,6 +14,23 @@ import models
 from pathlib import Path
 
 router = APIRouter(prefix="/pool", tags=["Liquidity Pool"])
+
+
+def check_system_paused():
+    """Check if system is paused and raise exception if it is"""
+    try:
+        if "AccessControl" in blockchain_service.contracts:
+            is_paused = blockchain_service.call_contract_function("AccessControl", "paused")
+            if is_paused:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="System is paused. All operations are currently frozen."
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # If we can't check pause status, allow operation but log warning
+        print(f"Warning: Could not check pause status: {e}")
 
 _ABI_DIR = Path(__file__).parent.parent.parent / "contracts" / "abi"
 
@@ -318,6 +335,7 @@ async def add_liquidity(
     Flow: approve PAL → approve BAD → addLiquidity(amountA, amountB)
     LP tokens are minted to the operator account by the contract.
     """
+    check_system_paused()
     try:
         pool_address = settings.liquidity_pool_address
         amount_a_wei = _to_wei(request.amount_a)
@@ -352,10 +370,7 @@ async def remove_liquidity(
     request: RemoveLiquidityRequest,
     db: Session = Depends(get_db),
 ):
-    """
-    Remove liquidity from the on-chain pool by burning LP shares.
-    The contract burns shares from msg.sender and returns PAL + BAD proportionally.
-    """
+    """Remove liquidity from the pool"""
     try:
         shares_wei = _to_wei(request.amount)
 
@@ -389,6 +404,7 @@ async def swap_tokens(
     Swap PAL ↔ BAD via the on-chain constant-product AMM (0.3 % fee).
     Flow: approve token_in → swap(tokenIn, amountIn)
     """
+    check_system_paused()
     try:
         pool         = _pool_contract()
         pool_address = settings.liquidity_pool_address

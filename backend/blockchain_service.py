@@ -28,8 +28,39 @@ class BlockchainService:
         else:
             self.account = None
             
-        # Contract instances (will be initialized when ABIs are loaded)
+        # Contract instances
         self.contracts = {}
+        
+        # Initialize core protocol contracts
+        self._init_contracts()
+        
+    def _init_contracts(self):
+        """Load ABIs and register core contracts from config"""
+        from pathlib import Path
+        
+        abi_dir = Path(__file__).parent.parent / "contracts" / "abi"
+        
+        def _load_abi(filename: str):
+            filepath = abi_dir / filename
+            if filepath.exists():
+                with open(filepath, "r") as f:
+                    return json.load(f)
+            return []
+            
+        if settings.lending_pool_address:
+            self.load_contract("LendingPool", settings.lending_pool_address, _load_abi("LendingPool.json"))
+            
+        if settings.credit_registry_address:
+            self.load_contract("CreditRegistry", settings.credit_registry_address, _load_abi("CreditRegistry.json"))
+            
+        if settings.collateral_vault_address:
+            self.load_contract("CollateralVault", settings.collateral_vault_address, _load_abi("CollateralVault.json"))
+            
+        if settings.palladium_address:
+            self.load_contract("TokenA", settings.palladium_address, _load_abi("SimToken.json"))
+            
+        if settings.badassium_address:
+            self.load_contract("TokenB", settings.badassium_address, _load_abi("SimToken.json"))
         
     def is_connected(self) -> bool:
         """Check if connected to blockchain"""
@@ -99,7 +130,7 @@ class BlockchainService:
         )
         
         # Send transaction
-        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
         
         # Wait for receipt
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)

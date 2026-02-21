@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
+import os
 import secrets
 import jwt
 from eth_account.messages import encode_defunct
@@ -17,7 +18,7 @@ from schemas import NonceRequest, NonceResponse, AuthVerifyRequest, AuthResponse
 
 router = APIRouter(prefix="/api/auth", tags=["Wallet Authentication"])
 
-JWT_SECRET = "your-secret-key-change-in-production"  # TODO: Move to environment variable
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
