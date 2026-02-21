@@ -11,7 +11,9 @@ alembic
 python-multipart
 httpx
 pyjwt
+python-jose[cryptography]
 eth-account
 aiohttp
 scikit-learn
 numpy
+firebase-admin
