@@ -3,6 +3,9 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { useLendingStore } from '@/store/lendingStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
+import { useReadContract } from 'wagmi';
+import { PALLADIUM_ADDRESS, BADASSIUM_ADDRESS, ERC20_ABI } from '@/lib/contracts';
+import { formatUnits } from 'viem';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -36,6 +39,26 @@ export default function LenderPage() {
   const [depositAmt, setDepositAmt] = useState('0.01');
   const [borrowAmt, setBorrowAmt] = useState('100');
   const [repayAmt, setRepayAmt] = useState('50');
+
+  // Read user's on-chain token balances
+  const { address } = useLendingActions();
+  const { data: pldmBalanceRaw } = useReadContract({
+    address: PALLADIUM_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address, refetchInterval: 8000 },
+  });
+  const { data: badmBalanceRaw } = useReadContract({
+    address: BADASSIUM_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address, refetchInterval: 8000 },
+  });
+
+  const pldmBalance = pldmBalanceRaw ? Number(formatUnits(pldmBalanceRaw as bigint, 18)) : 0;
+  const badmBalance = badmBalanceRaw ? Number(formatUnits(badmBalanceRaw as bigint, 18)) : 0;
 
   // Fetch borrowers + metrics from API
   const fetchLendingData = useCallback(async () => {
@@ -96,20 +119,20 @@ export default function LenderPage() {
   const atRiskCount = borrowers.filter((b) => b.status === 'danger' || b.status === 'warning').length;
 
   const kpis = [
-    { label: 'My Liquidity', value: `$${myLiquidity >= 1000000 ? (myLiquidity / 1000000).toFixed(2) + 'M' : (myLiquidity / 1000).toFixed(1) + 'K'}`, sub: 'In active pool', color: '#b367ff' },
-    { label: 'Interest Earned', value: `$${interestEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, sub: `↑ ${(borrowApr * 100).toFixed(1)}% APY`, color: '#22c55e' },
+    { label: 'Pool Liquidity (PLDM)', value: `${totalDeposits >= 1000000 ? (totalDeposits / 1000000).toFixed(2) + 'M' : totalDeposits >= 1000 ? (totalDeposits / 1000).toFixed(1) + 'K' : totalDeposits.toFixed(0)}`, sub: 'Palladium in pool', color: '#b367ff' },
+    { label: 'My PLDM Balance', value: `${pldmBalance >= 1000 ? (pldmBalance / 1000).toFixed(1) + 'K' : pldmBalance.toFixed(1)}`, sub: isConnected ? 'On-chain balance' : 'Connect wallet', color: '#22c55e' },
     { label: 'Active Loans', value: `${borrowers.length}`, sub: `${atRiskCount} at-risk`, color: '#00d4ff' },
-    { label: 'At-Risk Borrowers', value: atRiskCount.toString(), sub: 'HF < 1.8', color: '#f0a500' },
+    { label: 'My BADM Balance', value: `${badmBalance >= 1000 ? (badmBalance / 1000).toFixed(1) + 'K' : badmBalance.toFixed(1)}`, sub: isConnected ? 'Badassium tokens' : 'Connect wallet', color: '#f0a500' },
   ];
 
   const availableLiquidity = totalDeposits - totalBorrows;
   const avgLoanSize = borrowers.length > 0 ? totalBorrows / borrowers.length : 0;
 
   const poolStats = [
-    { label: 'Total Pool Reserves', value: `$${totalDeposits >= 1000000 ? (totalDeposits / 1000000).toFixed(2) + 'M' : (totalDeposits / 1000).toFixed(1) + 'K'}`, color: '#b367ff' },
-    { label: 'Available Liquidity', value: `$${availableLiquidity >= 1000000 ? (availableLiquidity / 1000000).toFixed(2) + 'M' : (availableLiquidity / 1000).toFixed(1) + 'K'}`, color: '#22c55e' },
+    { label: 'Total Pool Reserves (PLDM)', value: `${totalDeposits >= 1000000 ? (totalDeposits / 1000000).toFixed(2) + 'M' : totalDeposits >= 1000 ? (totalDeposits / 1000).toFixed(1) + 'K' : totalDeposits.toFixed(0)}`, color: '#b367ff' },
+    { label: 'Available Liquidity (PLDM)', value: `${availableLiquidity >= 1000000 ? (availableLiquidity / 1000000).toFixed(2) + 'M' : availableLiquidity >= 1000 ? (availableLiquidity / 1000).toFixed(1) + 'K' : availableLiquidity.toFixed(0)}`, color: '#22c55e' },
     { label: 'Utilization Rate', value: `${(utilizationRate * 100).toFixed(1)}%`, color: '#00d4ff' },
-    { label: 'Avg Loan Size', value: `$${(avgLoanSize / 1000).toFixed(1)}K`, color: '#f0a500' },
+    { label: 'Borrow APR', value: `${(borrowApr * 100).toFixed(1)}%`, color: '#f0a500' },
   ];
 
   const sortedBorrowers = [...borrowers].sort((a, b) => a.healthFactor - b.healthFactor);
