@@ -4,6 +4,7 @@ import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agentStore';
 import { useThreatStore } from '@/store/threatStore';
+import { useAuthStore } from '@/store/authStore';
 import { generateAgents, generateActivityFeed, generateThreatScores, generateThreatAlerts } from '@/lib/mockData';
 
 const roleBreakdown = [
@@ -64,6 +65,7 @@ function fmt(v: number) {
 export default function AdminPage() {
   const { agents, setAgents, setActivityFeed } = useAgentStore();
   const { threatScores, activeAlerts, setThreatScores, addAlert } = useThreatStore();
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     if (agents.length === 0) {
@@ -93,6 +95,21 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-8">
+      {/* Dev Mode - Show logged in admin */}
+      {user && (
+        <div className="bg-[rgba(0,212,255,0.08)] border border-[#00d4ff] rounded p-3 text-xs font-mono flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[#00d4ff]">🔓 DEV MODE</span>
+            <span className="text-text-tertiary">•</span>
+            <span className="text-text-secondary">Logged in as:</span>
+            <span className="text-text-primary font-bold">{user.email || user.name}</span>
+          </div>
+          <div className="text-text-tertiary">
+            Multiple admins can login simultaneously in development
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold font-mono text-text-primary">System Overview</h1>
         <p className="text-sm text-text-tertiary font-mono mt-1">Rust-eze Simulation Lab · Admin Console</p>

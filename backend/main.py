@@ -11,7 +11,7 @@ from config import settings
 # Import routers
 from agents.router import router as agents_router
 from agents.scenario_router import router as scenario_router
-from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth
+from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control
 from liquidity_engine.router import router as liquidity_engine_router
 from liquidity_engine.ml_router import router as ml_risk_router
 from agents.ml_router import router as agent_intel_router
@@ -38,6 +38,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router)          # Firebase/Google SSO → /auth/*
 app.include_router(wallet_auth.router)   # Wallet/MetaMask auth → /api/auth/*
+app.include_router(system_control.router) # System pause/unpause → /system/*
 app.include_router(api_adapter.router)   # Frontend API adapter → /api/*
 app.include_router(participants.router)
 app.include_router(pool.router)
@@ -168,9 +169,10 @@ async def get_contract_addresses():
 
 if __name__ == "__main__":
     import uvicorn
+    # Disable reload to avoid Windows multiprocessing errors with Python 3.13
     uvicorn.run(
         "main:app",
         host=settings.api_host,
         port=settings.api_port,
-        reload=settings.debug
+        reload=False  # Set to False to avoid multiprocessing issues on Windows
     )

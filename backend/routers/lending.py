@@ -1,9 +1,10 @@
 """
 Lending and borrowing routes
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
+from blockchain_service import blockchain_service
 from schemas import (
     DepositCollateralRequest,
     BorrowRequest,
@@ -14,12 +15,30 @@ from schemas import (
 router = APIRouter(prefix="/lending", tags=["Lending & Borrowing"])
 
 
+def check_system_paused():
+    """Check if system is paused and raise exception if it is"""
+    try:
+        if "AccessControl" in blockchain_service.contracts:
+            is_paused = blockchain_service.call_contract_function("AccessControl", "paused")
+            if is_paused:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="System is paused. All operations are currently frozen."
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # If we can't check pause status, allow operation but log warning
+        print(f"Warning: Could not check pause status: {e}")
+
+
 @router.post("/deposit-collateral")
 async def deposit_collateral(
     request: DepositCollateralRequest,
     db: Session = Depends(get_db)
 ):
     """Deposit collateral to enable borrowing"""
+    check_system_paused()
     try:
         return {
             "status": "success",
@@ -37,6 +56,7 @@ async def borrow_tokens(
     db: Session = Depends(get_db)
 ):
     """Borrow tokens against collateral"""
+    check_system_paused()
     try:
         # Mock health factor check
         health_factor = 2.5  # Mock value
@@ -66,6 +86,7 @@ async def repay_loan(
     db: Session = Depends(get_db)
 ):
     """Repay borrowed tokens"""
+    check_system_paused()
     try:
         return {
             "status": "success",

@@ -1,3 +1,9 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
@@ -9,11 +15,11 @@ const nextConfig = {
   // Enable React strict mode for better performance and error detection
   reactStrictMode: true,
   
-  // Enable SWC minification (faster than Terser)
-  swcMinify: true,
-  
   // Optimize production builds
   poweredByHeader: false,
+  
+  // Set workspace root to silence lockfile warning
+  outputFileTracingRoot: path.join(__dirname, '..'),
   
   // Optimize page loading
   experimental: {

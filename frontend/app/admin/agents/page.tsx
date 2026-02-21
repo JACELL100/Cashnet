@@ -236,7 +236,7 @@ export default function AgentsPage() {
 
       {/* ── Real Market Data Banner ───────────────────────────────────── */}
       {simStatus?.market_data && (
-        <div className="card p-4 bg-gradient-to-r from-[rgba(0,212,99,0.08)] to-[rgba(56,189,248,0.08)] border border-[color:var(--color-accent)] rounded-lg">
+        <div className="card p-4 bg-gradient-to-r from-[rgba(0,212,99,0.08)] to-[rgba(56,189,248,0.08)] border border-(--color-accent) rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-lg">📡</span>
@@ -258,7 +258,7 @@ export default function AgentsPage() {
           
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
             {Object.entries(simStatus.market_data.prices).map(([symbol, price]) => (
-              <div key={symbol} className="bg-[color:var(--color-bg-primary)] rounded p-2">
+              <div key={symbol} className="bg-(--color-bg-primary) rounded p-2">
                 <div className="flex items-center justify-between">
                   <span className="font-mono font-bold text-xs text-text-primary">{symbol}</span>
                   <span className={`text-[10px] font-mono font-bold ${
@@ -292,8 +292,8 @@ export default function AgentsPage() {
             key={agent.id}
             className={`card p-3 space-y-2 border-l-2 transition-all ${
               agent.active
-                ? 'border-l-[color:var(--color-accent)]'
-                : 'border-l-[color:var(--color-text-tertiary)] opacity-60'
+                ? 'border-l-(--color-accent)'
+                : 'border-l-(--color-text-tertiary) opacity-60'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -377,7 +377,7 @@ export default function AgentsPage() {
                   isRunning
                     ? 'text-success'
                     : isPaused
-                      ? 'text-[color:var(--color-warn)]'
+                      ? 'text-(--color-warn)'
                       : 'text-text-tertiary'
                 }`}
               >
@@ -396,7 +396,7 @@ export default function AgentsPage() {
             </span>
             <span className="text-text-secondary">
               Alerts:{' '}
-              <span className="text-[color:var(--color-danger)] font-bold">
+              <span className="text-(--color-danger) font-bold">
                 {simStatus?.total_alerts || 0}
               </span>
             </span>
@@ -405,7 +405,7 @@ export default function AgentsPage() {
 
         {/* Progress bar */}
         {(isRunning || isPaused) && (
-          <div className="w-full bg-[color:var(--color-bg-accent)] rounded-full h-2">
+          <div className="w-full bg-(--color-bg-accent) rounded-full h-2">
             <div
               className="h-2 rounded-full transition-all duration-500"
               style={{
@@ -439,7 +439,7 @@ export default function AgentsPage() {
           <Terminal title="Agent Activity Feed" lines={terminalLines} maxLines={18} />
         </div>
 
-        <div className="card space-y-4 max-h-[420px] overflow-y-auto">
+        <div className="card space-y-4 max-h-105 overflow-y-auto">
           <h3 className="text-sm font-mono font-bold text-text-primary uppercase">
             Fraud Alerts ({alerts.length})
           </h3>
@@ -451,10 +451,10 @@ export default function AgentsPage() {
               key={alert.id}
               className={`p-2 rounded border-l-2 ${
                 alert.severity === 'CRITICAL'
-                  ? 'border-l-[color:var(--color-danger)] bg-[rgba(255,56,96,0.08)]'
+                  ? 'border-l-(--color-danger) bg-[rgba(255,56,96,0.08)]'
                   : alert.severity === 'HIGH'
-                    ? 'border-l-[color:var(--color-warn)] bg-[rgba(255,178,56,0.08)]'
-                    : 'border-l-[color:var(--color-text-tertiary)] bg-[color:var(--color-bg-accent)]'
+                    ? 'border-l-(--color-warn) bg-[rgba(255,178,56,0.08)]'
+                    : 'border-l-(--color-text-tertiary) bg-(--color-bg-accent)'
               }`}
             >
               <div className="flex items-center justify-between mb-1">
@@ -586,7 +586,7 @@ export default function AgentsPage() {
             <div key={item.step} className="flex flex-col items-center gap-1 p-2">
               <span className="text-2xl">{item.icon}</span>
               <div
-                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold font-mono text-xs bg-[color:var(--color-bg-accent)] ${item.color}`}
+                className={`w-7 h-7 rounded-full flex items-center justify-center font-bold font-mono text-xs bg-(--color-bg-accent) ${item.color}`}
               >
                 {item.step}
               </div>
@@ -614,13 +614,13 @@ function StatBox({
   return (
     <div
       className={`card p-3 ${
-        danger ? 'border border-[color:var(--color-danger)] bg-[rgba(255,56,96,0.06)]' : ''
+        danger ? 'border border-(--color-danger) bg-[rgba(255,56,96,0.06)]' : ''
       }`}
     >
       <div className="text-[10px] text-text-tertiary font-mono uppercase">{label}</div>
       <div
         className={`text-lg font-bold font-mono ${
-          danger ? 'text-[color:var(--color-danger)]' : 'text-accent'
+          danger ? 'text-(--color-danger)' : 'text-accent'
         }`}
       >
         {value}
@@ -639,7 +639,7 @@ function MiniStat({
   color: string;
 }) {
   return (
-    <div className="p-2 bg-[color:var(--color-bg-accent)] rounded">
+    <div className="p-2 bg-(--color-bg-accent) rounded">
       <div className="text-[10px] text-text-tertiary font-mono">{label}</div>
       <div className={`text-base font-bold font-mono text-${color}`}>{value}</div>
     </div>
