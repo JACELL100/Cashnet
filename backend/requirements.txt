@@ -10,3 +10,8 @@ asyncpg
 alembic
 python-multipart
 httpx
+pyjwt
+eth-account
+aiohttp
+scikit-learn
+numpy

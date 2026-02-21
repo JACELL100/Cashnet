@@ -100,6 +100,40 @@ interface FraudAlert {
   resolved: boolean;
 }
 
+interface AgentIntel {
+  agent_id:               string;
+  agent_name:             string;
+  agent_type:             string;
+  predicted_agent_type:   string;
+  agent_type_confidence:  number;
+  threat_score:           number;
+  threat_category:        string;
+  mev_attack_probability: number;
+  flash_loan_probability: number;
+  is_mev_pattern:         boolean;
+  is_flash_loan_risk:     boolean;
+  market_sentiment:       string;
+  sentiment_confidence:   number;
+  predicted_volatility:   string;
+  pnl_forecast:           number;
+  pnl_direction:          string;
+  wash_trading_score:     number;
+  is_wash_trading:        boolean;
+  cascade_liquidation_risk: number;
+  cascade_imminent:       boolean;
+  risk_level:             string;
+  warnings:               string[];
+}
+
+interface MLMarketForecast {
+  sentiment:            string;
+  sentiment_confidence: number;
+  volatility:           string;
+  cascade_risk:         number;
+  cascade_imminent:     boolean;
+  warnings:             string[];
+}
+
 // ── Agent type visual config ───────────────────────────────────────────────
 const AGENT_ICONS: Record<string, string> = {
   retail_trader: '🛒',
@@ -139,6 +173,12 @@ export default function AgentsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ML Intelligence
+  const [threatMatrix, setThreatMatrix] = useState<AgentIntel[]>([]);
+  const [mlMarket, setMlMarket] = useState<MLMarketForecast | null>(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlPanel, setMlPanel] = useState(false);
+
   // ── Polling ─────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     const [statusData, agentData, feedData, alertData] = await Promise.all([
@@ -151,6 +191,20 @@ export default function AgentsPage() {
     if (Array.isArray(agentData)) setAgents(agentData);
     if (Array.isArray(feedData)) setFeed(feedData);
     if (Array.isArray(alertData)) setAlerts(alertData);
+  }, []);
+
+  const fetchMLIntel = useCallback(async () => {
+    setMlLoading(true);
+    try {
+      const [matrixRes, mktRes] = await Promise.all([
+        api<{ data: AgentIntel[] }>('/agents-sim/ml/threat-matrix'),
+        api<{ data: MLMarketForecast }>('/agents-sim/ml/market-forecast'),
+      ]);
+      if (matrixRes && Array.isArray((matrixRes as any).data)) setThreatMatrix((matrixRes as any).data);
+      if (mktRes && (mktRes as any).data) setMlMarket((mktRes as any).data);
+    } catch { /* silent */ } finally {
+      setMlLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -569,8 +623,167 @@ export default function AgentsPage() {
           />
         </div>
       </div>
+      {/* ── AI Intelligence Panel ────────────────────── */}
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-mono font-bold text-text-primary uppercase tracking-widest">
+            🧠 AI Agent Intelligence
+            <span className="ml-2 text-xs text-text-tertiary font-normal normal-case">(DotlocalAgentIntelModel · 8 sub-estimators)</span>
+          </h3>
+          <button
+            disabled={mlLoading || agents.length === 0}
+            onClick={fetchMLIntel}
+            className="btn-secondary text-xs px-4 py-2"
+          >
+            {mlLoading ? 'Analyzing…' : 'Run ML Analysis'}
+          </button>
+        </div>
 
-      {/* ── MEV Sandwich Visualizer ───────────────────────────────────── */}
+        {/* Market forecast row */}
+        {mlMarket && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-[color:var(--color-bg-accent)] rounded-lg p-3">
+              <div className="text-[10px] text-text-tertiary font-mono uppercase mb-1">ML Sentiment</div>
+              <div className={`text-lg font-bold font-mono ${
+                mlMarket.sentiment === 'BEARISH' ? 'text-red-400' :
+                mlMarket.sentiment === 'BULLISH' ? 'text-green-400' : 'text-yellow-400'
+              }`}>{mlMarket.sentiment}</div>
+              <div className="text-[10px] text-text-tertiary font-mono">{mlMarket.sentiment_confidence.toFixed(0)}% conf</div>
+            </div>
+            <div className="bg-[color:var(--color-bg-accent)] rounded-lg p-3">
+              <div className="text-[10px] text-text-tertiary font-mono uppercase mb-1">ML Volatility</div>
+              <div className={`text-lg font-bold font-mono ${
+                mlMarket.volatility === 'HIGH' ? 'text-red-400' :
+                mlMarket.volatility === 'LOW'  ? 'text-green-400' : 'text-yellow-400'
+              }`}>{mlMarket.volatility}</div>
+            </div>
+            <div className="bg-[color:var(--color-bg-accent)] rounded-lg p-3">
+              <div className="text-[10px] text-text-tertiary font-mono uppercase mb-1">Cascade Risk</div>
+              <div className={`text-lg font-bold font-mono ${
+                mlMarket.cascade_imminent ? 'text-red-400 animate-pulse' : 'text-green-400'
+              }`}>{mlMarket.cascade_risk.toFixed(1)}%</div>
+            </div>
+            <div className="bg-[color:var(--color-bg-accent)] rounded-lg p-3">
+              <div className="text-[10px] text-text-tertiary font-mono uppercase mb-1">Market Status</div>
+              <div className={`text-sm font-bold font-mono ${
+                mlMarket.cascade_imminent ? 'text-red-400' : 'text-green-400'
+              }`}>{mlMarket.cascade_imminent ? '🚨 CRITICAL' : '✅ STABLE'}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Cascade risk bar */}
+        {mlMarket && (
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-xs font-mono text-text-secondary uppercase">Cascade Liquidation Risk</span>
+              <span className="text-xs font-mono text-text-tertiary">{mlMarket.cascade_risk.toFixed(1)}%</span>
+            </div>
+            <div className="h-3 bg-[color:var(--color-bg-accent)] rounded overflow-hidden">
+              <div
+                className={`h-full rounded transition-all duration-700 ${
+                  mlMarket.cascade_risk > 70 ? 'bg-red-500' :
+                  mlMarket.cascade_risk > 40 ? 'bg-orange-400' : 'bg-green-500'
+                }`}
+                style={{ width: `${mlMarket.cascade_risk}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Threat Matrix Table */}
+        {threatMatrix.length > 0 && (
+          <div>
+            <div className="text-xs text-text-tertiary font-mono mb-2 uppercase">Agent Threat Matrix (ML-scored)</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="border-b border-[color:var(--color-border)] text-[10px] text-text-tertiary uppercase">
+                    <th className="py-2 px-2 text-left">Agent</th>
+                    <th className="py-2 px-2 text-left">Type ID</th>
+                    <th className="py-2 px-2 text-center">Threat</th>
+                    <th className="py-2 px-2 text-center">MEV%</th>
+                    <th className="py-2 px-2 text-center">Flash%</th>
+                    <th className="py-2 px-2 text-center">Wash</th>
+                    <th className="py-2 px-2 text-center">PnL Fcst</th>
+                    <th className="py-2 px-2 text-center">Risk</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {threatMatrix.map((row) => (
+                    <tr key={row.agent_id} className="border-b border-[color:var(--color-border)]/30 hover:bg-[color:var(--color-bg-accent)]/40 transition-colors">
+                      <td className="py-2 px-2">
+                        <span className="font-bold">{row.agent_name ?? row.agent_id?.slice(0, 12)}</span>
+                      </td>
+                      <td className="py-2 px-2 text-text-tertiary">
+                        {row.predicted_agent_type?.replace('_', ' ')}
+                        <span className="text-[10px] ml-1 text-text-tertiary">({row.agent_type_confidence?.toFixed(0)}%)</span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={`font-bold ${
+                          row.threat_score >= 75 ? 'text-red-400' :
+                          row.threat_score >= 50 ? 'text-orange-400' :
+                          row.threat_score >= 25 ? 'text-yellow-400' : 'text-green-400'
+                        }`}>{row.threat_score?.toFixed(0)}</span>
+                        <span className="text-text-tertiary text-[10px] ml-1">{row.threat_category}</span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={row.mev_attack_probability >= 50 ? 'text-red-400 font-bold' : 'text-text-secondary'}>
+                          {row.mev_attack_probability?.toFixed(0)}%
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={row.flash_loan_probability >= 50 ? 'text-red-400 font-bold' : 'text-text-secondary'}>
+                          {row.flash_loan_probability?.toFixed(0)}%
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={row.is_wash_trading ? 'text-red-400 font-bold' : 'text-green-400'}>
+                          {row.wash_trading_score?.toFixed(0)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={row.pnl_direction === 'PROFIT' ? 'text-green-400' : row.pnl_direction === 'LOSS' ? 'text-red-400' : 'text-text-secondary'}>
+                          {row.pnl_forecast >= 0 ? '+' : ''}{row.pnl_forecast?.toFixed(0)}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                          row.risk_level === 'CRITICAL' ? 'bg-red-900/40 text-red-300' :
+                          row.risk_level === 'HIGH'     ? 'bg-orange-900/40 text-orange-300' :
+                          row.risk_level === 'MEDIUM'   ? 'bg-yellow-900/40 text-yellow-300' :
+                                                          'bg-green-900/40 text-green-300'
+                        }`}>{row.risk_level}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ML Warnings */}
+        {(mlMarket?.warnings ?? []).length > 0 && (
+          <div className="space-y-1">
+            {mlMarket!.warnings.map((w, i) => (
+              <div key={i} className="text-xs font-mono text-yellow-300 bg-yellow-900/20 border border-yellow-800/40 rounded px-3 py-1.5">{w}</div>
+            ))}
+          </div>
+        )}
+
+        {!mlMarket && !mlLoading && (
+          <div className="text-xs text-text-tertiary font-mono text-center py-6">
+            Click &quot;Run ML Analysis&quot; to generate AI intelligence reports
+          </div>
+        )}
+        {mlLoading && (
+          <div className="text-xs text-text-tertiary font-mono text-center py-6 animate-pulse">
+            Running 8-model inference pipeline…
+          </div>
+        )}
+      </div>
+      {/* ── MEV Sandwich Visualizer ────────────────────── */}
       <div className="card space-y-4">
         <h3 className="text-sm font-mono font-bold text-text-primary uppercase">
           MEV Sandwich Attack Flow

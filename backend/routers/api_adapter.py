@@ -179,84 +179,61 @@ async def get_activity_feed():
 
 
 # ============================================================================
-# LIQUIDITY API (maps to /pool)
+# LIQUIDITY API (proxies to liquidity_engine pool_store)
 # ============================================================================
 
 @router.get("/liquidity/pool")
 async def get_pool_data():
-    """Get current pool data from simulation engine"""
-    pool = simulation_runner.pool
+    """Get current pool data from the AMM liquidity engine (default pool)."""
+    from liquidity_engine.pool_store import pool_store
+    pool = pool_store.get_or_raise("default")
+    state = pool.get_state()
     return {
         "success": True,
         "data": {
-            "reserve_a": round(pool.reserve_a, 2),
-            "reserve_b": round(pool.reserve_b, 2),
-            "price_a_per_b": round(pool.price_a_per_b, 6),
-            "price_b_per_a": round(pool.price_b_per_a, 6),
-            "total_liquidity": round(pool.reserve_a + pool.reserve_b, 2),
-            "volume_24h": round(pool.total_volume, 2),
-            "swap_count": pool.swap_count,
-        }
+            "reserve0": state["reserve0"],
+            "reserve1": state["reserve1"],
+            "token0": state["token0"],
+            "token1": state["token1"],
+            "price_token0_per_token1": state["price_token0_per_token1"],
+            "price_token1_per_token0": state["price_token1_per_token0"],
+            "total_liquidity": state["tvl"],
+            "tvl": state["tvl"],
+            "volume_24h": state["volume_24h"],
+            "swap_count": state["swap_count"],
+            "fee_pct": state["fee_pct"],
+            "k_product": state["k_product"],
+            "total_lp_tokens": state["total_lp_tokens"],
+            "provider_count": state["provider_count"],
+        },
     }
 
 
 @router.get("/liquidity/depth-chart")
 async def get_depth_chart():
-    """Get liquidity depth chart data"""
-    return {
-        "success": True,
-        "data": {
-            "bids": [
-                {"price": 1.95, "amount": 50000},
-                {"price": 1.90, "amount": 100000},
-                {"price": 1.85, "amount": 150000}
-            ],
-            "asks": [
-                {"price": 2.05, "amount": 50000},
-                {"price": 2.10, "amount": 100000},
-                {"price": 2.15, "amount": 150000}
-            ]
-        }
-    }
+    """Get real AMM liquidity depth chart data."""
+    from liquidity_engine.pool_store import pool_store
+    pool = pool_store.get_or_raise("default")
+    data = pool.get_depth_chart(price_range_pct=10.0, levels=15)
+    return {"success": True, "data": data}
 
 
 @router.get("/liquidity/slippage-curve")
 async def get_slippage_curve():
-    """Get slippage curve data"""
-    return {
-        "success": True,
-        "data": [
-            {"trade_size": 1000, "slippage": 0.1},
-            {"trade_size": 5000, "slippage": 0.5},
-            {"trade_size": 10000, "slippage": 1.2},
-            {"trade_size": 50000, "slippage": 5.8},
-            {"trade_size": 100000, "slippage": 12.5}
-        ]
-    }
+    """Get real AMM slippage curve data."""
+    from liquidity_engine.pool_store import pool_store
+    pool = pool_store.get_or_raise("default")
+    curve = pool.get_slippage_curve(direction="token0_to_token1", steps=20)
+    return {"success": True, "data": curve}
 
 
 @router.get("/liquidity/events")
 async def get_liquidity_events(db: Session = Depends(get_db)):
-    """Get recent liquidity events"""
-    from models import Transaction
-    
-    events = db.query(Transaction).filter(
-        Transaction.type.in_(["ADD_LIQUIDITY", "REMOVE_LIQUIDITY", "SWAP"])
-    ).order_by(Transaction.timestamp.desc()).limit(20).all()
-    
-    return {
-        "success": True,
-        "data": [
-            {
-                "id": str(event.id),
-                "type": event.type,
-                "wallet": event.wallet,
-                "amount": event.amount,
-                "timestamp": event.timestamp.isoformat()
-            }
-            for event in events
-        ]
-    }
+    """Get recent pool events from the AMM engine."""
+    from liquidity_engine.pool_store import pool_store
+    pool = pool_store.get_or_raise("default")
+    engine_events = pool.get_recent_events(limit=20)
+    return {"success": True, "data": engine_events}
 
 
 # ============================================================================
