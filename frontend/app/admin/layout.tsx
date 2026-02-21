@@ -21,7 +21,6 @@ function getTokenExpiry(token?: string | null): number | null {
 const adminNav = [
   { href: '/admin', label: 'Overview', icon: '⊡' },
   { href: '/admin/participants', label: 'Participants', icon: '⊙' },
-  { href: '/admin/contracts', label: 'Contracts', icon: '◈' },
   { href: '/admin/simulation', label: 'Simulation', icon: '≈' },
   { href: '/admin/agents', label: 'Agents', icon: '◈' },
   { href: '/admin/threats', label: 'Threats', icon: '⚠' },

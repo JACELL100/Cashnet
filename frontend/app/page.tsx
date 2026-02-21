@@ -150,13 +150,44 @@ export default function LandingPage() {
       {/* Navigation Bar */}
       <nav className="fixed top-0 left-0 right-0 h-16 md:h-17 bg-[color:var(--color-bg-secondary)] border-b border-[color:var(--color-border)] backdrop-blur-sm z-40">
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-accent rounded flex items-center justify-center text-xs font-bold text-[color:var(--color-bg-primary)]">
-              RE
+          <Link href="/" className="flex items-center gap-3 group">
+            {/* Logo mark */}
+            <div className="relative w-9 h-9 shrink-0">
+              <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                {/* Outer hex ring */}
+                <polygon
+                  points="18,2 32,10 32,26 18,34 4,26 4,10"
+                  stroke="#00d4ff"
+                  strokeWidth="1.5"
+                  fill="rgba(0,212,255,0.08)"
+                  className="transition-all duration-300 group-hover:fill-[rgba(0,212,255,0.16)]"
+                />
+                {/* Inner node */}
+                <circle cx="18" cy="18" r="4" fill="#00d4ff" />
+                {/* Spokes */}
+                <line x1="18" y1="14" x2="18" y2="5"  stroke="#00d4ff" strokeWidth="1" strokeOpacity="0.6" />
+                <line x1="18" y1="22" x2="18" y2="31" stroke="#00d4ff" strokeWidth="1" strokeOpacity="0.6" />
+                <line x1="14.5" y1="16" x2="7"  y2="11.5" stroke="#00d4ff" strokeWidth="1" strokeOpacity="0.6" />
+                <line x1="21.5" y1="20" x2="29" y2="24.5" stroke="#00d4ff" strokeWidth="1" strokeOpacity="0.6" />
+                <line x1="21.5" y1="16" x2="29" y2="11.5" stroke="#00d4ff" strokeWidth="1" strokeOpacity="0.6" />
+                <line x1="14.5" y1="20" x2="7"  y2="24.5" stroke="#00d4ff" strokeWidth="1" strokeOpacity="0.6" />
+              </svg>
             </div>
-            <span className="font-mono text-sm font-bold text-text-primary hidden sm:inline">
-              cashnet
-            </span>
+            {/* Wordmark */}
+            <div className="hidden sm:flex flex-col leading-none">
+              <span className="font-mono text-base font-bold tracking-tight"
+                style={{
+                  background: 'linear-gradient(90deg, #ffffff 0%, #00d4ff 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                cashnet
+              </span>
+              <span className="text-[9px] font-mono text-text-tertiary tracking-[0.2em] uppercase mt-0.5">
+                simulation lab
+              </span>
+            </div>
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-mono">
@@ -262,8 +293,13 @@ export default function LandingPage() {
 
       {/* Live Ticker */}
       <div className="bg-[color:var(--color-bg-secondary)] border-y border-[color:var(--color-border)] py-4 overflow-hidden">
-        <div className="flex gap-8 animate-marquee">
+        <div className="animate-marquee">
           {[
+            'ETH/USD: $3,245.67',
+            'USDC Pool: $1.2M',
+            'Liquidation Risk: 3.2%',
+            'Network Status: Optimal',
+            'Oracle Feed: Active',
             'ETH/USD: $3,245.67',
             'USDC Pool: $1.2M',
             'Liquidation Risk: 3.2%',
@@ -316,35 +352,48 @@ export default function LandingPage() {
 
       {/* How It Works */}
       <section className="py-20 px-6">
-        <div className="max-w-4xl mx-auto space-y-12">
-          <div className="text-center space-y-4">
+        <div className="max-w-5xl mx-auto space-y-16">
+          <div className="text-center space-y-3">
+            <div className="inline-block px-3 py-1 bg-[rgba(0,212,255,0.08)] border border-accent/30 rounded-full mb-2">
+              <span className="text-xs font-mono text-accent uppercase tracking-widest">workflow</span>
+            </div>
             <h2 className="text-4xl md:text-5xl font-bold font-mono text-text-primary">
               How It Works
             </h2>
+            <p className="text-text-secondary font-mono text-sm">Four steps from setup to insight</p>
           </div>
 
-          <div className="grid md:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-4 gap-0">
             {[
-              { num: '1', title: 'Configure', desc: 'Set market parameters and agent strategies' },
-              { num: '2', title: 'Simulate', desc: 'Run real-time DeFi scenarios with live data' },
-              { num: '3', title: 'Monitor', desc: 'Track metrics across 7 specialized modules' },
-              { num: '4', title: 'Analyze', desc: 'Review audit trails and generate reports' },
+              { num: '01', title: 'Configure', icon: '⚙', desc: 'Set market parameters, agent strategies, and risk thresholds', color: '#00d4ff' },
+              { num: '02', title: 'Simulate', icon: '≈', desc: 'Run real-time DeFi scenarios with live price feeds and agent behavior', color: '#b367ff' },
+              { num: '03', title: 'Monitor', icon: '◎', desc: 'Track metrics across 7 specialized modules in real time', color: '#f0a500' },
+              { num: '04', title: 'Analyze', icon: '◆', desc: 'Review cryptographic audit trails and export risk reports', color: '#22c55e' },
             ].map((step, idx) => (
-              <div key={idx} className="relative">
-                <div className="flex flex-col items-center space-y-4 text-center">
-                  <div className="w-12 h-12 bg-accent text-[color:var(--color-bg-primary)] rounded flex items-center justify-center font-bold font-mono">
-                    {step.num}
-                  </div>
-                  <div>
-                    <h3 className="font-bold font-mono text-text-primary">{step.title}</h3>
-                    <p className="text-sm text-text-secondary font-mono mt-1">{step.desc}</p>
-                  </div>
-                </div>
+              <div key={idx} className="relative flex flex-col items-center text-center group px-4">
+                {/* Connector line */}
                 {idx < 3 && (
-                  <div className="hidden md:block absolute top-6 -right-4 text-accent animate-arrowPulse">
-                    →
-                  </div>
+                  <div className="hidden md:block absolute top-10 left-[calc(50%+2.5rem)] right-0 h-px"
+                    style={{ background: `linear-gradient(90deg, ${step.color}66, transparent)` }} />
                 )}
+                {/* Step badge */}
+                <div className="relative mb-5">
+                  <div
+                    className="w-20 h-20 rounded-xl flex flex-col items-center justify-center transition-transform duration-300 group-hover:scale-110"
+                    style={{ background: `${step.color}15`, border: `1px solid ${step.color}40` }}
+                  >
+                    <span className="text-2xl mb-0.5">{step.icon}</span>
+                    <span className="text-xs font-mono font-bold" style={{ color: step.color }}>{step.num}</span>
+                  </div>
+                  {/* Glow */}
+                  <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 blur-xl -z-10"
+                    style={{ background: step.color }} />
+                </div>
+                <h3 className="font-bold font-mono text-text-primary text-base mb-2">{step.title}</h3>
+                <p className="text-xs text-text-secondary font-mono leading-relaxed">{step.desc}</p>
+                {/* Bottom accent */}
+                <div className="mt-4 h-0.5 w-0 group-hover:w-12 transition-all duration-300 rounded-full"
+                  style={{ background: step.color }} />
               </div>
             ))}
           </div>
@@ -382,108 +431,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Pricing Section */}
-      <section id="pricing" className="py-20 px-6">
-        <div className="max-w-5xl mx-auto space-y-12">
-          <div className="text-center space-y-4">
-            <h2 className="text-4xl md:text-5xl font-bold font-mono text-text-primary">
-              Transparent Pricing
-            </h2>
-            <p className="text-text-secondary font-mono">
-              Choose the plan that fits your needs
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {[
-              {
-                name: 'STARTER',
-                price: 'Free',
-                desc: 'Perfect for learning',
-                features: [
-                  'Up to 3 simulations/month',
-                  '2 concurrent agents',
-                  'Basic analytics',
-                  'Community support',
-                ],
-              },
-              {
-                name: 'PRO',
-                price: '$299',
-                period: '/month',
-                desc: 'For active users',
-                highlight: true,
-                features: [
-                  'Unlimited simulations',
-                  '6 concurrent agents',
-                  'Advanced analytics',
-                  'Email support',
-                  'Custom parameters',
-                  'API access',
-                ],
-              },
-              {
-                name: 'ENTERPRISE',
-                price: 'Custom',
-                desc: 'For institutions',
-                features: [
-                  'Everything in Pro',
-                  'Dedicated support',
-                  'Custom integrations',
-                  'SLA guarantees',
-                  'On-premise option',
-                  'Training included',
-                ],
-              },
-            ].map((plan, idx) => (
-              <div
-                key={idx}
-                className={`relative p-8 rounded border transition-all duration-200 ${
-                  plan.highlight
-                    ? 'bg-accent/10 border-accent scale-105'
-                    : 'bg-[color:var(--color-bg-secondary)] border-[color:var(--color-border)]'
-                }`}
-              >
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-6 px-2 py-1 bg-accent text-[color:var(--color-bg-primary)] rounded text-xs font-mono font-bold">
-                    POPULAR
-                  </div>
-                )}
-
-                <div className="space-y-4">
-                  <h3 className="font-bold font-mono text-text-primary uppercase">{plan.name}</h3>
-                  <div className="space-y-1">
-                    <div className="text-3xl font-bold font-mono text-accent">
-                      {plan.price}
-                      {plan.period && <span className="text-base text-text-secondary">{plan.period}</span>}
-                    </div>
-                    <p className="text-sm text-text-secondary font-mono">{plan.desc}</p>
-                  </div>
-
-                  <button
-                    className={`w-full py-3 rounded font-mono text-sm font-bold transition-colors ${
-                      plan.highlight
-                        ? 'btn accent'
-                        : 'btn ghost'
-                    }`}
-                  >
-                    Get Started
-                  </button>
-
-                  <div className="space-y-2 pt-4 border-t border-[color:var(--color-border)]">
-                    {plan.features.map((feature, fIdx) => (
-                      <div key={fIdx} className="flex items-start gap-2 text-sm font-mono text-text-secondary">
-                        <span className="text-success mt-0.5">✓</span>
-                        <span>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+     
 
       {/* Testimonials Section */}
       <section className="py-20 px-6 bg-gradient-to-b from-transparent via-[rgba(179,103,255,0.02)] to-transparent">
@@ -664,40 +612,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Integration Partners */}
-      <section className="py-20 px-6">
-        <div className="max-w-6xl mx-auto space-y-12">
-          <div className="text-center space-y-4">
-            <h2 className="text-4xl md:text-5xl font-bold font-mono text-text-primary">
-              Native Integrations
-            </h2>
-            <p className="text-text-secondary font-mono">
-              Connect seamlessly with your favorite DeFi protocols
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              'Uniswap V3',
-              'Aave V3',
-              'Curve',
-              'Balancer',
-              'MakerDAO',
-              'Lido',
-              'Compound',
-              'dYdX',
-            ].map((protocol, idx) => (
-              <div
-                key={idx}
-                className="p-6 bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded hover:border-cyan transition-all duration-200 text-center"
-              >
-                <div className="text-2xl font-bold font-mono text-accent mb-2">{protocol}</div>
-                <div className="text-xs text-text-tertiary font-mono">Connected</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      
 
       {/* Final CTA */}
       <section className="py-20 px-6">
