@@ -12,6 +12,7 @@ from config import settings
 from agents.router import router as agents_router
 from agents.scenario_router import router as scenario_router
 from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control
+from routers.contract_analyzer import router as contract_analyzer_router
 from liquidity_engine.router import router as liquidity_engine_router
 from liquidity_engine.ml_router import router as ml_risk_router
 from agents.ml_router import router as agent_intel_router
@@ -50,6 +51,7 @@ app.include_router(scenario_router)
 app.include_router(liquidity_engine_router)
 app.include_router(ml_risk_router)
 app.include_router(agent_intel_router)
+app.include_router(contract_analyzer_router)
 
 
 @app.on_event("startup")
