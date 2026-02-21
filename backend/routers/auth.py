@@ -26,7 +26,7 @@ if not firebase_admin._apps:
             cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if cred_path and os.path.exists(cred_path):
                 cred = fb_creds.Certificate(cred_path)
-                firebase_admin.initialize_app(cred)
+                firebase_admin.initialize_app(cred)             
                 print("✅ Firebase Admin SDK initialized from GOOGLE_APPLICATION_CREDENTIALS")
             else:
                 cred = fb_creds.ApplicationDefault()
@@ -90,7 +90,7 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
-# â”€â”€â”€ JWT helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 
 def create_jwt(payload: dict, days: int = 7) -> str:
     data = payload.copy()

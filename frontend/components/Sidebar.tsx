@@ -4,6 +4,21 @@ import React from 'react';
 import Link from 'next/link';
 import { useUIStore } from '@/store/uiStore';
 import { useSimulationStore } from '@/store/simulationStore';
+import { useAuthStore, UserRole } from '@/store/authStore';
+
+// Define nav items with role access
+const allNavItems = [
+  { href: '/dashboard', label: 'Overview', icon: '⊡', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
+  { href: '/dashboard/identity', label: 'Identity', icon: '⊙', roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dashboard/liquidity', label: 'Liquidity', icon: '≈', roles: ['ADMIN', 'LENDER'] },
+  { href: '/dashboard/lending', label: 'Lending', icon: '⎇', roles: ['ADMIN', 'LENDER', 'BORROWER'] },
+  { href: '/dashboard/agents', label: 'Agents', icon: '◈', roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dashboard/threats', label: 'Threats', icon: '⚠', roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dashboard/credit', label: 'Credit', icon: '✓', roles: ['ADMIN', 'BORROWER', 'LENDER'] },
+  { href: '/dashboard/audit', label: 'Audit', icon: '◆', roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dashboard/settings', label: 'Settings', icon: '⚙', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
+  { href: '/dashboard/profile', label: 'Profile', icon: '⛯', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
+];
 
 const Sidebar: React.FC = () => {
   const activeNavItem = useUIStore((state) => state.activeNavItem);
@@ -13,19 +28,13 @@ const Sidebar: React.FC = () => {
   const isRunning = useSimulationStore((state) => state.isRunning);
   const setRunning = useSimulationStore((state) => state.setRunning);
   const crashed = useSimulationStore((state) => state.crashed);
+  
+  // Get user role
+  const user = useAuthStore((state) => state.user);
+  const userRole: UserRole = user?.role || 'BORROWER';
 
-  const navItems = [
-    { href: '/dashboard', label: 'Overview', icon: '⊡' },
-    { href: '/dashboard/identity', label: 'Identity', icon: '⊙' },
-    { href: '/dashboard/liquidity', label: 'Liquidity', icon: '≈' },
-    { href: '/dashboard/lending', label: 'Lending', icon: '⎇' },
-    { href: '/dashboard/agents', label: 'Agents', icon: '◈' },
-    { href: '/dashboard/threats', label: 'Threats', icon: '⚠' },
-    { href: '/dashboard/credit', label: 'Credit', icon: '✓' },
-    { href: '/dashboard/audit', label: 'Audit', icon: '◆' },
-    { href: '/dashboard/settings', label: 'Settings', icon: '⚙' },
-    { href: '/dashboard/profile', label: 'Profile', icon: '⛯' },
-  ];
+  // Filter nav items based on user role
+  const navItems = allNavItems.filter((item) => item.roles.includes(userRole));
 
   return (
     <>

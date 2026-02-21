@@ -10,6 +10,7 @@ from config import settings
 
 # Import routers
 from agents.router import router as agents_router
+from agents.scenario_router import router as scenario_router
 from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth
 from liquidity_engine.router import router as liquidity_engine_router
 from liquidity_engine.ml_router import router as ml_risk_router
@@ -44,6 +45,7 @@ app.include_router(lending.router)
 app.include_router(alerts.router)
 app.include_router(simulations.router)
 app.include_router(agents_router)
+app.include_router(scenario_router)
 app.include_router(liquidity_engine_router)
 app.include_router(ml_risk_router)
 app.include_router(agent_intel_router)
@@ -98,6 +100,17 @@ async def startup_event():
         print("✅ DotlocalAgentIntelModel ready")
     except Exception as e:
         print(f"⚠️  Agent ML model init failed: {e}")
+
+    # Initialize blockchain integrator for on-chain event recording
+    try:
+        from agents.blockchain_integrator import get_blockchain_integrator
+        integrator = await get_blockchain_integrator()
+        if integrator.contracts_loaded:
+            print("✅ BlockchainIntegrator ready (on-chain recording enabled)")
+        else:
+            print("⚠️  BlockchainIntegrator running in simulation mode")
+    except Exception as e:
+        print(f"⚠️  BlockchainIntegrator init failed: {e}")
 
     print(f"🌐 API running at http://{settings.api_host}:{settings.api_port}")
     print(f"📚 Docs available at http://{settings.api_host}:{settings.api_port}/docs")

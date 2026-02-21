@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 const TechEarth = dynamic(() => import('@/components/TechEarth'), {
@@ -13,9 +14,45 @@ const TechEarth = dynamic(() => import('@/components/TechEarth'), {
   ),
 });
 
+type UserRole = 'ADMIN' | 'AUDITOR' | 'LENDER' | 'BORROWER';
+
+const roles: { role: UserRole; title: string; icon: string; description: string; color: string }[] = [
+  {
+    role: 'ADMIN',
+    title: 'Administrator',
+    icon: '⚙',
+    description: 'Full platform access, manage users, configure system settings',
+    color: 'text-purple-400 border-purple-400/50 bg-purple-400/10',
+  },
+  {
+    role: 'AUDITOR',
+    title: 'Auditor',
+    icon: '◆',
+    description: 'Review transactions, verify compliance, audit smart contracts',
+    color: 'text-amber-400 border-amber-400/50 bg-amber-400/10',
+  },
+  {
+    role: 'LENDER',
+    title: 'Lender',
+    icon: '≈',
+    description: 'Provide liquidity, earn interest, manage lending pools',
+    color: 'text-emerald-400 border-emerald-400/50 bg-emerald-400/10',
+  },
+  {
+    role: 'BORROWER',
+    title: 'Borrower',
+    icon: '⎇',
+    description: 'Access credit, manage loans, track collateral health',
+    color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
+  },
+];
+
 export default function LandingPage() {
+  const router = useRouter();
   const [scrollY, setScrollY] = useState(0);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('signup');
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -23,8 +60,93 @@ export default function LandingPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const handleRoleSelect = (role: UserRole) => {
+    console.log('[LANDING] Role selected:', role, 'Auth mode:', authMode);
+    let targetUrl: string;
+
+    if (role === 'ADMIN') {
+      targetUrl = '/admin/login';
+    } else if (role === 'AUDITOR') {
+      targetUrl = '/auditor/login';
+    } else if (role === 'LENDER') {
+      targetUrl = authMode === 'signup' ? '/lender/signup' : '/lender/login';
+    } else {
+      // BORROWER
+      targetUrl = `/${authMode}?role=BORROWER`;
+    }
+
+    console.log('[LANDING] Navigating to:', targetUrl);
+    setShowRoleModal(false);
+    router.push(targetUrl);
+  };
+
+  const openRoleModal = (mode: 'login' | 'signup') => {
+    console.log('[LANDING] Opening modal for mode:', mode);
+    setAuthMode(mode);
+    setShowRoleModal(true);
+  };
+
   return (
     <div className="min-h-screen bg-[color:var(--color-bg-primary)]">
+      {/* Role Selection Modal */}
+      {showRoleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowRoleModal(false)}
+          />
+          <div className="relative z-10 w-full max-w-2xl mx-4 bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded-xl p-8 animate-fadeUp">
+            <button
+              onClick={() => setShowRoleModal(false)}
+              className="absolute top-4 right-4 text-text-secondary hover:text-text-primary text-xl"
+            >
+              ×
+            </button>
+
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-bold font-mono text-text-primary mb-2">
+                Select Your Role
+              </h2>
+              <p className="text-text-secondary font-mono text-sm">
+                Choose how you want to use cashnet
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {roles.map((r) => (
+                <button
+                  key={r.role}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleRoleSelect(r.role);
+                  }}
+                  className={`group p-6 border rounded-lg text-left transition-all duration-200 hover:scale-[1.02] hover:shadow-lg ${r.color}`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="text-3xl">{r.icon}</div>
+                    <div>
+                      <h3 className="font-bold font-mono text-text-primary text-lg">
+                        {r.title}
+                      </h3>
+                      <p className="text-text-secondary font-mono text-xs mt-1">
+                        {r.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 h-0.5 w-0 group-hover:w-full transition-all bg-current opacity-50" />
+                </button>
+              ))}
+            </div>
+
+            <p className="text-center text-text-tertiary font-mono text-xs mt-6">
+              You can change your role later in settings
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Navigation Bar */}
       <nav className="fixed top-0 left-0 right-0 h-16 md:h-17 bg-[color:var(--color-bg-secondary)] border-b border-[color:var(--color-border)] backdrop-blur-sm z-40">
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
@@ -50,12 +172,18 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link href="/login" className="btn ghost text-xs py-2 px-3">
+            <button
+              onClick={() => openRoleModal('login')}
+              className="btn ghost text-xs py-2 px-3"
+            >
               Sign In
-            </Link>
-            <Link href="/signup" className="btn accent text-xs py-2 px-3">
+            </button>
+            <button
+              onClick={() => openRoleModal('signup')}
+              className="btn accent text-xs py-2 px-3"
+            >
               Get Started
-            </Link>
+            </button>
           </div>
         </div>
       </nav>
@@ -112,9 +240,12 @@ export default function LandingPage() {
 
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link href="/signup" className="btn accent px-6 py-2.5 font-mono text-sm font-semibold hover:scale-105 transition-transform">
+                <button
+                  onClick={() => openRoleModal('signup')}
+                  className="btn accent px-6 py-2.5 font-mono text-sm font-semibold hover:scale-105 transition-transform"
+                >
                   Start Free Trial
-                </Link>
+                </button>
                 <button className="btn outline px-6 py-2.5 font-mono text-sm hover:scale-105 transition-transform">
                   Watch Demo
                 </button>
@@ -583,9 +714,12 @@ export default function LandingPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/signup" className="btn accent px-8 py-4 font-mono font-bold">
+              <button
+                onClick={() => openRoleModal('signup')}
+                className="btn accent px-8 py-4 font-mono font-bold"
+              >
                 Get Started Free
-              </Link>
+              </button>
               <button className="btn ghost px-8 py-4 font-mono">
                 Schedule 1:1 Demo
               </button>
