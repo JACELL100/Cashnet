@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
 import { useUIStore } from '@/store/uiStore';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 interface Participant {
   id: string;
@@ -27,53 +29,26 @@ const ROLES = [
 export default function IdentityPage() {
   const addToast = useUIStore((state) => state.addToast);
 
-  const [participants, setParticipants] = useState<Participant[]>([
-    {
-      id: 'p1',
-      wallet: '0x1A2B3C4D5E6F7G8H9I0J1K2L',
-      role: 'Admin',
-      label: 'Alice Chen',
-      registered: true,
-      status: 'active',
-      joinedDate: '2024-01-01',
-    },
-    {
-      id: 'p2',
-      wallet: '0x2B3C4D5E6F7G8H9I0J1K2L3M',
-      role: 'Market Maker',
-      label: 'Bob Smith',
-      registered: true,
-      status: 'active',
-      joinedDate: '2024-01-05',
-    },
-    {
-      id: 'p3',
-      wallet: '0x3C4D5E6F7G8H9I0J1K2L3M4N',
-      role: 'Liquidator',
-      label: 'Carol Johnson',
-      registered: true,
-      status: 'active',
-      joinedDate: '2024-01-10',
-    },
-    {
-      id: 'p4',
-      wallet: '0x4D5E6F7G8H9I0J1K2L3M4N5O',
-      role: 'Trader',
-      label: 'David Williams',
-      registered: false,
-      status: 'inactive',
-      joinedDate: '2024-01-15',
-    },
-    {
-      id: 'p5',
-      wallet: '0x5E6F7G8H9I0J1K2L3M4N5O6P',
-      role: 'Oracle',
-      label: 'Eve Martinez',
-      registered: true,
-      status: 'active',
-      joinedDate: '2024-01-20',
-    },
-  ]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+
+  const fetchParticipants = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/participants`);
+      if (res.ok) {
+        const json = await res.json();
+        // Assuming the backend returns { data: [...] } or an array directly
+        setParticipants(json.data ?? json ?? []);
+      }
+    } catch {
+      // silently retry or ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchParticipants();
+    const interval = setInterval(fetchParticipants, 5000);
+    return () => clearInterval(interval);
+  }, [fetchParticipants]);
 
   const [formData, setFormData] = useState({
     wallet: '',
@@ -83,7 +58,7 @@ export default function IdentityPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
 
-  const handleRegisterParticipant = (e: React.FormEvent) => {
+  const handleRegisterParticipant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.wallet || !formData.label) {
       addToast({
@@ -93,22 +68,36 @@ export default function IdentityPage() {
       return;
     }
 
-    const newParticipant: Participant = {
-      id: `p${participants.length + 1}`,
-      wallet: formData.wallet,
-      role: 'Trader',
-      label: formData.label,
-      registered: true,
-      status: 'active',
-      joinedDate: new Date().toISOString().split('T')[0],
-    };
+    try {
+      const res = await fetch(`${API_URL}/api/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: formData.wallet,
+          label: formData.label,
+          role: 'Trader',
+        }),
+      });
 
-    setParticipants([...participants, newParticipant]);
-    setFormData({ wallet: '', label: '' });
-    addToast({
-      message: `${formData.label} registered successfully`,
-      severity: 'success',
-    });
+      if (res.ok) {
+        addToast({
+          message: `${formData.label} registered successfully`,
+          severity: 'success',
+        });
+        setFormData({ wallet: '', label: '' });
+        fetchParticipants(); // Refresh list after successful registration
+      } else {
+        addToast({
+          message: 'Failed to register participant',
+          severity: 'error',
+        });
+      }
+    } catch {
+      addToast({
+        message: 'Error communicating with server',
+        severity: 'error',
+      });
+    }
   };
 
   const filteredParticipants = participants.filter((p) => {
@@ -274,8 +263,8 @@ export default function IdentityPage() {
                         row.status === 'active'
                           ? 'success'
                           : row.status === 'suspended'
-                          ? 'critical'
-                          : 'medium'
+                            ? 'critical'
+                            : 'medium'
                       }
                     >
                       {row.status.toUpperCase()}

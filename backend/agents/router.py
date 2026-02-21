@@ -22,6 +22,7 @@ router = APIRouter(prefix="/agents-sim", tags=["Agents & Simulation"])
 class StartSimulationRequest(BaseModel):
     max_steps: int = 200
     tick_delay: float = 0.5
+    agents_config: Optional[list[dict]] = None
 
 
 class ToggleAgentRequest(BaseModel):
@@ -31,6 +32,10 @@ class ToggleAgentRequest(BaseModel):
 class UpdateCapitalRequest(BaseModel):
     capital: float
 
+class StressEventRequest(BaseModel):
+    event_type: str
+    magnitude: float = 1.0
+
 
 # ---------------------------------------------------------------------------
 # Simulation lifecycle
@@ -39,9 +44,15 @@ class UpdateCapitalRequest(BaseModel):
 @router.post("/simulation/start")
 async def start_simulation(req: StartSimulationRequest = StartSimulationRequest()):
     """Start the multi-agent simulation."""
+    
+    custom_agents = None
+    if req.agents_config:
+        custom_agents = simulation_runner._create_custom_agents(req.agents_config)
+        
     result = await simulation_runner.start(
         max_steps=req.max_steps,
         tick_delay=req.tick_delay,
+        custom_agents=custom_agents
     )
     return {"success": True, "data": result}
 
@@ -64,6 +75,16 @@ async def resume_simulation():
 async def stop_simulation():
     """Stop the simulation."""
     result = await simulation_runner.stop()
+    return {"success": True, "data": result}
+
+
+@router.post("/simulation/stress")
+async def trigger_stress_event(req: StressEventRequest):
+    """Trigger a live stress event in the simulation."""
+    if simulation_runner.status != "running":
+        raise HTTPException(status_code=400, detail="Simulation must be running to trigger test.")
+    
+    result = simulation_runner.trigger_stress_event(req.event_type, req.magnitude)
     return {"success": True, "data": result}
 
 

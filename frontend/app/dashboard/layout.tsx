@@ -40,23 +40,34 @@ export default function DashboardLayout({
       router.replace('/');
       return;
     }
-    
+
     // Set the current user ID in simulation store for user-specific data
     setUserId(user.id);
 
-    // Redirect to role-specific dashboard if on generic /dashboard
-    const userRole = user.role || 'BORROWER';
-    const defaultPath = roleDefaultPaths[userRole];
-    
-    // Only redirect if user is on the exact /dashboard path and their role has a different default
-    if (pathname === '/dashboard' && defaultPath !== '/dashboard') {
-      router.replace(defaultPath);
-    }
+    // Auto-redirect removed to allow all users to access the main dashboard.
   }, [isAuthenticated, user, hasHydrated, router, setUserId, pathname]);
 
-  // Show loading state while waiting for hydration (minimal, non-blocking)
-  if (!hasHydrated || !isAuthenticated || !user) {
-    return null; // Return null for instant loading - Next.js will handle the transition
+  if (!hasHydrated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <div className="text-center">
+          <div className="text-4xl font-bold text-accent font-mono mb-4">CSH</div>
+          <p className="text-text-secondary font-mono">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If hydrated but not authenticated, Next.js will handle the transition
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <div className="text-center">
+          <div className="text-4xl font-bold text-accent font-mono mb-4">CSH</div>
+          <p className="text-text-secondary font-mono">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -64,7 +75,7 @@ export default function DashboardLayout({
       <Sidebar />
       <Header />
       <CascadeBanner />
-      
+
       {/* Main content area */}
       <main className="ml-16 md:ml-60 pt-16 md:pt-16 pb-8">
         <div className="p-6 max-w-7xl">

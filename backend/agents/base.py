@@ -219,19 +219,75 @@ class PoolState:
 # ---------------------------------------------------------------------------
 
 @dataclass
+class CreditProfile:
+    """Manages the dynamic credit score for a participant."""
+    wallet: str
+    base_score: int = 500
+    successful_repay_volume: float = 0.0
+    liquidation_count: int = 0
+    interaction_quality_score: float = 0.0  # Boosted by defensive behaviors
+    
+    @property
+    def current_score(self) -> int:
+        """
+        Calculates dynamic credit score (300-850 range).
+        Base: 500
+        + up to 200 for repayment volume
+        + up to 100 for interaction quality (defensive plays)
+        - 100 per liquidation event
+        """
+        # Repayment factor (diminishing returns, max +200)
+        repay_bonus = min(200, (self.successful_repay_volume / 100_000) * 100)
+        
+        # Interaction factor (max +100)
+        quality_bonus = min(100, self.interaction_quality_score)
+        
+        # Penalties
+        liquidation_penalty = self.liquidation_count * 100
+        
+        raw_score = self.base_score + repay_bonus + quality_bonus - liquidation_penalty
+        return int(max(300, min(850, raw_score)))
+
+@dataclass
 class BorrowerPosition:
     wallet: str
-    collateral: float
-    debt: float
-    liquidation_threshold: float = 1.5
+    collateral: float        # in USD for simplicity
+    debt: float              # in USD
+    base_liquidation_threshold: float = 1.05  # Custom threshold (LTV)
+    base_max_ltv: float = 1.15                # Max loan-to-value allowed for initial borrow
+    credit_profile: Optional[CreditProfile] = None
+
+    def __post_init__(self):
+        if self.credit_profile is None:
+            self.credit_profile = CreditProfile(wallet=self.wallet)
+
+    @property
+    def liquidation_threshold(self) -> float:
+        """Dynamic liquidation threshold based on credit score. Higher score = lower threshold (better)."""
+        score = self.credit_profile.current_score
+        # E.g. Score 850 drops threshold by 0.05, Score 300 raises it by 0.05
+        modifier = (500 - score) / 350 * 0.05
+        return max(1.01, self.base_liquidation_threshold + modifier)
+
+    @property
+    def max_ltv(self) -> float:
+        """Dynamic maximum loan-to-value based on credit score. Higher score = higher LTV allowed."""
+        score = self.credit_profile.current_score
+        # E.g. Score 850 raises LTV by 0.05, Score 300 lowers by 0.05
+        modifier = (score - 500) / 350 * 0.05
+        return self.base_max_ltv + modifier
 
     @property
     def health_factor(self) -> float:
-        return self.collateral / self.debt if self.debt > 0 else 999.0
+        # HF = (Collateral / Liquidation Threshold) / Debt
+        # If debt = 0, HF = infinity
+        if self.debt <= 0:
+            return 999.0
+        return (self.collateral / self.liquidation_threshold) / self.debt
 
     @property
     def is_liquidatable(self) -> bool:
-        return self.health_factor < self.liquidation_threshold
+        return self.health_factor < 1.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -239,19 +295,35 @@ class BorrowerPosition:
             "collateral": round(self.collateral, 2),
             "debt": round(self.debt, 2),
             "health_factor": round(self.health_factor, 4),
-            "liquidation_threshold": self.liquidation_threshold,
+            "liquidation_threshold": round(self.liquidation_threshold, 4),
             "is_liquidatable": self.is_liquidatable,
+            "credit_score": self.credit_profile.current_score,
         }
 
 
 class LendingState:
-    """Simulated lending market shared across agents."""
+    """
+    Simulated lending market shared across agents.
+    Features:
+    - Dynamic Interest Rate Curve (Utilization Ratio)
+    - Borrow Caps (Total Liquidity limits)
+    - Dynamic liquidation close factors
+    """
 
     def __init__(self):
         self.positions: Dict[str, BorrowerPosition] = {}
         self.liquidation_count: int = 0
         self.total_collateral: float = 0.0
         self.total_debt: float = 0.0
+        self.total_supplied: float = 2_000_000.0  # Max liquidity pool (Borrow Cap limiting factor)
+        
+        # Interest Rate Math (Aave-style)
+        self.base_rate = 0.02           # 2% base APY
+        self.optimal_utilization = 0.80 # 80% optimal
+        self.slope_1 = 0.04             # 4% increase up to optimal
+        self.slope_2 = 0.75             # 75% increase post-optimal (kink)
+        self.current_borrow_apr = self.base_rate
+        
         self._seed_positions()
 
     def _seed_positions(self):
@@ -267,13 +339,47 @@ class LendingState:
             ("0xBorrower_H8", 60_000, 30_000),
         ]
         for wallet, collateral, debt in seeds:
-            pos = BorrowerPosition(wallet=wallet, collateral=collateral, debt=debt)
+            # Different risk profiles simulate different assets
+            thresh = random.choice([1.05, 1.10, 1.15, 1.20])
+            pos = BorrowerPosition(
+                wallet=wallet, 
+                collateral=collateral, 
+                debt=debt,
+                base_liquidation_threshold=thresh,
+                base_max_ltv=thresh + 0.05
+            )
+            # Give some random starting credit history to a few for variety
+            if random.random() < 0.5:
+                pos.credit_profile.successful_repay_volume = random.uniform(10_000, 50_000)
+                pos.credit_profile.interaction_quality_score = random.uniform(10, 50)
+            
             self.positions[wallet] = pos
         self._recompute()
+
+    @property
+    def utilization_ratio(self) -> float:
+        if self.total_supplied <= 0:
+            return 0.0
+        return self.total_debt / self.total_supplied
 
     def _recompute(self):
         self.total_collateral = sum(p.collateral for p in self.positions.values())
         self.total_debt = sum(p.debt for p in self.positions.values())
+        
+        # Calculate base interest rate curve
+        u = self.utilization_ratio
+        if u < self.optimal_utilization:
+            self.current_borrow_apr = self.base_rate + (u / self.optimal_utilization) * self.slope_1
+        else:
+            excess = (u - self.optimal_utilization) / (1 - self.optimal_utilization)
+            self.current_borrow_apr = self.base_rate + self.slope_1 + (excess * self.slope_2)
+            
+        # Update exposure concentration penalty in credit scores dynamically
+        if self.total_debt > 0:
+            for p in self.positions.values():
+                exposure = p.debt / self.total_debt
+                if exposure > 0.15:
+                    p.credit_profile.interaction_quality_score = max(0, p.credit_profile.interaction_quality_score - 2)
 
     def apply_price_change(self, pct: float):
         """Simulate a collateral price change across all positions."""
@@ -281,19 +387,65 @@ class LendingState:
             pos.collateral *= (1 + pct / 100)
         self._recompute()
 
+    def accrue_interest(self, tick_duration_seconds: float = 1.0):
+        """Accrue debt interest per tick."""
+        if self.total_debt <= 0:
+            return
+            
+        # APY to tick multiplier
+        # (borrow_apr / seconds_in_year) * tick_duration
+        tick_rate = (self.current_borrow_apr / 31536000) * tick_duration_seconds
+        
+        for pos in self.positions.values():
+            if pos.debt > 0:
+                # Calculate per-user dynamic APR based on credit score
+                # 850 score gets largest discount (e.g. 20% off base rate), 300 gets penalty (e.g. +20% on base rate)
+                score_modifier = 1.0 - ((pos.credit_profile.current_score - 500) / 350 * 0.20)
+                user_apr = self.current_borrow_apr * max(0.5, score_modifier)
+                user_tick_rate = (user_apr / 31536000) * tick_duration_seconds
+                pos.debt += (pos.debt * user_tick_rate)
+        self._recompute()
+
     def get_liquidatable(self) -> List[BorrowerPosition]:
         return [p for p in self.positions.values() if p.is_liquidatable]
 
     def liquidate(self, wallet: str) -> Optional[Dict[str, Any]]:
+        """
+        Partial Liquidation Strategy:
+        Only liquidate up to 50% of the debt (close factor M=0.5).
+        If Health Factor is extremely low (<0.95), allow 100% liquidation.
+        """
         pos = self.positions.get(wallet)
         if not pos or not pos.is_liquidatable:
             return None
-        seized = pos.collateral * 0.5
-        debt_covered = pos.debt * 0.5
+            
+        # Determine close factor
+        close_factor = 0.5
+        if pos.health_factor < 0.95:
+            close_factor = 1.0 # Cascade/severe undercollateralization
+            
+        debt_to_cover = pos.debt * close_factor
+        
+        # Liquidation penalty (Liquidator gets this premium)
+        penalty_pct = 0.05 # 5%
+        collateral_needed = debt_to_cover * (1 + penalty_pct)
+        
+        # If position doesn't have enough collateral, seize it all
+        if collateral_needed > pos.collateral:
+            seized = pos.collateral
+            debt_covered = pos.collateral / (1 + penalty_pct)
+        else:
+            seized = collateral_needed
+            debt_covered = debt_to_cover
+            
         pos.collateral -= seized
         pos.debt -= debt_covered
+        # Penalty for liquidation
+        pos.credit_profile.liquidation_count += 1
+        
         self.liquidation_count += 1
         self._recompute()
+        
         return {
             "wallet": wallet,
             "seized_collateral": round(seized, 2),
@@ -301,10 +453,29 @@ class LendingState:
             "remaining_hf": round(pos.health_factor, 4),
         }
 
+    def can_borrow(self, amount: float, wallet: str = None) -> bool:
+        """Check borrowing caps, including dynamic per-user limits based on credit score."""
+        if (self.total_debt + amount) > self.total_supplied:
+            return False
+            
+        if wallet and wallet in self.positions:
+            pos = self.positions[wallet]
+            score = pos.credit_profile.current_score
+            # Max borrow per user = (Score / 850) * 10% of total_supplied
+            user_cap_pct = (score / 850) * 0.10
+            user_max_borrow = self.total_supplied * user_cap_pct
+            if (pos.debt + amount) > user_max_borrow:
+                return False
+                
+        return True
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_collateral": round(self.total_collateral, 2),
             "total_debt": round(self.total_debt, 2),
+            "total_supplied": round(self.total_supplied, 2),
+            "utilization_ratio": round(self.utilization_ratio, 4),
+            "borrow_apr": round(self.current_borrow_apr, 4),
             "positions_count": len(self.positions),
             "liquidatable_count": len(self.get_liquidatable()),
             "liquidation_count": self.liquidation_count,

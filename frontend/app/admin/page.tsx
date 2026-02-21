@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAgentStore } from '@/store/agentStore';
 import { useThreatStore } from '@/store/threatStore';
-import { generateAgents, generateActivityFeed, generateThreatScores, generateThreatAlerts } from '@/lib/mockData';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 const roleBreakdown = [
   { role: 'BORROWER', count: 94, color: '#00d4ff' },
@@ -14,20 +15,20 @@ const roleBreakdown = [
 ];
 
 const contracts = [
-  { name: 'LendingPool',     status: 'active', address: '0x1a2b...3c4d' },
+  { name: 'LendingPool', status: 'active', address: '0x1a2b...3c4d' },
   { name: 'CollateralVault', status: 'active', address: '0x2b3c...4d5e' },
-  { name: 'CreditRegistry',  status: 'active', address: '0x3c4d...5e6f' },
-  { name: 'IdentityRegistry',status: 'active', address: '0x4d5e...6f7a' },
-  { name: 'LiquidityPool',   status: 'active', address: '0x5e6f...7a8b' },
-  { name: 'AccessControl',   status: 'paused', address: '0x6f7a...8b9c' },
+  { name: 'CreditRegistry', status: 'active', address: '0x3c4d...5e6f' },
+  { name: 'IdentityRegistry', status: 'active', address: '0x4d5e...6f7a' },
+  { name: 'LiquidityPool', status: 'active', address: '0x5e6f...7a8b' },
+  { name: 'AccessControl', status: 'paused', address: '0x6f7a...8b9c' },
 ];
 
 const recentRegistrations = [
   { wallet: '0xabc1...ef23', role: 'BORROWER', status: 'verified', time: '2m ago' },
-  { wallet: '0xdef4...gh56', role: 'LENDER',   status: 'pending',  time: '14m ago' },
+  { wallet: '0xdef4...gh56', role: 'LENDER', status: 'pending', time: '14m ago' },
   { wallet: '0x789a...bc01', role: 'BORROWER', status: 'verified', time: '1h ago' },
-  { wallet: '0x456d...ef78', role: 'AUDITOR',  status: 'verified', time: '3h ago' },
-  { wallet: '0x123g...hi90', role: 'BORROWER', status: 'flagged',  time: '6h ago' },
+  { wallet: '0x456d...ef78', role: 'AUDITOR', status: 'verified', time: '3h ago' },
+  { wallet: '0x123g...hi90', role: 'BORROWER', status: 'flagged', time: '6h ago' },
 ];
 
 const statusColor: Record<string, string> = { verified: '#22c55e', pending: '#f0a500', flagged: '#ff3860' };
@@ -65,30 +66,58 @@ export default function AdminPage() {
   const { agents, setAgents, setActivityFeed } = useAgentStore();
   const { threatScores, activeAlerts, setThreatScores, addAlert } = useThreatStore();
 
+  const fetchAdminData = useCallback(async () => {
+    try {
+      const [agentsRes, feedRes, scoresRes, alertsRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/agents`),
+        fetch(`${API_URL}/api/sim/activity-feed?limit=50`),
+        fetch(`${API_URL}/api/threats/scores`),
+        fetch(`${API_URL}/api/threats/alerts`),
+      ]);
+
+      if (agentsRes.status === 'fulfilled' && agentsRes.value.ok) {
+        const json = await agentsRes.value.json();
+        setAgents(json.data ?? json ?? []);
+      }
+      if (feedRes.status === 'fulfilled' && feedRes.value.ok) {
+        const json = await feedRes.value.json();
+        setActivityFeed(json.data ?? json ?? []);
+      }
+      if (scoresRes.status === 'fulfilled' && scoresRes.value.ok) {
+        const json = await scoresRes.value.json();
+        setThreatScores(json.data ?? json ?? []);
+      }
+      if (alertsRes.status === 'fulfilled' && alertsRes.value.ok) {
+        const json = await alertsRes.value.json();
+        const data = json.data ?? json ?? [];
+        data.forEach((a: any) => {
+          if (!activeAlerts.some(existing => existing.id === a.id)) {
+            addAlert(a);
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }, [setAgents, setActivityFeed, setThreatScores, addAlert, activeAlerts]);
+
   useEffect(() => {
-    if (agents.length === 0) {
-      setAgents(generateAgents() as any);
-      setActivityFeed(generateActivityFeed() as any);
-    }
-    if (threatScores.length === 0) {
-      setThreatScores(generateThreatScores());
-    }
-    if (activeAlerts.length === 0) {
-      generateThreatAlerts().forEach((a) => addAlert(a));
-    }
-  }, []);
+    fetchAdminData();
+    const interval = setInterval(fetchAdminData, 5000);
+    return () => clearInterval(interval);
+  }, [fetchAdminData]);
 
   const activeAgents = agents.filter((a) => a.active);
   const totalPnl = agents.reduce((s, a) => s + (a.pnl ?? 0), 0);
   const unresolvedAlerts = activeAlerts.filter((a) => !a.resolved);
   const criticalAlerts = unresolvedAlerts.filter((a) => a.severity === 'critical' || a.severity === 'high');
-  const displayScores = threatScores.length > 0 ? threatScores : generateThreatScores();
+  const displayScores = threatScores;
 
   const kpis = [
-    { label: 'Total Participants', value: '128',               sub: '+4 this week',                              color: '#ff3860' },
-    { label: 'Active Contracts',   value: '6',                 sub: 'All systems live',                          color: '#00d4ff' },
-    { label: 'Active Agents',      value: String(activeAgents.length || agents.length), sub: `${agents.length} total`, color: '#b367ff' },
-    { label: 'Total Value Locked', value: '$2.4M',             sub: '↑ 12% 7d',                                 color: '#22c55e' },
+    { label: 'Total Participants', value: '128', sub: '+4 this week', color: '#ff3860' },
+    { label: 'Active Contracts', value: '6', sub: 'All systems live', color: '#00d4ff' },
+    { label: 'Active Agents', value: String(activeAgents.length || agents.length), sub: `${agents.length} total`, color: '#b367ff' },
+    { label: 'Total Value Locked', value: '$2.4M', sub: '↑ 12% 7d', color: '#22c55e' },
   ];
 
   return (
@@ -124,9 +153,9 @@ export default function AdminPage() {
           {/* summary stats */}
           <div className="grid grid-cols-3 gap-3 mb-4">
             {[
-              { label: 'Total',  value: String(agents.length),       color: '#b367ff' },
+              { label: 'Total', value: String(agents.length), color: '#b367ff' },
               { label: 'Active', value: String(activeAgents.length), color: '#22c55e' },
-              { label: 'Net PnL',value: (totalPnl >= 0 ? '+' : '') + fmt(totalPnl), color: totalPnl >= 0 ? '#22c55e' : '#ff3860' },
+              { label: 'Net PnL', value: (totalPnl >= 0 ? '+' : '') + fmt(totalPnl), color: totalPnl >= 0 ? '#22c55e' : '#ff3860' },
             ].map((s) => (
               <div key={s.label} className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-2 text-center">
                 <div className="text-xs font-mono text-text-tertiary mb-0.5">{s.label}</div>
@@ -137,10 +166,10 @@ export default function AdminPage() {
 
           {/* agent rows */}
           <div className="space-y-2">
-            {(agents.length > 0 ? agents : generateAgents()).slice(0, 5).map((a: any) => {
+            {agents.slice(0, 5).map((a: any) => {
               const color = typeColor[a.type] ?? '#64748b';
-              const icon  = typeIcon[a.type]  ?? '◌';
-              const pnl   = a.pnl ?? 0;
+              const icon = typeIcon[a.type] ?? '◌';
+              const pnl = a.pnl ?? 0;
               return (
                 <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-[color:var(--color-border)] last:border-0">
                   <div className="flex items-center gap-2">
@@ -180,8 +209,8 @@ export default function AdminPage() {
           {/* alert summary badges */}
           <div className="grid grid-cols-3 gap-3 mb-4">
             {[
-              { label: 'Active',   value: String(unresolvedAlerts.length),  color: unresolvedAlerts.length > 0 ? '#ff3860' : '#22c55e' },
-              { label: 'Critical', value: String(criticalAlerts.length),    color: criticalAlerts.length > 0 ? '#ff0033' : '#22c55e' },
+              { label: 'Active', value: String(unresolvedAlerts.length), color: unresolvedAlerts.length > 0 ? '#ff3860' : '#22c55e' },
+              { label: 'Critical', value: String(criticalAlerts.length), color: criticalAlerts.length > 0 ? '#ff0033' : '#22c55e' },
               { label: 'Resolved', value: String(activeAlerts.filter(a => a.resolved).length), color: '#22c55e' },
             ].map((s) => (
               <div key={s.label} className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-2 text-center">

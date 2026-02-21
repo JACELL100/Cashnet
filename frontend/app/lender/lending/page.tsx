@@ -14,6 +14,8 @@ export default function LendingPage() {
   const totalDeposits = useLendingStore((state) => state.totalDeposits);
   const totalBorrows = useLendingStore((state) => state.totalBorrows);
   const utilizationRate = useLendingStore((state) => state.utilizationRate);
+  const borrowApr = useLendingStore((state) => state.borrowApr);
+  const totalSupplied = useLendingStore((state) => state.totalSupplied);
   const cascadeEvents = useLendingStore((state) => state.cascadeEvents);
   const addCascadeEvent = useLendingStore((state) => state.addCascadeEvent);
   const updateBorrower = useLendingStore((state) => state.updateBorrower);
@@ -42,6 +44,7 @@ export default function LendingPage() {
           collateral: b.collateral_value ?? 0,
           borrowed: b.debt_value ?? 0,
           healthFactor: b.health_factor ?? 999,
+          creditScore: b.credit_score ?? 500,
           liquidationPrice: b.collateral_value && b.debt_value
             ? Math.round(b.debt_value * 1.5 / (b.collateral_value / 2000))
             : 0,
@@ -61,6 +64,8 @@ export default function LendingPage() {
           totalDeposits: m.total_collateral ?? 0,
           totalBorrows: m.total_debt ?? 0,
           utilizationRate: (m.utilization_rate ?? 0) / 100, // API returns %, store uses 0-1
+          borrowApr: m.borrow_apr ?? 0,
+          totalSupplied: m.total_supplied ?? 0,
         });
       }
     } catch { /* retry on next tick */ }
@@ -143,16 +148,16 @@ export default function LendingPage() {
               <input type="range" min="0.5" max="1" step="0.05" className="w-full" defaultValue="0.8" />
             </div>
             <div className="space-y-2">
-              <label className="form-label text-xs">Interest Model</label>
-              <select className="form-input text-xs">
-                <option>Jump Rate</option>
-                <option>Linear</option>
-                <option>Sigmoid</option>
-              </select>
+              <label className="form-label text-xs text-accent">Current Borrow APR</label>
+              <div className="form-input text-xs font-mono font-bold">
+                {(borrowApr * 100).toFixed(2)}%
+              </div>
             </div>
             <div className="space-y-2">
-              <label className="form-label text-xs">Borrowing Cap</label>
-              <input type="number" className="form-input text-xs" defaultValue="10000000" />
+              <label className="form-label text-xs">Borrowing Cap (Max Liquidity)</label>
+              <div className="form-input text-xs font-mono">
+                ${totalSupplied.toLocaleString()}
+              </div>
             </div>
           </div>
         </div>
@@ -228,17 +233,20 @@ export default function LendingPage() {
               <div
                 key={b.id}
                 className={`p-3 rounded text-center border ${b.status === 'healthy'
-                    ? 'bg-[rgba(0,212,99,0.1)] border-success'
-                    : b.status === 'warning'
-                      ? 'bg-[rgba(255,182,68,0.1)] border-warn'
-                      : 'bg-[rgba(255,56,96,0.1)] border-danger'
+                  ? 'bg-[rgba(0,212,99,0.1)] border-success'
+                  : b.status === 'warning'
+                    ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                    : 'bg-[rgba(255,56,96,0.1)] border-danger'
                   }`}
               >
                 <div className="text-xs font-mono font-bold text-text-primary mb-1">
                   {b.wallet.slice(0, 8)}...
                 </div>
-                <div className="text-lg font-bold font-mono mb-2">
+                <div className="text-2xl font-bold font-mono text-text-primary leading-none mt-2 mb-1">
                   {b.healthFactor.toFixed(2)}
+                </div>
+                <div className="text-[10px] uppercase font-mono text-text-secondary mb-2 whitespace-nowrap overflow-hidden">
+                  Credit Score: <span className="text-text-primary">{b.creditScore}</span>
                 </div>
                 <Badge
                   variant={
@@ -275,6 +283,21 @@ export default function LendingPage() {
                 </span>
               ),
               className: 'font-mono text-xs font-bold',
+            },
+            {
+              header: 'Credit Score',
+              accessor: (row: any) => (
+                <span className={
+                  row.creditScore > 700
+                    ? 'text-success'
+                    : row.creditScore > 500
+                      ? 'text-warn'
+                      : 'text-danger'
+                }>
+                  {row.creditScore || '—'}
+                </span>
+              ),
+              className: 'font-mono text-xs font-bold text-center',
             },
             {
               header: 'Liquidation Price',
