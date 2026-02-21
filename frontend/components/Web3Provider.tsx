@@ -3,7 +3,7 @@
 import '@rainbow-me/rainbowkit/styles.css';
 import { RainbowKitProvider, darkTheme, connectorsForWallets } from '@rainbow-me/rainbowkit';
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { mainnet, sepolia, polygon, optimism, arbitrum } from 'wagmi/chains';
+import { sepolia } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ReactNode, useState, useEffect } from 'react';
 import {
@@ -37,16 +37,13 @@ const connectors = connectorsForWallets(
 // Configure wagmi (wagmi 2.x compatible)
 // ssr: true defers hydration state-updates to useEffect, preventing
 // "Cannot update a component while rendering a different component"
+// Configure wagmi — Sepolia only (all gas fees in Sepolia ETH)
 const config = createConfig({
   ssr: true,
   connectors,
-  chains: [mainnet, sepolia, polygon, optimism, arbitrum],
+  chains: [sepolia],
   transports: {
-    [mainnet.id]: http(),
     [sepolia.id]: http(),
-    [polygon.id]: http(),
-    [optimism.id]: http(),
-    [arbitrum.id]: http(),
   },
 });
 

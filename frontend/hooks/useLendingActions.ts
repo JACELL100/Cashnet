@@ -2,6 +2,7 @@
 
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
 import { parseEther, parseUnits } from 'viem';
+import { sepolia } from 'wagmi/chains';
 import { LENDING_POOL_ADDRESS, LENDING_POOL_ABI, PALLADIUM_ADDRESS, ERC20_ABI } from '@/lib/contracts';
 
 /**
@@ -29,6 +30,7 @@ export function useLendingActions() {
     const depositCollateral = (ethAmount: string) => {
         if (!isConnected) return alert('Connect your wallet first');
         writeContract({
+            chainId: sepolia.id,
             address: LENDING_POOL_ADDRESS,
             abi: LENDING_POOL_ABI,
             functionName: 'depositCollateral',
@@ -40,6 +42,7 @@ export function useLendingActions() {
     const borrow = (tokenAmount: string) => {
         if (!isConnected) return alert('Connect your wallet first');
         writeContract({
+            chainId: sepolia.id,
             address: LENDING_POOL_ADDRESS,
             abi: LENDING_POOL_ABI,
             functionName: 'borrow',
@@ -51,6 +54,7 @@ export function useLendingActions() {
     const approveRepay = (tokenAmount: string) => {
         if (!isConnected) return alert('Connect your wallet first');
         writeContract({
+            chainId: sepolia.id,
             address: PALLADIUM_ADDRESS,
             abi: ERC20_ABI,
             functionName: 'approve',
@@ -61,6 +65,7 @@ export function useLendingActions() {
     const repay = (tokenAmount: string) => {
         if (!isConnected) return alert('Connect your wallet first');
         writeContract({
+            chainId: sepolia.id,
             address: LENDING_POOL_ADDRESS,
             abi: LENDING_POOL_ABI,
             functionName: 'repay',
@@ -72,6 +77,7 @@ export function useLendingActions() {
     const liquidate = (userAddress: string) => {
         if (!isConnected) return alert('Connect your wallet first');
         writeContract({
+            chainId: sepolia.id,
             address: LENDING_POOL_ADDRESS,
             abi: LENDING_POOL_ABI,
             functionName: 'liquidate',

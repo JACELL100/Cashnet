@@ -117,7 +117,7 @@ class BlockchainService:
         # Build transaction
         transaction = function(*args).build_transaction({
             'from': self.account.address,
-            'nonce': self.w3.eth.get_transaction_count(self.account.address),
+            'nonce': self.w3.eth.get_transaction_count(self.account.address, "pending"),
             'gas': 2000000,
             'gasPrice': self.w3.eth.gas_price,
             'value': value
@@ -130,7 +130,7 @@ class BlockchainService:
         )
         
         # Send transaction
-        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         
         # Wait for receipt
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)

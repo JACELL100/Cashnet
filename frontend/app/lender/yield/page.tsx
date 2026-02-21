@@ -612,7 +612,7 @@ export default function YieldAnalyticsPage() {
                     </div>
                     {isImbalanced && (
                       <div className="text-xs font-mono text-[#f0a500] border border-[rgba(240,165,0,0.3)] rounded px-2.5 py-1.5 bg-[rgba(240,165,0,0.06)]">
-                        ⚠ Pool is imbalanced (&gt;15% drift from 50/50)
+                        ⚠ Pool is imbalanced (>15% drift from 50/50)
                       </div>
                     )}
                     <div className="space-y-1.5 pt-1">
