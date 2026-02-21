@@ -10,10 +10,13 @@ Detection Rules:
   - Wash trading (circular trades by same entity)
   - Rapid-fire trading (too many txns in short window)
   - Cascade liquidation warnings
+  - Oracle manipulation (extreme price divergence)
+  - Liquidity poisoning (rapid add/remove at skewed ratios)
+  - Coordinated pump-dump (multi-wallet buy burst + large sell)
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict
@@ -35,6 +38,9 @@ class AlertType(str, Enum):
     CASCADE_LIQUIDATION = "cascade_liquidation"
     PRICE_MANIPULATION = "price_manipulation"
     UNUSUAL_SLIPPAGE = "unusual_slippage"
+    ORACLE_MANIPULATION = "oracle_manipulation"
+    LIQUIDITY_POISONING = "liquidity_poisoning"
+    PUMP_DUMP = "pump_dump"
 
 
 @dataclass
@@ -77,11 +83,32 @@ class FraudMonitor:
         self._agent_trade_times: Dict[str, List[float]] = defaultdict(list)
         self._agent_trade_counts: Dict[str, int] = defaultdict(int)
 
-        # Configurable thresholds
-        self.whale_threshold_pct: float = 5.0        # single trade > 5% pool
-        self.rapid_fire_window: float = 10.0          # seconds
+        # ── Wash-trading state ───────────────────────────────────────
+        self._trade_pairs: Dict[Tuple[str, str], List[float]] = defaultdict(list)
+        self._wash_window: float = 60.0          # seconds
+        self._wash_min_trades: int = 3            # min round-trips to flag
+
+        # ── Oracle manipulation state ────────────────────────────────
+        self._price_history: List[Tuple[float, float]] = []   # (ts, price)
+        self._oracle_spike_pct: float = 15.0      # single-update spike threshold
+        self._oracle_twap_diverge_pct: float = 10.0  # divergence from 20-pt TWAP
+
+        # ── Liquidity poisoning state ────────────────────────────────
+        self._liquidity_events: Dict[str, List[Dict]] = defaultdict(list)
+        self._poison_window: float = 30.0          # seconds
+        self._poison_remove_pct: float = 80.0      # % removed to flag
+
+        # ── Pump-dump state ──────────────────────────────────────────
+        self._recent_buys: List[Dict[str, Any]] = []
+        self._pump_buy_window: float = 10.0        # seconds for coordinated buys
+        self._pump_min_wallets: int = 3            # min distinct buyers
+        self._pump_sell_window: float = 30.0       # seconds for the dump
+
+        # Existing thresholds
+        self.whale_threshold_pct: float = 5.0      # single trade > 5% pool
+        self.rapid_fire_window: float = 10.0       # seconds
         self.rapid_fire_max_trades: int = 10
-        self.slippage_alert_pct: float = 3.0          # slippage > 3%
+        self.slippage_alert_pct: float = 3.0       # slippage > 3%
 
     def process_event(self, event: Dict[str, Any]):
         """Process an incoming agent event and check all detection rules."""
@@ -163,7 +190,6 @@ class FraudMonitor:
 
         # --- Rule: Cascade Liquidations ---
         if event_type == "liquidation_executed":
-            # Check if multiple liquidations happening rapidly
             recent_liq_alerts = [
                 a for a in self.alerts
                 if a.alert_type == AlertType.CASCADE_LIQUIDATION.value
@@ -189,12 +215,233 @@ class FraudMonitor:
                     data,
                 )
 
+        # --- Rule: Wash Trading ---
+        if event_type in ("swap", "trade", "wash_trade"):
+            self._check_wash_trading(agent_id, agent_type, data, ts)
+
+        # --- Rule: Oracle Manipulation ---
+        if event_type in ("price_update", "oracle_update", "oracle_manipulation"):
+            self._check_oracle_manipulation(agent_id, agent_type, data, ts)
+
+        # --- Rule: Liquidity Poisoning ---
+        if event_type in ("add_liquidity", "remove_liquidity", "liquidity_poison"):
+            self._check_liquidity_poisoning(agent_id, agent_type, event_type, data, ts)
+
+        # --- Rule: Pump & Dump ---
+        if event_type in ("buy", "sell", "swap", "trade", "pump_buy", "pump_sell"):
+            self._check_pump_dump(agent_id, agent_type, event_type, data, ts)
+
         # --- Rule: Rapid-fire Trading ---
         self._check_rapid_fire(agent_id, agent_type, event.get("agent_name", agent_id), ts)
 
+    # =====================================================================
+    # WASH TRADING DETECTOR
+    # =====================================================================
+    def _check_wash_trading(self, agent_id: str, agent_type: str, data: Dict, ts: float):
+        """Detect circular trades: same wallet pair trading back-and-forth."""
+        counterparty = data.get("counterparty", data.get("receiver", ""))
+        if not counterparty or counterparty == agent_id:
+            return
+
+        pair = tuple(sorted([agent_id, counterparty]))
+        self._trade_pairs[pair].append(ts)
+
+        # Prune old entries
+        cutoff = ts - self._wash_window
+        self._trade_pairs[pair] = [t for t in self._trade_pairs[pair] if t > cutoff]
+
+        count = len(self._trade_pairs[pair])
+        if count >= self._wash_min_trades:
+            volume = data.get("amount", 0) * count
+            self._create_alert(
+                AlertType.WASH_TRADING,
+                AlertSeverity.HIGH if count >= 5 else AlertSeverity.MEDIUM,
+                agent_id,
+                agent_type,
+                f"Wash trading detected: {count} round-trip trades between "
+                f"{agent_id[:10]}… and {counterparty[:10]}… in {self._wash_window}s "
+                f"(~${volume:,.0f} inflated volume)",
+                {
+                    "trade_count": count,
+                    "pair": list(pair),
+                    "window_seconds": self._wash_window,
+                    "estimated_inflated_volume": round(volume, 2),
+                },
+            )
+
+    # =====================================================================
+    # ORACLE MANIPULATION DETECTOR
+    # =====================================================================
+    def _check_oracle_manipulation(self, agent_id: str, agent_type: str, data: Dict, ts: float):
+        """Detect abnormal price feed updates — spikes or TWAP divergence."""
+        price = data.get("price", data.get("new_price", 0))
+        if price <= 0:
+            return
+
+        self._price_history.append((ts, price))
+
+        # Keep rolling window of last 50 updates
+        if len(self._price_history) > 50:
+            self._price_history = self._price_history[-50:]
+
+        if len(self._price_history) < 2:
+            return
+
+        prev_price = self._price_history[-2][1]
+        change_pct = abs(price - prev_price) / prev_price * 100
+
+        # Check single-update spike
+        if change_pct > self._oracle_spike_pct:
+            self._create_alert(
+                AlertType.ORACLE_MANIPULATION,
+                AlertSeverity.CRITICAL,
+                agent_id,
+                agent_type,
+                f"Oracle price spike: {change_pct:.1f}% change in single update "
+                f"(${prev_price:,.2f} → ${price:,.2f}). "
+                f"Possible Mango Markets-style oracle manipulation.",
+                {
+                    "price_before": round(prev_price, 4),
+                    "price_after": round(price, 4),
+                    "change_pct": round(change_pct, 2),
+                    "detection_method": "single_update_spike",
+                },
+            )
+
+        # Check TWAP divergence (use last 20 points)
+        if len(self._price_history) >= 5:
+            recent = self._price_history[-20:]
+            twap = sum(p for _, p in recent) / len(recent)
+            divergence_pct = abs(price - twap) / twap * 100
+
+            if divergence_pct > self._oracle_twap_diverge_pct:
+                self._create_alert(
+                    AlertType.ORACLE_MANIPULATION,
+                    AlertSeverity.HIGH,
+                    agent_id,
+                    agent_type,
+                    f"Oracle TWAP divergence: current ${price:,.2f} is "
+                    f"{divergence_pct:.1f}% away from TWAP ${twap:,.2f}. "
+                    f"Potential price feed manipulation.",
+                    {
+                        "current_price": round(price, 4),
+                        "twap": round(twap, 4),
+                        "divergence_pct": round(divergence_pct, 2),
+                        "twap_window": len(recent),
+                        "detection_method": "twap_divergence",
+                    },
+                )
+
+    # =====================================================================
+    # LIQUIDITY POISONING DETECTOR
+    # =====================================================================
+    def _check_liquidity_poisoning(
+        self, agent_id: str, agent_type: str, event_type: str, data: Dict, ts: float
+    ):
+        """Detect rapid add+remove liquidity patterns at skewed ratios."""
+        self._liquidity_events[agent_id].append({
+            "type": event_type,
+            "ts": ts,
+            "amount": data.get("amount", data.get("shares", 0)),
+            "amount_a": data.get("amount_a", 0),
+            "amount_b": data.get("amount_b", 0),
+        })
+
+        # Prune old
+        cutoff = ts - self._poison_window
+        self._liquidity_events[agent_id] = [
+            e for e in self._liquidity_events[agent_id] if e["ts"] > cutoff
+        ]
+
+        events = self._liquidity_events[agent_id]
+        adds = [e for e in events if "add" in e["type"]]
+        removes = [e for e in events if "remove" in e["type"]]
+
+        if adds and removes:
+            total_added = sum(e["amount"] for e in adds)
+            total_removed = sum(e["amount"] for e in removes)
+
+            if total_added > 0:
+                remove_ratio = (total_removed / total_added) * 100
+                if remove_ratio >= self._poison_remove_pct:
+                    time_delta = removes[-1]["ts"] - adds[0]["ts"]
+                    self._create_alert(
+                        AlertType.LIQUIDITY_POISONING,
+                        AlertSeverity.HIGH,
+                        agent_id,
+                        agent_type,
+                        f"Liquidity poisoning: {agent_id[:10]}… added then removed "
+                        f"{remove_ratio:.0f}% of liquidity within {time_delta:.1f}s. "
+                        f"Likely price/ratio manipulation attempt.",
+                        {
+                            "total_added": round(total_added, 2),
+                            "total_removed": round(total_removed, 2),
+                            "remove_ratio_pct": round(remove_ratio, 1),
+                            "time_delta_seconds": round(time_delta, 1),
+                            "add_events": len(adds),
+                            "remove_events": len(removes),
+                        },
+                    )
+
+    # =====================================================================
+    # PUMP & DUMP DETECTOR
+    # =====================================================================
+    def _check_pump_dump(
+        self, agent_id: str, agent_type: str, event_type: str, data: Dict, ts: float
+    ):
+        """Detect coordinated buy burst followed by a single large sell."""
+        is_buy = event_type in ("buy", "pump_buy") or data.get("side") == "buy"
+        is_sell = event_type in ("sell", "pump_sell") or data.get("side") == "sell"
+        amount = data.get("amount", 0)
+
+        if is_buy:
+            self._recent_buys.append({
+                "wallet": agent_id,
+                "ts": ts,
+                "amount": amount,
+            })
+            # Prune old buys
+            cutoff = ts - self._pump_sell_window
+            self._recent_buys = [b for b in self._recent_buys if b["ts"] > cutoff]
+
+        if is_sell and amount > 0:
+            # Check if there was a coordinated buy burst before this sell
+            buy_cutoff = ts - self._pump_sell_window
+            recent = [b for b in self._recent_buys if b["ts"] > buy_cutoff]
+            distinct_wallets = set(b["wallet"] for b in recent)
+
+            # Remove seller from buyer set (the dumper may have also bought)
+            if agent_id in distinct_wallets:
+                distinct_wallets.discard(agent_id)
+
+            if len(distinct_wallets) >= self._pump_min_wallets:
+                total_buy_volume = sum(b["amount"] for b in recent)
+                self._create_alert(
+                    AlertType.PUMP_DUMP,
+                    AlertSeverity.CRITICAL,
+                    agent_id,
+                    agent_type,
+                    f"Coordinated pump & dump detected! "
+                    f"{len(distinct_wallets)} wallets bought ${total_buy_volume:,.0f} "
+                    f"then {agent_id[:10]}… dumped ${amount:,.0f}. "
+                    f"Classic pump-dump pattern.",
+                    {
+                        "dump_wallet": agent_id,
+                        "dump_amount": round(amount, 2),
+                        "pump_wallets": list(distinct_wallets),
+                        "pump_wallet_count": len(distinct_wallets),
+                        "total_buy_volume": round(total_buy_volume, 2),
+                        "window_seconds": self._pump_sell_window,
+                    },
+                )
+                # Clear to avoid duplicate alerts
+                self._recent_buys.clear()
+
+    # =====================================================================
+    # RAPID-FIRE TRADING DETECTOR (existing)
+    # =====================================================================
     def _check_rapid_fire(self, agent_id: str, agent_type: str, agent_name: str, ts: float):
         times = self._agent_trade_times[agent_id]
-        # Keep only recent window
         cutoff = ts - self.rapid_fire_window
         recent = [t for t in times if t > cutoff]
         self._agent_trade_times[agent_id] = recent
@@ -210,6 +457,9 @@ class FraudMonitor:
                 {"trade_count": len(recent), "window_seconds": self.rapid_fire_window},
             )
 
+    # =====================================================================
+    # ALERT CREATION
+    # =====================================================================
     def _create_alert(
         self,
         alert_type: AlertType,
@@ -231,7 +481,7 @@ class FraudMonitor:
         )
         self.alerts.append(alert)
 
-    # --- Public query API ---------------------------------------------------
+    # --- Public query API -------------------------------------------------
 
     def get_alerts(
         self,
@@ -269,10 +519,11 @@ class FraudMonitor:
         axes = [
             ("MEV", [AlertType.SANDWICH_ATTACK.value]),
             ("Flash Loan", [AlertType.FLASH_LOAN_EXPLOIT.value]),
-            ("Liquidity", [AlertType.WHALE_MANIPULATION.value, AlertType.UNUSUAL_SLIPPAGE.value]),
+            ("Wash Trade", [AlertType.WASH_TRADING.value]),
+            ("Oracle", [AlertType.ORACLE_MANIPULATION.value]),
+            ("Liquidity", [AlertType.WHALE_MANIPULATION.value, AlertType.UNUSUAL_SLIPPAGE.value, AlertType.LIQUIDITY_POISONING.value]),
+            ("Pump-Dump", [AlertType.PUMP_DUMP.value]),
             ("Cascade", [AlertType.CASCADE_LIQUIDATION.value]),
-            ("Price", [AlertType.PRICE_MANIPULATION.value]),
-            ("Systemic", [AlertType.RAPID_FIRE.value, AlertType.WASH_TRADING.value]),
         ]
 
         scores = []
@@ -297,3 +548,7 @@ class FraudMonitor:
         self._alert_counter = 0
         self._agent_trade_times.clear()
         self._agent_trade_counts.clear()
+        self._trade_pairs.clear()
+        self._price_history.clear()
+        self._liquidity_events.clear()
+        self._recent_buys.clear()

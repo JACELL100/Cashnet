@@ -82,6 +82,30 @@ const scenarios: StressScenario[] = [
     difficulty: 'critical',
   },
   {
+    id: 'wash_trading',
+    name: 'Wash Trading',
+    description: 'Circular trades between wallets to inflate volume metrics',
+    icon: '🔄',
+    category: 'attack',
+    difficulty: 'high',
+  },
+  {
+    id: 'liquidity_poisoning',
+    name: 'Liquidity Poisoning',
+    description: 'Rapid add/remove liquidity at skewed ratios to distort pricing',
+    icon: '☠️',
+    category: 'attack',
+    difficulty: 'high',
+  },
+  {
+    id: 'pump_dump',
+    name: 'Coordinated Pump & Dump',
+    description: 'Multiple wallets inflate token price then one wallet dumps',
+    icon: '📈',
+    category: 'attack',
+    difficulty: 'critical',
+  },
+  {
     id: 'luna_death_spiral',
     name: 'Death Spiral',
     description: 'Algorithmic stablecoin de-peg cascade (Terra/Luna)',
@@ -184,11 +208,10 @@ export default function StressTestingPage() {
           <button
             key={cat.id}
             onClick={() => setSelectedCategory(cat.id)}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              selectedCategory === cat.id
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${selectedCategory === cat.id
                 ? 'bg-[color:var(--color-accent)] text-black'
                 : 'bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] hover:border-[color:var(--color-accent)]'
-            }`}
+              }`}
           >
             {cat.label}
           </button>
@@ -228,11 +251,10 @@ export default function StressTestingPage() {
               <button
                 onClick={() => runStressTest(scenario)}
                 disabled={isRunning}
-                className={`w-full py-2 rounded-lg font-medium transition-colors ${
-                  isRunning
+                className={`w-full py-2 rounded-lg font-medium transition-colors ${isRunning
                     ? 'bg-gray-500 cursor-not-allowed'
                     : 'bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] text-black'
-                }`}
+                  }`}
               >
                 {isRunning ? 'Running...' : 'Run Test'}
               </button>
@@ -305,15 +327,46 @@ export default function StressTestingPage() {
                         {result.status && (
                           <div>
                             Status:{' '}
-                            <span className="text-green-500">{result.status}</span>
+                            <span className={result.status === 'detected' ? 'text-green-500' : 'text-red-500'}>
+                              {result.status === 'detected' ? '✓ DETECTED' : '✗ UNDETECTED'}
+                            </span>
                           </div>
                         )}
-                        {result.events && (
+                        {result.events_generated && (
                           <div>
-                            Events Triggered:{' '}
-                            <span className="text-blue-500">
-                              {result.events.length}
-                            </span>
+                            Events Generated:{' '}
+                            <span className="text-blue-500">{result.events_generated}</span>
+                          </div>
+                        )}
+                        {result.alerts_triggered && (
+                          <div>
+                            Alerts Triggered:{' '}
+                            <span className="text-orange-500">{result.alerts_triggered.length}</span>
+                          </div>
+                        )}
+                        {result.impact && (
+                          <div className="mt-2 pt-2 border-t border-[color:var(--color-border)]">
+                            <div className="text-[10px] uppercase tracking-wider text-[color:var(--color-accent)] mb-1">Impact</div>
+                            {Object.entries(result.impact).map(([k, v]) => (
+                              <div key={k} className="flex justify-between">
+                                <span className="text-[color:var(--color-text-secondary)]">{k.replace(/_/g, ' ')}</span>
+                                <span className="text-white font-mono">{typeof v === 'number' ? v.toLocaleString() : String(v)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {result.timeline && result.timeline.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-[color:var(--color-border)]">
+                            <div className="text-[10px] uppercase tracking-wider text-[color:var(--color-accent)] mb-1">Timeline</div>
+                            {result.timeline.slice(0, 6).map((step: any, i: number) => (
+                              <div key={i} className="flex gap-2">
+                                <span className="text-[color:var(--color-text-secondary)] w-10 text-right">{step.t}s</span>
+                                <span>{step.action}</span>
+                              </div>
+                            ))}
+                            {result.timeline.length > 6 && (
+                              <div className="text-[color:var(--color-text-secondary)]">+{result.timeline.length - 6} more…</div>
+                            )}
                           </div>
                         )}
                       </>

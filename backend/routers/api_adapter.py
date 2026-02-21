@@ -370,26 +370,60 @@ async def resolve_alert(alert_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/threats/simulate")
-async def simulate_attack(attack_type: str, params: Dict[str, Any], db: Session = Depends(get_db)):
-    """Simulate an attack"""
+async def simulate_attack(body: Dict[str, Any], db: Session = Depends(get_db)):
+    """Run a full attack simulation and return detected alerts + impact."""
+    attack_type = body.get("attack_type") or body.get("scenario_type") or body.get("type", "")
+    params = body.get("params", {})
     from models import Alert
-    
-    # Create a simulated alert
-    alert = Alert(
-        type=attack_type,
-        severity="HIGH",
-        wallet=params.get("target_wallet", "0xSimulated"),
-        description=f"Simulated {attack_type} attack"
+    from agents.anomaly_simulators import (
+        simulate_wash_trading,
+        simulate_oracle_manipulation,
+        simulate_flash_loan_attack,
+        simulate_liquidity_poisoning,
+        simulate_pump_dump,
     )
-    db.add(alert)
+
+    simulators = {
+        "wash_trading": simulate_wash_trading,
+        "oracle_manipulation": simulate_oracle_manipulation,
+        "flash_loan_exploit": simulate_flash_loan_attack,
+        "liquidity_poisoning": simulate_liquidity_poisoning,
+        "pump_dump": simulate_pump_dump,
+        # Aliases used by the stress test page
+        "sandwich_mega": simulate_flash_loan_attack,
+        "luna_death_spiral": simulate_oracle_manipulation,
+    }
+
+    simulator_fn = simulators.get(attack_type)
+    if not simulator_fn:
+        return {
+            "success": True,
+            "data": {
+                "attack_type": attack_type,
+                "status": "unknown_type",
+                "message": f"No simulator for '{attack_type}'. Available: {list(simulators.keys())}",
+            }
+        }
+
+    result = simulator_fn(_fraud_monitor, params)
+
+    # Persist triggered alerts to DB
+    for alert_data in result.get("alerts_triggered", []):
+        try:
+            db_alert = Alert(
+                type=alert_data.get("type", attack_type),
+                severity=alert_data.get("severity", "HIGH"),
+                wallet=alert_data.get("agent_id", "0xSimulated"),
+                description=alert_data.get("description", f"Simulated {attack_type}"),
+            )
+            db.add(db_alert)
+        except Exception:
+            pass
     db.commit()
-    
+
     return {
         "success": True,
-        "data": {
-            "message": f"Simulated {attack_type} attack",
-            "alert_id": str(alert.id)
-        }
+        "data": result,
     }
 
 
