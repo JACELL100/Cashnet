@@ -7,7 +7,7 @@ export default function AdminSignupPage() {
   return (
     <div className="min-h-screen bg-[color:var(--color-bg-primary)] flex items-center justify-center p-8">
       <div className="w-full max-w-md space-y-8 text-center">
-        <div className="w-16 h-16 bg-[#ff3860] rounded-xl flex items-center justify-center text-2xl font-bold text-white mx-auto">AD</div>
+        <div className="w-16 h-16 bg-[#ff3860] rounded-xl flex items-center justify-center text-2xl font-bold text-white mx-auto">CN</div>
         <div className="space-y-3">
           <h1 className="text-2xl font-bold font-mono text-text-primary">Admin Account Request</h1>
           <p className="text-sm text-text-secondary font-mono leading-relaxed">

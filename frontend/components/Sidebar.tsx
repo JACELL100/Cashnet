@@ -52,7 +52,7 @@ const Sidebar: React.FC = () => {
         <div className="p-4 border-b border-[color:var(--color-border)] flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-[#00d4ff] rounded flex items-center justify-center text-xs font-bold text-[color:var(--color-bg-primary)]">
-              RE
+              CN
             </div>
             {sidebarOpen && (
               <span className="font-mono text-xs font-bold uppercase hidden md:inline">

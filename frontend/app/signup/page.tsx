@@ -151,10 +151,10 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-[color:var(--color-bg-primary)] grid grid-cols-1 md:grid-cols-2">
       {/* Left Panel - Branding */}
-      <div className="hidden md:flex flex-col justify-between p-8 bg-gradient-to-b from-[color:var(--color-bg-secondary)] to-[color:var(--color-bg-primary)] border-r border-[color:var(--color-border)]">
+      <div className="hidden md:flex flex-col justify-start gap-10 p-8 bg-gradient-to-b from-[color:var(--color-bg-secondary)] to-[color:var(--color-bg-primary)] border-r border-[color:var(--color-border)]">
         <Link href="/" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-accent rounded flex items-center justify-center text-base font-bold text-[color:var(--color-bg-primary)]">
-            RE
+            CN
           </div>
           <span className="font-mono text-lg font-bold text-text-primary">cashnet</span>
         </Link>
@@ -200,7 +200,7 @@ export default function SignupPage() {
           {/* Mobile Logo */}
           <Link href="/" className="md:hidden flex items-center gap-2 justify-center mb-8">
             <div className="w-8 h-8 bg-accent rounded flex items-center justify-center text-xs font-bold text-[color:var(--color-bg-primary)]">
-              RE
+              CN
             </div>
             <span className="font-mono text-base font-bold text-text-primary">cashnet</span>
           </Link>

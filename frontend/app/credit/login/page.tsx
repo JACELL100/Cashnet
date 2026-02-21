@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 import type { UserRole } from '@/store/authStore';
 
-export default function LenderLoginPage() {
+export default function CreditLoginPage() {
   const addToast = useUIStore((s) => s.addToast);
 
   const [email, setEmail] = useState('');
@@ -35,9 +35,9 @@ export default function LenderLoginPage() {
     }
 
     const data = res.data;
-    if (data.role !== 'LENDER') {
+    if (data.role !== 'BORROWER') {
       setLoading(false);
-      setErrorMsg('This account is not a Lender account. Please use the correct portal.');
+      setErrorMsg('This account is not a Borrower account. Please use the correct portal.');
       return;
     }
 
@@ -57,7 +57,7 @@ export default function LenderLoginPage() {
       loading: false,
     });
     addToast({ message: `Welcome back, ${data.name}!`, severity: 'success' });
-    window.location.href = '/lender';
+    window.location.href = '/dashboard/credit';
   };
 
   return (
@@ -65,32 +65,32 @@ export default function LenderLoginPage() {
       {/* Left panel */}
       <div className="hidden md:flex flex-col justify-start gap-10 p-8 bg-[color:var(--color-bg-secondary)] border-r border-[color:var(--color-border)]">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#b367ff] rounded flex items-center justify-center text-sm font-bold text-white">CN</div>
-          <span className="font-mono text-lg font-bold text-text-primary">cashnet <span className="text-[#b367ff]">lending</span></span>
+          <div className="w-10 h-10 bg-[#00d4ff] rounded flex items-center justify-center text-sm font-bold text-white">CN</div>
+          <span className="font-mono text-lg font-bold text-text-primary">cashnet <span className="text-[#00d4ff]">credit</span></span>
         </Link>
         <div className="space-y-6">
           <div>
-            <div className="text-xs font-mono text-text-tertiary uppercase tracking-wider mb-2">Lender Portal</div>
-            <h2 className="text-2xl font-bold font-mono text-text-primary">Liquidity Management</h2>
+            <div className="text-xs font-mono text-text-tertiary uppercase tracking-wider mb-2">Borrower Portal</div>
+            <h2 className="text-2xl font-bold font-mono text-text-primary">Credit & Loans</h2>
             <p className="text-sm text-text-secondary font-mono mt-2">
-              Manage your liquidity positions, issue loans, monitor borrower health, and earn yield.
+              Manage your loans, track your credit score, and monitor collateral health in real time.
             </p>
           </div>
           <div className="space-y-2">
-            {['Deposit & withdraw liquidity', 'Monitor loan portfolio', 'View borrower health factors', 'Trigger liquidations', 'Track interest earned'].map((f) => (
+            {['Request and manage loans', 'Track credit score (300–850)', 'Monitor collateral health factor', 'View dynamic interest rates', 'Repayment scheduling'].map((f) => (
               <div key={f} className="flex items-center gap-2 text-sm font-mono text-text-secondary">
-                <span className="text-[#b367ff]">◆</span> {f}
+                <span className="text-[#00d4ff]">◆</span> {f}
               </div>
             ))}
           </div>
           <div className="p-4 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded text-xs font-mono space-y-1">
-            <div className="text-[#b367ff]">◆ TVL: $125,000,000</div>
-            <div className="text-success">✓ 12 active lenders</div>
-            <div className="text-accent">→ 8.2% avg APY</div>
+            <div className="text-[#00d4ff]">◆ 24 active borrowers</div>
+            <div className="text-success">✓ avg credit score: 680</div>
+            <div className="text-accent">→ min rate: 4.5% APR</div>
           </div>
         </div>
         <div className="flex gap-2">
-          <span className="px-3 py-1 bg-[rgba(179,103,255,0.1)] border border-[#b367ff] text-[#b367ff] rounded text-xs font-mono">LENDER</span>
+          <span className="px-3 py-1 bg-[rgba(0,212,255,0.1)] border border-[#00d4ff] text-[#00d4ff] rounded text-xs font-mono">BORROWER</span>
           <span className="px-3 py-1 bg-[rgba(0,212,99,0.1)] border border-[#00d463] text-[#00d463] rounded text-xs font-mono">sepolia</span>
         </div>
       </div>
@@ -99,13 +99,13 @@ export default function LenderLoginPage() {
       <div className="flex flex-col justify-center items-center p-8 md:p-12">
         <div className="w-full max-w-sm space-y-8">
           <div className="text-center space-y-2">
-            <div className="w-12 h-12 bg-[#b367ff] rounded-lg flex items-center justify-center text-lg font-bold text-white mx-auto">CN</div>
-            <h1 className="text-2xl font-bold font-mono text-text-primary">Lender Sign In</h1>
-            <p className="text-sm text-text-secondary font-mono">Access your lending dashboard</p>
+            <div className="w-12 h-12 bg-[#00d4ff] rounded-lg flex items-center justify-center text-lg font-bold text-white mx-auto">CN</div>
+            <h1 className="text-2xl font-bold font-mono text-text-primary">Borrower Sign In</h1>
+            <p className="text-sm text-text-secondary font-mono">Access your credit dashboard</p>
           </div>
 
           {errorMsg && (
-            <div className="p-3 bg-[rgba(179,103,255,0.1)] border border-[rgba(179,103,255,0.3)] rounded text-xs font-mono text-[#b367ff]">
+            <div className="p-3 bg-[rgba(0,212,255,0.1)] border border-[rgba(0,212,255,0.3)] rounded text-xs font-mono text-[#00d4ff]">
               {errorMsg}
             </div>
           )}
@@ -118,7 +118,7 @@ export default function LenderLoginPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full px-3 py-2.5 text-sm font-mono bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded outline-none focus:border-[#b367ff] text-text-primary placeholder:text-text-tertiary"
+                className="w-full px-3 py-2.5 text-sm font-mono bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded outline-none focus:border-[#00d4ff] text-text-primary placeholder:text-text-tertiary"
                 autoFocus
               />
             </div>
@@ -130,14 +130,14 @@ export default function LenderLoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-3 py-2.5 text-sm font-mono bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded outline-none focus:border-[#b367ff] text-text-primary placeholder:text-text-tertiary"
+                className="w-full px-3 py-2.5 text-sm font-mono bg-[color:var(--color-bg-accent)] border border-[color:var(--color-border)] rounded outline-none focus:border-[#00d4ff] text-text-primary placeholder:text-text-tertiary"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-[#b367ff] text-white rounded font-mono text-sm font-medium hover:bg-[#9f4ef0] disabled:opacity-50 transition-colors"
+              className="w-full py-2.5 bg-[#00d4ff] text-white rounded font-mono text-sm font-medium hover:bg-[#00b8db] disabled:opacity-50 transition-colors"
             >
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
@@ -148,19 +148,19 @@ export default function LenderLoginPage() {
               <div className="w-full border-t border-[color:var(--color-border)]" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="px-2 bg-[color:var(--color-bg-primary)] text-text-tertiary font-mono">lender · email login</span>
+              <span className="px-2 bg-[color:var(--color-bg-primary)] text-text-tertiary font-mono">borrower · email login</span>
             </div>
           </div>
 
           <div className="text-center text-xs font-mono text-text-tertiary space-y-2">
             <div>
               Don&apos;t have an account?{' '}
-              <Link href="/lender/signup" className="text-[#b367ff] hover:underline">Create Lender account →</Link>
+              <Link href="/credit/signup" className="text-[#00d4ff] hover:underline">Create Credit account →</Link>
             </div>
           </div>
 
           <div className="text-xs font-mono text-text-tertiary text-center space-x-3">
-            <Link href="/credit/login" className="text-[#00d4ff] hover:underline">Borrower login</Link>
+            <Link href="/lender/login" className="text-[#b367ff] hover:underline">Lender login</Link>
             <span>·</span>
             <Link href="/auditor/login" className="text-[#f0a500] hover:underline">Auditor login</Link>
             <span>·</span>

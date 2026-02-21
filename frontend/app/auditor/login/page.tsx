@@ -44,7 +44,7 @@ export default function AuditorLoginPage() {
     <div className="min-h-screen bg-[color:var(--color-bg-primary)] grid grid-cols-1 md:grid-cols-2">
       <div className="hidden md:flex flex-col justify-between p-8 bg-[color:var(--color-bg-secondary)] border-r border-[color:var(--color-border)]">
         <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#f0a500] rounded flex items-center justify-center text-sm font-bold text-white">AU</div>
+          <div className="w-10 h-10 bg-[#f0a500] rounded flex items-center justify-center text-sm font-bold text-white">CN</div>
           <span className="font-mono text-lg font-bold text-text-primary">cashnet <span className="text-[#f0a500]">auditor</span></span>
         </Link>
         <div className="space-y-6">
@@ -75,7 +75,7 @@ export default function AuditorLoginPage() {
       <div className="flex flex-col justify-center items-center p-8 md:p-12">
         <div className="w-full max-w-sm space-y-8">
           <div className="space-y-2">
-            <div className="w-12 h-12 bg-[#f0a500] rounded-lg flex items-center justify-center text-lg font-bold text-white mx-auto">AU</div>
+            <div className="w-12 h-12 bg-[#f0a500] rounded-lg flex items-center justify-center text-lg font-bold text-white mx-auto">CN</div>
             <h1 className="text-2xl font-bold font-mono text-text-primary text-center">Auditor Sign In</h1>
             <p className="text-sm text-text-secondary font-mono text-center">Access is restricted to authorized auditors</p>
           </div>

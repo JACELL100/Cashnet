@@ -137,6 +137,28 @@ class BlockchainService:
         
         return receipt['transactionHash'].hex()
     
+    def send_raw_transaction_dict(self, transaction_dict: Dict) -> str:
+        """
+        Sign and send a pre-built transaction dictionary.
+        Returns transaction hash.
+        """
+        if not self.account:
+            raise ValueError("No account configured")
+        
+        # Sign the transaction
+        signed_txn = self.w3.eth.account.sign_transaction(
+            transaction_dict,
+            private_key=self.account.key
+        )
+        
+        # Send the raw transaction
+        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        
+        # Wait for receipt
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        
+        return receipt['transactionHash'].hex()
+    
     def get_transaction_receipt(self, tx_hash: str) -> Dict:
         """Get transaction receipt"""
         return self.w3.eth.get_transaction_receipt(tx_hash)
