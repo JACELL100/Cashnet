@@ -38,6 +38,34 @@ if not firebase_admin._apps:
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# --- Caches (token verify + admin record) ------------------------------------
+import time as _time, hashlib as _hashlib
+
+_admin_cache: dict = {}   # email -> {"role","uid","exp"}
+_token_cache: dict = {}   # sha256(credential) -> (decoded, exp_monotonic)
+_ADMIN_TTL = 300          # 5 min
+_TOKEN_TTL = 300          # 5 min
+
+def _admin_cache_get(email: str):
+    e = _admin_cache.get(email)
+    return e if e and e["exp"] > _time.monotonic() else None
+
+def _admin_cache_set(email: str, role: str, uid: str):
+    _admin_cache[email] = {"role": role, "uid": uid, "exp": _time.monotonic() + _ADMIN_TTL}
+
+def _admin_cache_bust(email: str):
+    _admin_cache.pop(email, None)
+
+def _token_cache_get(cred: str):
+    key = _hashlib.sha256(cred.encode()).hexdigest()
+    e = _token_cache.get(key)
+    return e[0] if e and e[1] > _time.monotonic() else None
+
+def _token_cache_set(cred: str, decoded: dict):
+    key = _hashlib.sha256(cred.encode()).hexdigest()
+    _token_cache[key] = (decoded, _time.monotonic() + _TOKEN_TTL)
+
+
 # â”€â”€â”€ Schemas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class GoogleTokenRequest(BaseModel):
@@ -78,49 +106,77 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     - If found   â†’ return user + JWT
     - If missing â†’ 403 "Admin or Auditor access only"
     """
-    # 1. Verify Firebase ID token
-    try:
-        decoded = firebase_auth.verify_id_token(body.credential)
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid Firebase token: {e}")
+    # 1. Verify Firebase ID token — use cached result when same token is reused (e.g. 10-min session refresh)
+    #    check_revoked=False avoids a second outbound HTTP call to Google (~1.5s savings)
+    decoded = _token_cache_get(body.credential)
+    if decoded is None:
+        try:
+            decoded = firebase_auth.verify_id_token(body.credential, check_revoked=False)
+            _token_cache_set(body.credential, decoded)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid Firebase token: {e}")
 
-    uid: str = decoded["uid"]
-    email: str = decoded.get("email", "")
-    name: str = decoded.get("name", email)
+    uid: str     = decoded["uid"]
+    email: str   = decoded.get("email", "")
+    name: str    = decoded.get("name", email)
     picture: str = decoded.get("picture", "")
 
-    # 2. Check provisioned table — email is the canonical key; uid is back-filled on first login
-    record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
+    # 2. Check admin record cache first; fall back to DB — auto-create on first login
+    cached = _admin_cache_get(email)
+    if cached:
+        role_value = cached["role"]
+        record = None  # uid/last_login sync happens below if uid drifted
+    else:
+        record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
+        if not record:
+            # First-time sign-in: auto-provision as AUDITOR
+            record = AdminAuditor(
+                uid=uid,
+                email=email,
+                name=name,
+                picture=picture,
+                role=AdminAuditorRoleEnum.AUDITOR,
+            )
+            db.add(record)
+            try:
+                db.commit()
+                db.refresh(record)
+            except Exception:
+                db.rollback()
+                raise HTTPException(status_code=500, detail="Failed to create account")
+        role_value = record.role.value
+        _admin_cache_set(email, role_value, record.uid)
 
-    # Back-fill / update the real UID whenever it changes or was a placeholder
-    if record and record.uid != uid:
-        record.uid = uid
-        db.commit()
-        db.refresh(record)
-
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "error": "access_denied",
-                "message": "This portal is restricted to Admin and Auditor accounts only. "
-                           "Contact the system operator to request access.",
-            },
-        )
-
-    # 3. Update last_login
-    record.last_login = datetime.utcnow()
-    db.commit()
+    # 3. Single commit: back-fill uid + last_login only when something changed
+    if record is not None or (cached and cached.get("uid") != uid):
+        if record is None:
+            record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
+        if record:
+            dirty = False
+            if record.uid != uid:
+                record.uid = uid
+                dirty = True
+                _admin_cache_bust(email)
+            try:
+                record.last_login = datetime.utcnow()
+                dirty = True
+            except Exception:
+                pass
+            if dirty:
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
 
     # 4. Issue JWT
-    token = create_jwt({"uid": uid, "email": email, "role": record.role.value})
+    token = create_jwt({"uid": uid, "email": email, "role": role_value})
 
     return UserOut(
         uid=uid,
         email=email,
         name=name,
         picture=picture,
-        role=record.role.value,
+        role=role_value,
         token=token,
     )
 

@@ -120,6 +120,24 @@ async def verify_signature_and_login(request: AuthVerifyRequest, db: Session = D
     )
 
 
+@router.get("/borrowers", tags=["Admin"])
+async def list_all_borrowers(db: Session = Depends(get_db)):
+    """Admin endpoint: list all registered borrowers from the wallet-auth table."""
+    borrowers = db.query(Borrower).all()
+    return [
+        {
+            "id": b.id,
+            "wallet_address": b.wallet_address,
+            "name": b.name,
+            "email": b.email,
+            "is_active": b.is_active,
+            "created_at": b.created_at.isoformat() if b.created_at else None,
+            "last_login": b.last_login.isoformat() if b.last_login else None,
+        }
+        for b in borrowers
+    ]
+
+
 @router.get("/me", response_model=BorrowerResponse)
 async def get_current_user(token: str, db: Session = Depends(get_db)):
     payload = verify_jwt_token(token)
