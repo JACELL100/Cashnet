@@ -3,7 +3,7 @@
 import '@rainbow-me/rainbowkit/styles.css';
 import { RainbowKitProvider, darkTheme, connectorsForWallets } from '@rainbow-me/rainbowkit';
 import { WagmiProvider, createConfig, http } from 'wagmi';
-import { mainnet, sepolia, polygon, optimism, arbitrum } from 'wagmi/chains';
+import { sepolia } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ReactNode, useState, useEffect } from 'react';
 import {
@@ -34,16 +34,12 @@ const connectors = connectorsForWallets(
   }
 );
 
-// Configure wagmi without MetaMask (wagmi 2.x compatible)
+// Configure wagmi — Sepolia only (all gas fees in Sepolia ETH)
 const config = createConfig({
   connectors,
-  chains: [mainnet, sepolia, polygon, optimism, arbitrum],
+  chains: [sepolia],
   transports: {
-    [mainnet.id]: http(),
     [sepolia.id]: http(),
-    [polygon.id]: http(),
-    [optimism.id]: http(),
-    [arbitrum.id]: http(),
   },
 });
 
