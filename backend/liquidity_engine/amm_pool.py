@@ -299,8 +299,10 @@ class AMMPool:
         Returns amounts of token0 and token1 received.
         """
         pos = self.positions.get(provider)
-        if not pos or pos.lp_tokens < lp_tokens:
-            raise ValueError("Insufficient LP tokens")
+        if not pos:
+            raise ValueError(f"No LP position found for provider '{provider}'. Add liquidity first.")
+        if pos.lp_tokens < lp_tokens:
+            raise ValueError(f"Insufficient LP tokens: requested {lp_tokens:.4f}, available {pos.lp_tokens:.4f}")
 
         share = lp_tokens / self.total_lp_tokens
         amount0_out = share * self.reserve0

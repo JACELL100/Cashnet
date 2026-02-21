@@ -13,7 +13,7 @@ class PoolStore:
 
     def __init__(self):
         self._pools: dict[str, AMMPool] = {}
-        # Seed a default USDC/ETH pool
+        # Seed a default PAL/BAD pool (Palladium / Badassium simulation tokens)
         self._seed_default()
 
     # ------------------------------------------------------------------
@@ -24,15 +24,17 @@ class PoolStore:
         default_id = "default"
         self._pools[default_id] = AMMPool(
             pool_id=default_id,
-            token0="USDC",
-            token1="ETH",
-            reserve0=1_000_000.0,
-            reserve1=312.5,          # 1ETH ≈ $3200
+            token0="PAL",            # Palladium — 0x983A613d5f224459D2919e0d9E9e77C72E032042
+            token1="BAD",            # Badassium — 0x2960e22Ed3256E2bAfF233F5d03A20f597f14e07
+            reserve0=1_000_000.0,    # 1,000,000 PAL
+            reserve1=500_000.0,      # 500,000 BAD  → 1 BAD = 2 PAL
             fee_bps=30,
-            name="USDC/ETH",
+            name="PAL/BAD",
         )
         # Add an initial LP position for the "protocol" (shows up in provider_count)
         self._pools[default_id].add_liquidity("protocol_treasury", 100_000.0)
+        # Seed a "lender_user" position so the pool page can remove liquidity out of the box
+        self._pools[default_id].add_liquidity("lender_user", 50_000.0)
 
     # ------------------------------------------------------------------
     # CRUD
@@ -40,10 +42,10 @@ class PoolStore:
 
     def create_pool(
         self,
-        token0: str = "USDC",
-        token1: str = "ETH",
+        token0: str = "PAL",
+        token1: str = "BAD",
         reserve0: float = 100_000.0,
-        reserve1: float = 31.25,
+        reserve1: float = 50_000.0,
         fee_bps: int = 30,
         name: Optional[str] = None,
     ) -> AMMPool:

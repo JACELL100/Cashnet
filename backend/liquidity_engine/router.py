@@ -2,12 +2,51 @@
 Liquidity Engine Router — FastAPI endpoints for the AMM simulation engine.
 All routes are prefixed with /liquidity-engine
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
 from typing import Optional
+import uuid
+import json
+
+from sqlalchemy.orm import Session
+from database import get_db
+import models
 
 from .pool_store import pool_store
 from .amm_pool import AMMPool
+
+
+# ---------------------------------------------------------------------------
+# Internal helper — persist a pool transaction to the DB
+# ---------------------------------------------------------------------------
+
+def _log_tx(
+    db: Session,
+    tx_type: models.TransactionTypeEnum,
+    provider: str,
+    amount: float,
+    token: str,
+    pool_id: str,
+    extra: dict,
+) -> str:
+    """Write a Transaction row and return the generated hash."""
+    tx_hash = "0xsim_" + uuid.uuid4().hex[:40]
+    tx = models.Transaction(
+        hash=tx_hash,
+        type=tx_type,
+        wallet=provider,
+        amount=amount,
+        token=token,
+        block_number=None,
+        gas_used=None,
+        tx_metadata=json.dumps({"pool_id": pool_id, **extra}),
+    )
+    try:
+        db.add(tx)
+        db.commit()
+    except Exception:
+        db.rollback()          # never let a DB error kill the API response
+    return tx_hash
 
 router = APIRouter(prefix="/liquidity-engine", tags=["Liquidity Engine"])
 
@@ -127,12 +166,29 @@ async def get_pool_events(pool_id: str = "default", limit: int = Query(default=2
 # ---------------------------------------------------------------------------
 
 @router.post("/pools/{pool_id}/add-liquidity")
-async def add_liquidity(pool_id: str, req: AddLiquidityRequest):
-    """Add liquidity to pool."""
+async def add_liquidity(
+    pool_id: str,
+    req: AddLiquidityRequest,
+    db: Session = Depends(get_db),
+):
+    """Add liquidity to pool and log the transaction."""
     try:
         pool = pool_store.get_or_raise(pool_id)
         result = pool.add_liquidity(req.provider, req.amount0, req.max_slippage_pct)
-        return {"success": True, "data": result, "pool_state": pool.get_state()}
+        tx_hash = _log_tx(
+            db,
+            models.TransactionTypeEnum.ADD_LIQUIDITY,
+            provider=req.provider,
+            amount=result["amount0_deposited"],
+            token=pool.token0,
+            pool_id=pool_id,
+            extra={
+                "amount1_deposited": result["amount1_deposited"],
+                "lp_tokens_minted": result["lp_tokens_minted"],
+                "token1": pool.token1,
+            },
+        )
+        return {"success": True, "data": result, "pool_state": pool.get_state(), "tx_hash": tx_hash}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except (ValueError, ArithmeticError) as exc:
@@ -140,12 +196,32 @@ async def add_liquidity(pool_id: str, req: AddLiquidityRequest):
 
 
 @router.post("/pools/{pool_id}/remove-liquidity")
-async def remove_liquidity(pool_id: str, req: RemoveLiquidityRequest):
-    """Remove liquidity from pool by burning LP tokens."""
+async def remove_liquidity(
+    pool_id: str,
+    req: RemoveLiquidityRequest,
+    db: Session = Depends(get_db),
+):
+    """Remove liquidity from pool by burning LP tokens and log the transaction."""
     try:
         pool = pool_store.get_or_raise(pool_id)
         result = pool.remove_liquidity(req.provider, req.lp_tokens)
-        return {"success": True, "data": result, "pool_state": pool.get_state()}
+        tx_hash = _log_tx(
+            db,
+            models.TransactionTypeEnum.REMOVE_LIQUIDITY,
+            provider=req.provider,
+            amount=req.lp_tokens,
+            token="LP",
+            pool_id=pool_id,
+            extra={
+                "amount0_received": result["amount0_received"],
+                "amount1_received": result["amount1_received"],
+                "lp_tokens_burned": result["lp_tokens_burned"],
+                "impermanent_loss_pct": result["impermanent_loss_pct"],
+                "token0": pool.token0,
+                "token1": pool.token1,
+            },
+        )
+        return {"success": True, "data": result, "pool_state": pool.get_state(), "tx_hash": tx_hash}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except (ValueError, ArithmeticError) as exc:
@@ -157,14 +233,36 @@ async def remove_liquidity(pool_id: str, req: RemoveLiquidityRequest):
 # ---------------------------------------------------------------------------
 
 @router.post("/pools/{pool_id}/swap")
-async def swap(pool_id: str, req: SwapRequest):
-    """Execute a swap on the pool."""
+async def swap(
+    pool_id: str,
+    req: SwapRequest,
+    db: Session = Depends(get_db),
+):
+    """Execute a swap on the pool and log the transaction."""
     try:
         pool = pool_store.get_or_raise(pool_id)
         if req.direction == "token0_to_token1":
             result = pool.swap_token0_for_token1(req.amount_in)
+            token_in, token_out = pool.token0, pool.token1
         else:
             result = pool.swap_token1_for_token0(req.amount_in)
+            token_in, token_out = pool.token1, pool.token0
+        tx_hash = _log_tx(
+            db,
+            models.TransactionTypeEnum.SWAP,
+            provider="pool",
+            amount=result.amount_in,
+            token=token_in,
+            pool_id=pool_id,
+            extra={
+                "direction": req.direction,
+                "amount_out": result.amount_out,
+                "fee_paid": result.fee_paid,
+                "price_impact": result.price_impact,
+                "token_out": token_out,
+                "slippage": result.slippage,
+            },
+        )
         return {
             "success": True,
             "data": {
@@ -177,6 +275,7 @@ async def swap(pool_id: str, req: SwapRequest):
                 "slippage": result.slippage,
             },
             "pool_state": pool.get_state(),
+            "tx_hash": tx_hash,
         }
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
