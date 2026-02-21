@@ -5,7 +5,7 @@ import { RainbowKitProvider, darkTheme, connectorsForWallets } from '@rainbow-me
 import { WagmiProvider, createConfig, http } from 'wagmi';
 import { mainnet, sepolia, polygon, optimism, arbitrum } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import {
   metaMaskWallet,
   rainbowWallet,
@@ -52,6 +52,8 @@ interface Web3ProviderProps {
 }
 
 export function Web3Provider({ children }: Web3ProviderProps) {
+  const [mounted, setMounted] = useState(false);
+
   // Create query client per component instance with optimized settings
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
@@ -61,10 +63,13 @@ export function Web3Provider({ children }: Web3ProviderProps) {
         refetchOnReconnect: false,
         retry: false,
         staleTime: 5 * 60 * 1000, // 5 minutes
-        cacheTime: 10 * 60 * 1000, // 10 minutes
       },
     },
   }));
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <WagmiProvider config={config}>
@@ -76,7 +81,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
             borderRadius: 'medium',
           })}
         >
-          {children}
+          {mounted ? children : null}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

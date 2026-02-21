@@ -3,6 +3,7 @@ import { Chakra_Petch, IBM_Plex_Mono, DM_Sans } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import Providers from './providers'
 import { Web3Provider } from '@/components/Web3Provider'
+import VoiceAgentWrapper from '@/components/VoiceAgentWrapper'
 import './globals.css'
 
 const chakraPetch = Chakra_Petch({ 
@@ -41,6 +42,7 @@ export default function RootLayout({
         <Providers>
           <Web3Provider>
             {children}
+            <VoiceAgentWrapper />
           </Web3Provider>
         </Providers>
         <Analytics />
