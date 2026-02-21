@@ -55,16 +55,20 @@ export default function SignupPage() {
       const authState = useAuthStore.getState();
       
       if (authState.isAuthenticated && authState.user) {
+        console.log('[SIGNUP] Auth successful, setting user ID and preparing redirect');
         setUserId(authState.user.id);
         addToast({
           message: `Welcome to cashnet, ${authState.user.name || 'User'}!`,
           severity: 'success',
         });
-        // Use setTimeout to ensure state is fully updated before redirect
+        console.log('[SIGNUP] Toast shown, initiating redirect to /dashboard');
+        // Use setTimeout to ensure state is fully updated and persisted before redirect
         setTimeout(() => {
-          router.push('/dashboard');
-        }, 100);
+          console.log('[SIGNUP] Executing redirect now...');
+          router.replace('/dashboard');
+        }, 300);
       } else {
+        console.error('[SIGNUP] User state not updated properly:', authState);
         throw new Error('Authentication succeeded but user state not updated');
       }
     } catch (error) {

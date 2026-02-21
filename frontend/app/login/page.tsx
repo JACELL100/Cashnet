@@ -70,16 +70,18 @@ export default function LoginPage() {
       });
       
       if (authState.isAuthenticated && authState.user) {
+        console.log('[AUTH] Auth successful, setting user ID and preparing redirect');
         setUserId(authState.user.id);
         addToast({
           message: `Welcome, ${authState.user.name || 'User'}!`,
           severity: 'success',
         });
-        console.log('[AUTH] Redirecting to dashboard...');
-        // Use setTimeout to ensure state is fully updated before redirect
+        console.log('[AUTH] Toast shown, initiating redirect to /dashboard');
+        // Use setTimeout to ensure state is fully updated and persisted before redirect
         setTimeout(() => {
-          router.push('/dashboard');
-        }, 100);
+          console.log('[AUTH] Executing redirect now...');
+          router.replace('/dashboard');
+        }, 300);
       } else {
         console.error('[AUTH] User state not updated properly:', authState);
         throw new Error('Authentication succeeded but user state not updated');

@@ -23,6 +23,8 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   token: string | null;
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
   loginWithWallet: (walletAddress: string, signature: string, name?: string, email?: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (role: UserRole) => Promise<void>;
@@ -44,6 +46,11 @@ export const useAuthStore = create<AuthState>()(
       loading: false,
       error: null,
       token: null,
+      _hasHydrated: false,
+
+      setHasHydrated: (state: boolean) => {
+        set({ _hasHydrated: state });
+      },
 
       loginWithWallet: async (walletAddress: string, signature: string, name?: string, email?: string) => {
         set({ loading: true, error: null });
@@ -260,6 +267,9 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

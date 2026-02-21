@@ -1,8 +1,4 @@
-﻿"""
-Firebase Auth authentication for Admin and Auditor roles.
-Both roles share the `adminandauditor` table, differentiated by the `role` column.
-Anyone not provisioned in that table is rejected with a 403.
-"""
+﻿
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import firebase_admin
@@ -10,24 +6,32 @@ from firebase_admin import auth as firebase_auth, credentials as fb_creds
 from jose import jwt
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+import base64, json
 
 from database import get_db
 from models import AdminAuditor, AdminAuditorRoleEnum
 from config import settings
 import os
 
-# â”€â”€â”€ Firebase Admin SDK init (once per process) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if not firebase_admin._apps:
-    # Uses GOOGLE_APPLICATION_CREDENTIALS env var pointing to service account JSON
     try:
-        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-        if cred_path and os.path.exists(cred_path):
-            cred = fb_creds.Certificate(cred_path)
+        sa_b64 = os.getenv("FIREBASE_SA_B64")
+        if sa_b64:
+            # Decode base64 service-account JSON from env var
+            sa_json = json.loads(base64.b64decode(sa_b64))
+            cred = fb_creds.Certificate(sa_json)
             firebase_admin.initialize_app(cred)
+            print("✅ Firebase Admin SDK initialized from FIREBASE_SA_B64")
         else:
-            # Fallback to Application Default Credentials (for GCP/Cloud Run)
-            cred = fb_creds.ApplicationDefault()
-            firebase_admin.initialize_app(cred)
+            cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if cred_path and os.path.exists(cred_path):
+                cred = fb_creds.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+                print("✅ Firebase Admin SDK initialized from GOOGLE_APPLICATION_CREDENTIALS")
+            else:
+                cred = fb_creds.ApplicationDefault()
+                firebase_admin.initialize_app(cred)
+                print("✅ Firebase Admin SDK initialized from Application Default Credentials")
     except Exception as e:
         print(f"Warning: Firebase Admin SDK initialization failed: {e}")
         print("Firebase token verification will not work until this is resolved.")
