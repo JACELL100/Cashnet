@@ -37,7 +37,7 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
         <div className="text-center">
-          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">AU</div>
+          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">CN</div>
           <p className="text-text-secondary font-mono">Loading...</p>
         </div>
       </div>
@@ -50,7 +50,7 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
         <div className="text-center">
-          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">AU</div>
+          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">CN</div>
           <p className="text-text-secondary font-mono">Loading...</p>
         </div>
       </div>
@@ -61,7 +61,7 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
     <div className="min-h-screen bg-[color:var(--color-bg-primary)]">
       <aside className="fixed left-0 top-0 h-screen w-16 md:w-60 bg-[color:var(--color-bg-secondary)] border-r border-[color:var(--color-border)] z-40 flex flex-col">
         <div className="p-4 border-b border-[color:var(--color-border)] flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#f0a500] rounded flex items-center justify-center text-xs font-bold text-white shrink-0">AU</div>
+          <div className="w-8 h-8 bg-[#f0a500] rounded flex items-center justify-center text-xs font-bold text-white shrink-0">CN</div>
           <div className="hidden md:block overflow-hidden">
             <div className="text-xs font-mono font-bold text-text-primary truncate">cashnet auditor</div>
             <div className="text-xs font-mono text-[#f0a500] truncate">● AUDITOR</div>

@@ -119,6 +119,20 @@ export const creditApi = {
   getDynamicRates: () => apiRequest('/api/credit/dynamic-rates'),
 };
 
+/* === AUTH API (email/password) === */
+export const authApi = {
+  emailSignup: (name: string, email: string, password: string, role: string) =>
+    apiRequest<{ uid: string; email: string; name: string; role: string; token: string }>(
+      '/api/auth/email/signup',
+      { method: 'POST', body: JSON.stringify({ name, email, password, role }) }
+    ),
+  emailLogin: (email: string, password: string) =>
+    apiRequest<{ uid: string; email: string; name: string; role: string; token: string }>(
+      '/api/auth/email/login',
+      { method: 'POST', body: JSON.stringify({ email, password }) }
+    ),
+};
+
 /* === AUDIT API === */
 export const auditApi = {
   getLog: (filters?: any) =>

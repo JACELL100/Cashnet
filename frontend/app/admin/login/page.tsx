@@ -70,7 +70,7 @@ export default function AdminLoginPage() {
       <div className="flex flex-col justify-center items-center p-8 md:p-12">
         <div className="w-full max-w-sm space-y-8">
           <div className="space-y-2">
-            <div className="w-12 h-12 bg-[#ff3860] rounded-lg flex items-center justify-center text-lg font-bold text-white mx-auto">AD</div>
+            <div className="w-12 h-12 bg-[#ff3860] rounded-lg flex items-center justify-center text-lg font-bold text-white mx-auto">CN</div>
             <h1 className="text-2xl font-bold font-mono text-text-primary text-center">Admin Sign In</h1>
             <p className="text-sm text-text-secondary font-mono text-center">Access is restricted to authorized administrators</p>
           </div>

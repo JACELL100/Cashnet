@@ -17,6 +17,18 @@ const nextConfig = {
   
   // Optimize production builds
   poweredByHeader: false,
+
+  // Allow WalletConnect / RainbowKit popups (fixes COOP 404)
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin-allow-popups' },
+        ],
+      },
+    ];
+  },
   
   // Set workspace root to silence lockfile warning
   outputFileTracingRoot: path.join(__dirname, '..'),
