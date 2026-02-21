@@ -100,6 +100,18 @@ interface FraudAlert {
   resolved: boolean;
 }
 
+interface LiveTransaction {
+  id: string;
+  type: string;
+  token_in: string;
+  token_out: string;
+  amount_in: number;
+  status: 'pending' | 'confirming' | 'confirmed' | 'failed';
+  tx_hash?: string;
+  etherscan_url?: string;
+  timestamp: number;
+}
+
 // ── Agent type visual config ───────────────────────────────────────────────
 const AGENT_ICONS: Record<string, string> = {
   retail_trader: '🛒',
@@ -137,6 +149,9 @@ export default function AgentsPage() {
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [alerts, setAlerts] = useState<FraudAlert[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [liveTransactions, setLiveTransactions] = useState<LiveTransaction[]>([]);
+  const [showTxTracker, setShowTxTracker] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string>('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Polling ─────────────────────────────────────────────────────────────
@@ -166,6 +181,42 @@ export default function AgentsPage() {
     setIsLoading(true);
     await api('/api/simulation/start', { method: 'POST', body: JSON.stringify({ max_steps: 200, tick_delay: 0.5 }) });
     await fetchAll();
+    setIsLoading(false);
+  };
+  
+  const runDemoAttack = async () => {
+    setIsLoading(true);
+    setShowTxTracker(true);
+    setLiveTransactions([]);
+    
+    try {
+      const response = await api('/api/scenarios/demo-attack', { method: 'POST' });
+      if (!response) {
+        throw new Error("Invalid response from server");
+      }
+      
+      // Extract wallet address
+      if (response.etherscan_wallet) {
+        const walletMatch = response.etherscan_wallet.match(/0x[a-fA-F0-9]{40}/);
+        if (walletMatch) setWalletAddress(walletMatch[0]);
+      }
+      
+      // Show success message
+      alert(`✅ Continuous Attack Started!\n\n${response.message}\n\nWatch the Activity Feed below for live blockchain confirmations.\n\n🔗 Etherscan: ${response.etherscan_wallet}\n\n⚠️ Click STOP button to end the attack.`);
+      
+      await fetchAll();
+    } catch (error) {
+      setLiveTransactions([{
+        id: 'error',
+        type: 'Failed',
+        token_in: 'N/A',
+        token_out: 'N/A',
+        amount_in: 0,
+        status: 'failed',
+        timestamp: Date.now()
+      }]);
+      alert(`❌ Demo attack failed: ${error?.message || 'Unknown error'}\n\nMake sure backend is running.`);
+    }
     setIsLoading(false);
   };
 
@@ -199,28 +250,63 @@ export default function AgentsPage() {
     ? Math.round((simStatus.current_step / simStatus.max_steps) * 100)
     : 0;
 
-  const totalCapital = agents.reduce((s, a) => s + a.capital, 0);
-  const totalValue = agents.reduce((s, a) => s + a.current_value, 0);
-  const totalPnl = agents.reduce((s, a) => s + a.pnl, 0);
+  const totalCapital = agents.reduce((s, a) => s + (a.capital || 0), 0);
+  const totalValue = agents.reduce((s, a) => s + (a.current_value || 0), 0);
+  const totalPnl = agents.reduce((s, a) => s + (a.pnl || 0), 0);
 
-  const terminalLines = feed.map((e) => ({
-    text: `[${e.agent_name || e.agent_id}] ${e.event_type}: ${
-      typeof e.data === 'object'
-        ? Object.entries(e.data)
-            .filter(([k]) => k !== 'receipt')
-            .map(([k, v]) => `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`)
-            .join(' | ')
-        : String(e.data)
-    }`,
-    type: (e.event_type.includes('attack') || e.event_type.includes('flash')
-      ? 'danger'
-      : e.event_type.includes('panic') || e.event_type.includes('liquidat')
-        ? 'warn'
-        : e.event_type.includes('arb')
-          ? 'success'
-          : 'info') as 'info' | 'success' | 'danger' | 'warn',
-    timestamp: e.timestamp * 1000,
-  }));
+  // Count on-chain transactions from blockchain events in feed
+  const onChainTxCount = feed.filter(
+    (e) => e.agent_type === 'blockchain_tx' && e.event_type.includes('confirmed')
+  ).length;
+
+  const terminalLines = feed.map((e) => {
+    // Special formatting for blockchain transactions
+    if (e.agent_type === 'blockchain_tx') {
+      const data = e.data || {};
+      let text = `[🔗 Blockchain] ${e.event_type}: `;
+      
+      if (e.event_type === 'approval_pending') {
+        text += `🔓 Approving ${data.token} (${data.amount})`;
+      } else if (e.event_type === 'approval_confirmed') {
+        text += `✅ Approved ${data.token} | TX: ${data.tx_hash?.slice(0, 10)}... | ${data.etherscan || ''}`;
+      } else if (e.event_type === 'swap_pending') {
+        text += `⏳ Swapping ${data.amount} ${data.token_in} → ${data.token_out}`;
+      } else if (e.event_type === 'swap_confirmed') {
+        text += `✅ Swapped ${data.amount} ${data.token_in} → ${data.token_out} | TX: ${data.tx_hash?.slice(0, 10)}... | ${data.etherscan || ''}`;
+      } else {
+        text += Object.entries(data)
+          .filter(([k]) => k !== 'receipt' && k !== 'etherscan')
+          .map(([k, v]) => `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`)
+          .join(' | ');
+      }
+      
+      return {
+        text,
+        type: (e.event_type.includes('confirmed') ? 'success' : 'info') as 'info' | 'success' | 'danger' | 'warn',
+        timestamp: e.timestamp * 1000,
+      };
+    }
+    
+    // Standard agent event formatting
+    return {
+      text: `[${e.agent_name || e.agent_id}] ${e.event_type}: ${
+        typeof e.data === 'object'
+          ? Object.entries(e.data)
+              .filter(([k]) => k !== 'receipt')
+              .map(([k, v]) => `${k}=${typeof v === 'number' ? v.toFixed(2) : v}`)
+              .join(' | ')
+          : String(e.data)
+      }`,
+      type: (e.event_type.includes('attack') || e.event_type.includes('flash')
+        ? 'danger'
+        : e.event_type.includes('panic') || e.event_type.includes('liquidat')
+          ? 'warn'
+          : e.event_type.includes('arb')
+            ? 'success'
+            : 'info') as 'info' | 'success' | 'danger' | 'warn',
+      timestamp: e.timestamp * 1000,
+    };
+  });
 
   return (
     <div className="space-y-8 animate-fadeUp">
@@ -303,21 +389,21 @@ export default function AgentsPage() {
                   {agent.name}
                 </h3>
                 <p className="text-[10px] text-text-tertiary font-mono truncate">
-                  {(agent.type ?? '').replace(/_/g, ' ')}
+                  {agent.type?.replace('_', ' ') || 'Unknown'}
                 </p>
               </div>
             </div>
             <div className="flex items-center justify-between">
               <Badge variant={AGENT_RISK_BADGE[agent.risk] || 'medium'}>
-                {(agent.risk ?? '').toUpperCase()}
+                {agent.risk?.toUpperCase() || 'MEDIUM'}
               </Badge>
               <span
                 className={`text-xs font-mono font-bold ${
                   agent.pnl >= 0 ? 'text-success' : 'text-danger'
                 }`}
               >
-                {(agent.pnl ?? 0) >= 0 ? '+' : ''}
-                {(agent.pnl ?? 0).toFixed(0)}
+                {agent.pnl >= 0 ? '+' : ''}
+                {agent.pnl?.toFixed(0) || 0}
               </span>
             </div>
             <label className="flex items-center gap-2 text-xs cursor-pointer">
@@ -339,23 +425,43 @@ export default function AgentsPage() {
         )}
       </div>
 
-      {/* ── Playback Controls + Status ────────────────────────────────── */}
+      {/* ── Playback Controls + Status ──────────────────────────────────*/}
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {!isRunning && !isPaused && (
-              <button
-                className="btn accent text-xs py-2 px-5"
-                onClick={startSim}
-                disabled={isLoading}
-              >
-                {isLoading ? 'STARTING...' : '▶ START'}
-              </button>
+              <>
+                <button
+                  className="btn accent text-xs py-2 px-5"
+                  onClick={startSim}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'STARTING...' : '▶ START'}
+                </button>
+                <button
+                  className="btn text-xs py-2 px-5 bg-gradient-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
+                  onClick={runDemoAttack}
+                  disabled={isLoading}
+                  title="Execute 100+ transaction attack demo with Palladium & Badassium tokens"
+                >
+                  {isLoading ? 'ATTACKING...' : '💥 DEMO ATTACK (100+ TXs)'}
+                </button>
+              </>
             )}
             {isRunning && (
-              <button className="btn ghost text-xs py-2 px-4" onClick={pauseSim}>
-                ⏸ PAUSE
-              </button>
+              <>
+                <button className="btn ghost text-xs py-2 px-4" onClick={pauseSim}>
+                  ⏸ PAUSE
+                </button>
+                <button
+                  className="btn text-xs py-2 px-5 bg-gradient-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
+                  onClick={runDemoAttack}
+                  disabled={isLoading}
+                  title="Execute 100+ transaction attack demo with Palladium & Badassium tokens"
+                >
+                  {isLoading ? 'ATTACKING...' : '💥 DEMO ATTACK'}
+                </button>
+              </>
             )}
             {isPaused && (
               <button className="btn accent text-xs py-2 px-4" onClick={resumeSim}>
@@ -394,6 +500,14 @@ export default function AgentsPage() {
               Trades:{' '}
               <span className="text-cyan font-bold">{simStatus?.total_trades || 0}</span>
             </span>
+            {onChainTxCount > 0 && (
+              <span className="text-text-secondary">
+                On-Chain:{' '}
+                <span className="text-success font-bold animate-pulse">
+                  {onChainTxCount}
+                </span>
+              </span>
+            )}
             <span className="text-text-secondary">
               Alerts:{' '}
               <span className="text-(--color-danger) font-bold">
@@ -416,6 +530,67 @@ export default function AgentsPage() {
           </div>
         )}
       </div>
+
+      {/* ── Live Transaction Tracker ──────────────────────────────────── */}
+      {showTxTracker && walletAddress && (
+        <div className="card p-4 space-y-3 border-l-4 border-l-accent">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-mono font-bold text-text-primary uppercase flex items-center gap-2">
+              <span className="animate-pulse">🔴</span> Live On-Chain Attack — Watch Activity Feed Below
+            </h3>
+            <div className="flex items-center gap-2">
+              <a
+                href={`https://sepolia.etherscan.io/address/${walletAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn accent text-xs py-1 px-3 flex items-center gap-1"
+              >
+                🔗 View Wallet on Etherscan
+              </a>
+              <button
+                onClick={() => setShowTxTracker(false)}
+                className="btn ghost text-xs py-1 px-2"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          {/* Transaction Flow Diagram */}
+          <div className="bg-(--color-bg-accent) rounded-lg p-4 font-mono text-xs">
+            <div className="text-text-secondary mb-2 font-bold">Continuous Attack Strategy:</div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-accent">
+                <span className="bg-(--color-bg-primary) px-3 py-1.5 rounded font-bold">PALLADIUM</span>
+                <span className="text-danger text-lg">→</span>
+                <span className="bg-(--color-bg-primary) px-3 py-1.5 rounded font-bold">BADASSIUM</span>
+                <span className="text-text-tertiary ml-2">(400K tokens per swap)</span>
+              </div>
+              <div className="text-text-tertiary text-center">↓ Price Manipulation ↓</div>
+              <div className="flex items-center gap-2 text-cyan">
+                <span className="bg-(--color-bg-primary) px-3 py-1.5 rounded font-bold">BADASSIUM</span>
+                <span className="text-success text-lg">→</span>
+                <span className="bg-(--color-bg-primary) px-3 py-1.5 rounded font-bold">PALLADIUM</span>
+                <span className="text-text-tertiary ml-2">(400K tokens per swap)</span>
+              </div>
+              <div className="mt-3 p-2 bg-(--color-bg-primary) rounded text-center">
+                <span className="text-success animate-pulse font-bold">🔄 Loops continuously until STOP pressed</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div className="bg-warn/10 border border-warn/30 rounded-lg p-3 text-xs font-mono">
+            <div className="font-bold text-warn mb-1">📊 Live Transaction Tracking:</div>
+            <ul className="text-text-secondary space-y-1 ml-4">
+              <li>• Watch the <span className="text-accent font-bold">Activity Feed</span> terminal below for real-time updates</li>
+              <li>• Each swap has 2 TXs: Approval + Swap (both visible on Etherscan)</li>
+              <li>• Click <span className="text-accent font-bold">View Wallet on Etherscan</span> to see all transactions</li>
+              <li>• Press <span className="text-danger font-bold">STOP</span> button to end the attack</li>
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* ── Pool / Lending Live Stats ─────────────────────────────────── */}
       {simStatus && (
@@ -470,7 +645,7 @@ export default function AgentsPage() {
                   {alert.severity}
                 </Badge>
                 <span className="text-[10px] text-text-tertiary font-mono">
-                  {alert.type.replace('_', ' ')}
+                  {alert.type?.replace('_', ' ') || 'Unknown'}
                 </span>
               </div>
               <p className="text-xs text-text-secondary font-mono leading-relaxed">
@@ -509,58 +684,58 @@ export default function AgentsPage() {
                 header: 'Agent',
                 accessor: (row: SimAgent) => (
                   <span>
-                    {AGENT_ICONS[row.type] || '🤖'} {row.name}
+                    {AGENT_ICONS[row.type] || '🤖'} {row.name || 'Unknown'}
                   </span>
                 ),
                 className: 'font-mono text-xs font-bold',
               },
               {
                 header: 'Type',
-                accessor: (row: SimAgent) => (row.type ?? '').replace(/_/g, ' '),
+                accessor: (row: SimAgent) => row.type?.replace('_', ' ') || 'Unknown',
                 className: 'font-mono text-xs capitalize',
               },
               {
                 header: 'Capital',
-                accessor: (row: SimAgent) => `$${((row.capital ?? 0) / 1000).toFixed(1)}k`,
+                accessor: (row: SimAgent) => `$${((row.capital || 0) / 1000).toFixed(1)}k`,
                 className: 'text-xs',
               },
               {
                 header: 'Value',
-                accessor: (row: SimAgent) => `$${((row.current_value ?? 0) / 1000).toFixed(1)}k`,
+                accessor: (row: SimAgent) => `$${((row.current_value || 0) / 1000).toFixed(1)}k`,
                 className: 'text-xs',
               },
               {
                 header: 'PnL',
                 accessor: (row: SimAgent) => (
-                  <span className={(row.pnl ?? 0) >= 0 ? 'text-success' : 'text-danger'}>
-                    {(row.pnl ?? 0) >= 0 ? '+' : ''}
-                    {(row.pnl ?? 0).toFixed(0)}
+                  <span className={(row.pnl || 0) >= 0 ? 'text-success' : 'text-danger'}>
+                    {(row.pnl || 0) >= 0 ? '+' : ''}
+                    {(row.pnl || 0).toFixed(0)}
                   </span>
                 ),
                 className: 'font-mono text-xs font-bold',
               },
               {
                 header: 'Trades',
-                accessor: (row: SimAgent) => String(row.stats?.trades_count ?? 0),
+                accessor: (row: SimAgent) => String(row.stats?.trades_count || 0),
                 className: 'text-xs',
               },
               {
                 header: 'Win %',
                 accessor: (row: SimAgent) =>
-                  `${((row.win_rate ?? 0) * 100).toFixed(0)}%`,
+                  `${((row.win_rate || 0) * 100).toFixed(0)}%`,
                 className: 'text-xs',
               },
               {
                 header: 'Volume',
                 accessor: (row: SimAgent) =>
-                  `$${((row.stats?.total_volume ?? 0) / 1000).toFixed(1)}k`,
+                  `$${((row.stats?.total_volume || 0) / 1000).toFixed(1)}k`,
                 className: 'text-xs',
               },
               {
                 header: 'Status',
                 accessor: (row: SimAgent) => (
                   <Badge variant={row.active ? 'success' : 'medium'}>
-                    {(row.state ?? '').toUpperCase()}
+                    {row.state?.toUpperCase() || 'IDLE'}
                   </Badge>
                 ),
               },

@@ -19,8 +19,8 @@ const fmtUSD = (v: number) =>
   v >= 1_000_000
     ? `$${(v / 1e6).toFixed(2)}M`
     : v >= 1_000
-    ? `$${(v / 1e3).toFixed(1)}K`
-    : `$${v.toFixed(2)}`;
+      ? `$${(v / 1e3).toFixed(1)}K`
+      : `$${v.toFixed(2)}`;
 
 const shortAddr = (addr: string) =>
   addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '—';
@@ -38,10 +38,10 @@ interface LookupResult {
 export default function BorrowersPage() {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress ?? '');
 
-  const borrowers    = useLendingStore((s) => s.borrowers);
+  const borrowers = useLendingStore((s) => s.borrowers);
   const totalBorrows = useLendingStore((s) => s.totalBorrows);
   const setBorrowers = useLendingStore((s) => s.setBorrowers);
-  const setMetrics   = useLendingStore((s) => s.setMetrics);
+  const setMetrics = useLendingStore((s) => s.setMetrics);
 
   const {
     depositCollateral, borrow, approveRepay, repay, liquidate, reset,
@@ -50,22 +50,22 @@ export default function BorrowersPage() {
 
   // My-position inputs
   const [depositAmt, setDepositAmt] = useState('');
-  const [borrowAmt,  setBorrowAmt]  = useState('');
-  const [repayAmt,   setRepayAmt]   = useState('');
+  const [borrowAmt, setBorrowAmt] = useState('');
+  const [repayAmt, setRepayAmt] = useState('');
 
   // Wallet lookup
-  const [lookupWallet,  setLookupWallet]  = useState('');
-  const [lookupResult,  setLookupResult]  = useState<LookupResult | null>(null);
+  const [lookupWallet, setLookupWallet] = useState('');
+  const [lookupResult, setLookupResult] = useState<LookupResult | null>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupError,   setLookupError]   = useState('');
+  const [lookupError, setLookupError] = useState('');
 
   // My own position (fetched from chain for connected wallet)
   const [myPosition, setMyPosition] = useState<LookupResult | null>(null);
 
   // Sort / filter
-  const [sortDir, setSortDir]     = useState<'asc' | 'desc'>('asc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [filterStatus, setFilterStatus] = useState<'all' | 'healthy' | 'warning' | 'danger'>('all');
-  const [search, setSearch]       = useState('');
+  const [search, setSearch] = useState('');
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -101,8 +101,8 @@ export default function BorrowersPage() {
               (b.health_factor ?? 0) >= 1.5
                 ? 'healthy'
                 : (b.health_factor ?? 0) >= 1.2
-                ? 'warning'
-                : 'danger',
+                  ? 'warning'
+                  : 'danger',
           })
         );
         setBorrowers(rows);
@@ -112,11 +112,11 @@ export default function BorrowersPage() {
         const json = await mRes.json();
         const m = json.data ?? json;
         setMetrics({
-          totalDeposits:    m.total_collateral   ?? 0,
-          totalBorrows:     m.total_debt         ?? 0,
-          utilizationRate:  (m.utilization_rate  ?? 0) / 100,
-          borrowApr:        m.borrow_apr         ?? 0,
-          totalSupplied:    m.total_supplied      ?? 0,
+          totalDeposits: m.total_collateral ?? 0,
+          totalBorrows: m.total_debt ?? 0,
+          utilizationRate: (m.utilization_rate ?? 0) / 100,
+          borrowApr: m.borrow_apr ?? 0,
+          totalSupplied: m.total_supplied ?? 0,
         });
       }
     } catch {
@@ -163,19 +163,11 @@ export default function BorrowersPage() {
     }
   };
 
-  // ── Liquidate via API ────────────────────────────────────────────────────
-  const handleApiLiquidate = async (wallet: string) => {
-    try {
-      await fetch(`${API_URL}/api/lending/liquidate?borrower_id=${wallet}`, {
-        method: 'POST',
-      });
-      await fetchData();
-    } catch {/* ignore */}
-  };
+
 
   // ── Derived data ─────────────────────────────────────────────────────────
-  const atRiskCount  = borrowers.filter((b) => b.status !== 'healthy').length;
-  const avgHF        = borrowers.length
+  const atRiskCount = borrowers.filter((b) => b.status !== 'healthy').length;
+  const avgHF = borrowers.length
     ? borrowers.reduce((s, b) => s + b.healthFactor, 0) / borrowers.length
     : 0;
 
@@ -219,7 +211,7 @@ export default function BorrowersPage() {
     const map = {
       healthy: { color: '#22c55e', label: 'HEALTHY' },
       warning: { color: '#f0a500', label: 'WARNING' },
-      danger:  { color: '#ff3860', label: 'DANGER'  },
+      danger: { color: '#ff3860', label: 'DANGER' },
     };
     const { color, label } = map[status];
     return (
@@ -716,30 +708,16 @@ export default function BorrowersPage() {
 
                     {/* Action */}
                     <td className="px-4 py-3">
-                      {b.status === 'danger' ? (
-                        <div className="flex gap-1">
-                          {/* On-chain liquidate via MetaMask */}
-                          {isConnected && (
-                            <button
-                              onClick={() => liquidate(b.wallet)}
-                              disabled={isSigning || isConfirming}
-                              title="Liquidate on-chain via MetaMask"
-                              className="text-xs px-2 py-0.5 rounded font-bold disabled:opacity-40 transition-colors"
-                              style={{ background: '#ff3860', color: '#fff' }}
-                            >
-                              ⚡ On-chain
-                            </button>
-                          )}
-                          {/* API liquidate */}
-                          <button
-                            onClick={() => handleApiLiquidate(b.wallet)}
-                            title="Trigger simulation liquidation via API"
-                            className="text-xs px-2 py-0.5 rounded font-bold"
-                            style={{ background: '#ff386030', color: '#ff3860', border: '1px solid #ff386055' }}
-                          >
-                            API
-                          </button>
-                        </div>
+                      {b.status === 'danger' && isConnected ? (
+                        <button
+                          onClick={() => liquidate(b.wallet)}
+                          disabled={isSigning || isConfirming}
+                          title="Liquidate on-chain via MetaMask"
+                          className="text-xs px-2 py-0.5 rounded font-bold disabled:opacity-40 transition-colors"
+                          style={{ background: '#ff3860', color: '#fff' }}
+                        >
+                          ⚡ Liquidate
+                        </button>
                       ) : (
                         <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>—</span>
                       )}
@@ -762,8 +740,8 @@ export default function BorrowersPage() {
 function filteredSummary(rows: BorrowerPosition[]) {
   if (!rows.length) return null;
   const totalCollateral = rows.reduce((s, b) => s + b.collateral, 0);
-  const totalBorrowed   = rows.reduce((s, b) => s + b.borrowed, 0);
-  const dangerCount     = rows.filter((b) => b.status === 'danger').length;
+  const totalBorrowed = rows.reduce((s, b) => s + b.borrowed, 0);
+  const dangerCount = rows.filter((b) => b.status === 'danger').length;
   const fmtUSD = (v: number) =>
     v >= 1_000_000 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1_000 ? `$${(v / 1e3).toFixed(1)}K` : `$${v.toFixed(2)}`;
 

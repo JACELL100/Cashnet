@@ -19,6 +19,7 @@ from agents.scenario_engine import (
     get_scenario_engine,
 )
 from agents.simulation_runner import simulation_runner
+from agents.demo_attack_scenario import run_protocol_stress_test_demo
 
 
 router = APIRouter(prefix="/api/scenarios", tags=["Scenario Simulations"])
@@ -26,6 +27,10 @@ router = APIRouter(prefix="/api/scenarios", tags=["Scenario Simulations"])
 # ─── In-memory job store ──────────────────────────────────────────────────────
 # job_id -> {"status": "running"|"done"|"error", "result": dict|None}
 _jobs: Dict[str, dict] = {}
+
+# Global attack task tracker
+_continuous_attack_task: Optional[asyncio.Task] = None
+_attack_running: bool = False
 
 
 # ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -267,3 +272,154 @@ async def get_fxtc_case_study():
             "final_recovery_rate": 0.15,
         }
     }
+
+
+async def _continuous_swap_attack():
+    """Background task that continuously executes swaps until stopped."""
+    global _attack_running
+    
+    swap_count = 0
+    direction = "PALLADIUM_TO_BADASSIUM"  # Start direction
+    
+    print("\n🔥 Starting continuous swap attack...")
+    print("   Strategy: Alternate PALLADIUM ⇄ BADASSIUM swaps")
+    print("   Each cycle = 2 on-chain transactions")
+    print("   Will run until STOP button pressed or simulation stopped\n")
+    
+    try:
+        while _attack_running and simulation_runner.status == "running":
+            try:
+                # Check if blockchain integrator is still available
+                if not simulation_runner.blockchain_integrator:
+                    print("⚠️  Blockchain integrator not available, waiting...")
+                    await asyncio.sleep(5)
+                    continue
+                
+                # Alternate swap direction
+                if direction == "PALLADIUM_TO_BADASSIUM":
+                    # Swap PALLADIUM → BADASSIUM
+                    tx_hash = await simulation_runner.blockchain_integrator.execute_real_swap(
+                        agent_wallet="attacker",
+                        token_in="PALLADIUM",
+                        token_out="BADASSIUM",
+                        amount_in=400_000  # 400K tokens per swap
+                    )
+                    if tx_hash:
+                        swap_count += 1
+                        print(f"   ✅ Swap #{swap_count}: PALLADIUM → BADASSIUM | TX: {tx_hash[:16]}...")
+                    
+                    # Also execute in pool simulation
+                    try:
+                        simulation_runner.pool.execute_swap(400_000, "TOKEN_A")
+                    except Exception as pool_err:
+                        print(f"   ⚠️  Pool simulation error (non-critical): {pool_err}")
+                    
+                    direction = "BADASSIUM_TO_PALLADIUM"
+                    
+                else:
+                    # Swap BADASSIUM → PALLADIUM
+                    tx_hash = await simulation_runner.blockchain_integrator.execute_real_swap(
+                        agent_wallet="attacker",
+                        token_in="BADASSIUM",
+                        token_out="PALLADIUM",
+                        amount_in=400_000  # 400K tokens per swap
+                    )
+                    if tx_hash:
+                        swap_count += 1
+                        print(f"   ✅ Swap #{swap_count}: BADASSIUM → PALLADIUM | TX: {tx_hash[:16]}...")
+                    
+                    # Also execute in pool simulation
+                    try:
+                        simulation_runner.pool.execute_swap(400_000, "TOKEN_B")
+                    except Exception as pool_err:
+                        print(f"   ⚠️  Pool simulation error (non-critical): {pool_err}")
+                    
+                    direction = "PALLADIUM_TO_BADASSIUM"
+                
+                # Small delay between swaps to avoid network congestion
+                await asyncio.sleep(3)
+                
+            except asyncio.CancelledError:
+                print("\n🛑 Attack cancelled by user")
+                raise
+            except Exception as e:
+                print(f"⚠️  Swap error (will retry): {e}")
+                import traceback
+                traceback.print_exc()
+                await asyncio.sleep(5)  # Longer delay on error, then continue
+                
+    except asyncio.CancelledError:
+        print("\n🛑 Continuous attack task cancelled")
+    finally:
+        _attack_running = False
+        print(f"\n🛑 Continuous attack stopped. Total swaps executed: {swap_count}")
+
+
+@router.post("/demo-attack")
+async def run_demo_attack():
+    """
+    Execute Continuous Protocol Stress Test with Palladium & Badassium tokens.
+    Performs continuous on-chain swaps until STOP is pressed.
+    
+    Strategy:
+      - PALLADIUM → BADASSIUM (price manipulation)
+      - BADASSIUM → PALLADIUM (profit taking)
+      - Loops continuously until simulation stopped
+    
+    Perfect for demonstrating live blockchain transactions to judges!
+    """
+    global _continuous_attack_task, _attack_running
+    
+    # Start simulation with high step count for continuous execution
+    if simulation_runner.status != "running":
+        print("🚀 Starting continuous attack simulation...")
+        await simulation_runner.start(max_steps=10000, tick_delay=0.1)  # Very high max_steps
+        await asyncio.sleep(2)  # Let blockchain integrator initialize
+    
+    if not simulation_runner.pool or not simulation_runner.lending:
+        raise HTTPException(
+            status_code=500,
+            detail="Simulation pool/lending not initialized"
+        )
+    
+    # Verify blockchain integrator is ready
+    wallet = "N/A"
+    if simulation_runner.blockchain_integrator:
+        print(f"✅ Blockchain integrator ready for continuous attack")
+        print(f"   Real TXs enabled: {simulation_runner.blockchain_integrator.enable_real_txs}")
+        if simulation_runner.blockchain_integrator.blockchain.account:
+            wallet = simulation_runner.blockchain_integrator.blockchain.account.address
+            print(f"   Wallet: {wallet}")
+            print(f"   Etherscan: https://sepolia.etherscan.io/address/{wallet}")
+    else:
+        print("⚠️  Blockchain integrator not available - transactions will be simulated only")
+    
+    # Cancel any existing attack task
+    if _continuous_attack_task and not _continuous_attack_task.done():
+        print("⚠️  Cancelling existing attack task...")
+        _continuous_attack_task.cancel()
+        try:
+            await _continuous_attack_task
+        except asyncio.CancelledError:
+            pass
+    
+    # Launch continuous swap attack
+    _attack_running = True
+    _continuous_attack_task = asyncio.create_task(_continuous_swap_attack())
+    
+    return {
+        "success": True,
+        "message": "Continuous attack started! Swaps will execute until you press STOP.",
+        "data": {
+            "attack_name": "Continuous On-Chain Swap Attack",
+            "tokens": {
+                "PALLADIUM": "0x983A613d5f224459D2919e0d9E9e77C72E032042",
+                "BADASSIUM": "0x2960e22Ed3256E2bAfF233F5d03A20f597f14e07"
+            },
+            "status": "running",
+            "max_steps": 10000,
+            "wallet": wallet,
+            "etherscan": f"https://sepolia.etherscan.io/address/{wallet}"
+        }
+    }
+

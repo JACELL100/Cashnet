@@ -11,7 +11,8 @@ from config import settings
 # Import routers
 from agents.router import router as agents_router
 from agents.scenario_router import router as scenario_router
-from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control
+from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control, blockchain
+from routers.contract_analyzer import router as contract_analyzer_router
 from liquidity_engine.router import router as liquidity_engine_router
 from liquidity_engine.ml_router import router as ml_risk_router
 from agents.ml_router import router as agent_intel_router
@@ -39,6 +40,7 @@ app.add_middleware(
 app.include_router(auth.router)          # Firebase/Google SSO → /auth/*
 app.include_router(wallet_auth.router)   # Wallet/MetaMask auth → /api/auth/*
 app.include_router(system_control.router) # System pause/unpause → /system/*
+app.include_router(blockchain.router)    # Blockchain transactions → /blockchain/*
 app.include_router(api_adapter.router)   # Frontend API adapter → /api/*
 app.include_router(participants.router)
 app.include_router(pool.router)
@@ -50,6 +52,7 @@ app.include_router(scenario_router)
 app.include_router(liquidity_engine_router)
 app.include_router(ml_risk_router)
 app.include_router(agent_intel_router)
+app.include_router(contract_analyzer_router)
 
 
 @app.on_event("startup")

@@ -117,7 +117,7 @@ class BlockchainService:
         # Build transaction
         transaction = function(*args).build_transaction({
             'from': self.account.address,
-            'nonce': self.w3.eth.get_transaction_count(self.account.address),
+            'nonce': self.w3.eth.get_transaction_count(self.account.address, "pending"),
             'gas': 2000000,
             'gasPrice': self.w3.eth.gas_price,
             'value': value
@@ -130,10 +130,32 @@ class BlockchainService:
         )
         
         # Send transaction
-        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         
         # Wait for receipt
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        
+        return receipt['transactionHash'].hex()
+    
+    def send_raw_transaction_dict(self, transaction_dict: Dict) -> str:
+        """
+        Sign and send a pre-built transaction dictionary.
+        Returns transaction hash.
+        """
+        if not self.account:
+            raise ValueError("No account configured")
+        
+        # Sign the transaction
+        signed_txn = self.w3.eth.account.sign_transaction(
+            transaction_dict,
+            private_key=self.account.key
+        )
+        
+        # Send the raw transaction
+        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        
+        # Wait for receipt
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         
         return receipt['transactionHash'].hex()
     
