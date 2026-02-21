@@ -11,6 +11,9 @@ from config import settings
 # Import routers
 from agents.router import router as agents_router
 from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth
+from liquidity_engine.router import router as liquidity_engine_router
+from liquidity_engine.ml_router import router as ml_risk_router
+from agents.ml_router import router as agent_intel_router
 
 
 # Create FastAPI app
@@ -41,6 +44,9 @@ app.include_router(lending.router)
 app.include_router(alerts.router)
 app.include_router(simulations.router)
 app.include_router(agents_router)
+app.include_router(liquidity_engine_router)
+app.include_router(ml_risk_router)
+app.include_router(agent_intel_router)
 
 
 @app.on_event("startup")
@@ -65,6 +71,23 @@ async def startup_event():
     except Exception as e:
         print(f"⚠️  Blockchain connection error: {e}")
     
+    # Pre-load / train the combined ML risk model
+    try:
+        import asyncio
+        from liquidity_engine.ml_model import get_model as get_liquidity_model
+        await asyncio.get_event_loop().run_in_executor(None, get_liquidity_model)
+        print("✅ DotlocalRiskModel ready")
+    except Exception as e:
+        print(f"⚠️  Liquidity ML model init failed: {e}")
+
+    # Pre-load / train the agent intelligence ML model
+    try:
+        from agents.ml_model import get_model as get_agent_model
+        await asyncio.get_event_loop().run_in_executor(None, get_agent_model)
+        print("✅ DotlocalAgentIntelModel ready")
+    except Exception as e:
+        print(f"⚠️  Agent ML model init failed: {e}")
+
     print(f"🌐 API running at http://{settings.api_host}:{settings.api_port}")
     print(f"📚 Docs available at http://{settings.api_host}:{settings.api_port}/docs")
 
