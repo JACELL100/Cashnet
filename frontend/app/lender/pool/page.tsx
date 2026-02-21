@@ -303,18 +303,18 @@ export default function LiquidityPoolPage() {
           <h1 className="text-2xl font-bold font-mono text-text-primary flex items-center gap-2">
             Liquidity Pool
             <span className="text-xs font-normal font-mono px-2 py-0.5 rounded bg-[rgba(0,212,255,0.12)] text-[#00d4ff] border border-[rgba(0,212,255,0.3)]">
-              &#x26D3; Sepolia
+              ⛓ Sepolia
             </span>
           </h1>
           <p className="text-xs text-text-tertiary font-mono mt-1">
-            PAL/BAD &middot; Constant Product AMM &middot; 0.3% fee
+            PAL/BAD · Constant Product AMM · 0.3% fee
             {pool?.contract_address && (
               <a
                 href={`${SEPOLIA}/address/${pool.contract_address}`}
                 target="_blank" rel="noreferrer"
                 className="ml-3 text-[#b367ff] hover:underline"
               >
-                {pool.contract_address.slice(0, 10)}&hellip;{pool.contract_address.slice(-6)} &uarr;
+                {pool.contract_address.slice(0, 10)}…{pool.contract_address.slice(-6)} ↑
               </a>
             )}
           </p>
@@ -338,7 +338,7 @@ export default function LiquidityPoolPage() {
       {/* Backend offline banner */}
       {error && (
         <div className="rounded-lg border border-[#ff3860] bg-[rgba(255,56,96,0.08)] px-4 py-3 text-xs font-mono text-[#ff3860]">
-          &#9888; {error}
+          ⚠ {error}
         </div>
       )}
 
@@ -369,7 +369,7 @@ export default function LiquidityPoolPage() {
           {/* Add Liquidity */}
           <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
             <h2 className="text-sm font-mono font-bold text-text-primary mb-4 flex items-center gap-2">
-              <span className="text-[#22c55e]">&#x2295;</span> Add Liquidity
+              <span className="text-[#22c55e]">⊕</span> Add Liquidity
             </h2>
             <div className="space-y-3">
               <div>
@@ -391,14 +391,14 @@ export default function LiquidityPoolPage() {
                 />
               </div>
               {!wallet && (
-                <p className="text-xs font-mono text-[#f0a500]">&#9888; Connect wallet to transact</p>
+                <p className="text-xs font-mono text-[#f0a500]">⚠ Connect wallet to transact</p>
               )}
               <button
                 onClick={handleAddLiquidity}
                 disabled={addLoading || !addAmtA || !addAmtB}
                 className="w-full py-2.5 font-mono text-sm rounded border border-[#22c55e] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {addLoading ? 'Sending tx…' : '&#x2295; Add Liquidity'}
+                {addLoading ? 'Sending tx…' : '⊕ Add Liquidity'}
               </button>
               {addResult && (
                 <div className={`text-xs font-mono px-3 py-2 rounded border ${
@@ -413,7 +413,7 @@ export default function LiquidityPoolPage() {
           {/* Remove Liquidity */}
           <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
             <h2 className="text-sm font-mono font-bold text-text-primary mb-4 flex items-center gap-2">
-              <span className="text-[#ff3860]">&#x2296;</span> Remove Liquidity
+              <span className="text-[#ff3860]">⊖</span> Remove Liquidity
             </h2>
             <div className="space-y-3">
               <div>
@@ -427,18 +427,18 @@ export default function LiquidityPoolPage() {
               </div>
               {pool && (
                 <div className="text-xs font-mono text-text-tertiary">
-                  Your LP balance: {balances ? fmtToken(balances.lp_balance) : '—'} &nbsp;|&nbsp; Total supply: {fmtToken(pool.total_lp_supply)}
+                  Your LP balance: {balances ? fmtToken(balances.lp_balance) : '—'} | Total supply: {fmtToken(pool.total_lp_supply)}
                 </div>
               )}
               {!wallet && (
-                <p className="text-xs font-mono text-[#f0a500]">&#9888; Connect wallet to transact</p>
+                <p className="text-xs font-mono text-[#f0a500]">⚠ Connect wallet to transact</p>
               )}
               <button
                 onClick={handleRemoveLiquidity}
                 disabled={removeLoading || !removeShares}
                 className="w-full py-2.5 font-mono text-sm rounded border border-[#ff3860] text-[#ff3860] hover:bg-[rgba(255,56,96,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {removeLoading ? 'Sending tx…' : '&#x2296; Remove Liquidity'}
+                {removeLoading ? 'Sending tx…' : '⊖ Remove Liquidity'}
               </button>
               {removeResult && (
                 <div className={`text-xs font-mono px-3 py-2 rounded border ${
@@ -457,7 +457,7 @@ export default function LiquidityPoolPage() {
           {/* Swap */}
           <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
             <h2 className="text-sm font-mono font-bold text-text-primary mb-4 flex items-center gap-2">
-              <span className="text-[#00d4ff]">&#x21C4;</span> Swap
+              <span className="text-[#00d4ff]">⇄</span> Swap
             </h2>
             <div className="space-y-3">
               <div className="flex gap-2">
@@ -469,7 +469,7 @@ export default function LiquidityPoolPage() {
                       : 'border-[color:var(--color-border)] text-text-tertiary'
                   }`}
                 >
-                  PAL &rarr; BAD
+                  PAL → BAD
                 </button>
                 <button
                   onClick={() => setSwapDir('BAD_to_PAL')}
@@ -479,7 +479,7 @@ export default function LiquidityPoolPage() {
                       : 'border-[color:var(--color-border)] text-text-tertiary'
                   }`}
                 >
-                  BAD &rarr; PAL
+                  BAD → PAL
                 </button>
               </div>
               <div>
@@ -492,14 +492,14 @@ export default function LiquidityPoolPage() {
                 />
               </div>
               {!wallet && (
-                <p className="text-xs font-mono text-[#f0a500]">&#9888; Connect wallet to transact</p>
+                <p className="text-xs font-mono text-[#f0a500]">⚠ Connect wallet to transact</p>
               )}
               <button
                 onClick={handleSwap}
                 disabled={swapLoading || !swapAmount}
                 className="w-full py-2.5 font-mono text-sm rounded border border-[#00d4ff] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {swapLoading ? 'Sending tx…' : `&#x21C4; Swap ${inLabel} \u2192 ${outLabel}`}
+                {swapLoading ? 'Sending tx…' : `⇄ Swap ${inLabel} → ${outLabel}`}
               </button>
               {swapResult && (
                 <div className="bg-[color:var(--color-bg-primary)] border border-[#00d4ff] rounded p-3 space-y-1.5">
@@ -519,14 +519,14 @@ export default function LiquidityPoolPage() {
                       className="text-[#b367ff] hover:underline"
                       title={swapResult.txHash}
                     >
-                      {swapResult.txHash.slice(0, 18)}&hellip;
+                      {swapResult.txHash.slice(0, 18)}…
                     </a>
                   </div>
                 </div>
               )}
               {swapError && (
                 <div className="text-xs font-mono px-3 py-2 rounded border border-[#ff3860] text-[#ff3860] bg-[rgba(255,56,96,0.08)]">
-                  &#x2717; {swapError}
+                  ✗ {swapError}
                 </div>
               )}
             </div>
@@ -535,7 +535,7 @@ export default function LiquidityPoolPage() {
           {/* Slippage Curve */}
           <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
             <h2 className="text-sm font-mono font-bold text-text-primary mb-1">Slippage Curve</h2>
-            <p className="text-xs font-mono text-text-tertiary mb-4">Slippage vs. trade size (PAL &rarr; BAD)</p>
+            <p className="text-xs font-mono text-text-tertiary mb-4">Slippage vs. trade size (PAL → BAD)</p>
             <div className="h-28 flex items-end gap-0.5">
               {slippage.map((p, i) => {
                 const h = Math.min(100, (p.slippage_pct / maxSlippage) * 100);
@@ -567,7 +567,7 @@ export default function LiquidityPoolPage() {
           {/* Depth Chart */}
           <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
             <h2 className="text-sm font-mono font-bold text-text-primary mb-1">Depth Chart</h2>
-            <p className="text-xs font-mono text-text-tertiary mb-4">Cumulative bid/ask liquidity &plusmn;10% price</p>
+            <p className="text-xs font-mono text-text-tertiary mb-4">Cumulative bid/ask liquidity ±10% price</p>
             <div className="h-28 flex items-end gap-0.5">
               {[...depth.bids].reverse().map((d, i) => (
                 <div
@@ -593,16 +593,16 @@ export default function LiquidityPoolPage() {
               )}
             </div>
             <div className="flex justify-between text-xs font-mono mt-2">
-              <span className="text-[#22c55e]">&larr; Bids</span>
+              <span className="text-[#22c55e]">← Bids</span>
               <span className="text-text-tertiary">Spot</span>
-              <span className="text-[#ff3860]">Asks &rarr;</span>
+              <span className="text-[#ff3860]">Asks →</span>
             </div>
           </div>
 
           {/* Stress Test */}
           <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
             <h2 className="text-sm font-mono font-bold text-text-primary mb-4 flex items-center gap-2">
-              <span className="text-[#f0a500]">&#x26A1;</span> Stress Test
+              <span className="text-[#f0a500]">⚡</span> Stress Test
             </h2>
             <div className="space-y-3">
               <div>
@@ -624,7 +624,7 @@ export default function LiquidityPoolPage() {
                 disabled={stressLoading}
                 className="w-full py-2.5 font-mono text-sm rounded border border-[#f0a500] text-[#f0a500] hover:bg-[rgba(240,165,0,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {stressLoading ? 'Running…' : '&#x26A1; Run Stress Test'}
+                {stressLoading ? 'Running…' : '⚡ Run Stress Test'}
               </button>
               {stressResult && (
                 <div className="space-y-1.5 pt-1">
@@ -702,7 +702,7 @@ export default function LiquidityPoolPage() {
                       className="text-[#b367ff] hover:underline"
                       title={tx.hash}
                     >
-                      {tx.hash.slice(0, 16)}&hellip;
+                      {tx.hash.slice(0, 16)}…
                     </a>
                   </td>
                 </tr>
