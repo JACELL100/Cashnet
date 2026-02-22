@@ -37,9 +37,9 @@ class _SystemControlPageState extends State<SystemControlPage> {
 
   Future<void> _fetchStatus() async {
     try {
-      final url = '${AuthService.apiBaseUrl}/api/system/status';
+      final url = '${AuthService.apiBaseUrl}/system/status';
       print('📡 [SYSTEM] API CALL: GET $url');
-      
+
       final response = await http
           .get(
             Uri.parse(url),
@@ -47,18 +47,20 @@ class _SystemControlPageState extends State<SystemControlPage> {
           .timeout(const Duration(seconds: 5));
 
       print('📥 [SYSTEM] RESPONSE: Status ${response.statusCode}');
-      
+
       if (response.statusCode == 200 && mounted) {
         final data = jsonDecode(response.body);
-        print('✅ [SYSTEM] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'Raw data'}');
+        print(
+            '✅ [SYSTEM] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'Raw data'}');
         print('📊 [SYSTEM] Content: $data');
-        
+
         setState(() {
           _systemStatus = data['data'] ?? data;
           _isLoading = false;
         });
       } else {
-        print('⚠️ [SYSTEM] API returned ${response.statusCode}, using mock data');
+        print(
+            '⚠️ [SYSTEM] API returned ${response.statusCode}, using mock data');
         _loadMockData();
       }
     } catch (e) {
@@ -86,15 +88,15 @@ class _SystemControlPageState extends State<SystemControlPage> {
   Future<void> _pauseSystem() async {
     setState(() => _isProcessing = true);
     try {
-      final url = '${AuthService.apiBaseUrl}/api/system/pause';
+      final url = '${AuthService.apiBaseUrl}/system/pause';
       print('📡 [SYSTEM] POST $url');
-      
+
       final response = await http.post(
         Uri.parse(url),
       );
 
       print('📥 [SYSTEM] Pause response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         print('✅ [SYSTEM] Paused successfully');
         _showSnackBar('System paused successfully', Colors.orange);
@@ -114,15 +116,15 @@ class _SystemControlPageState extends State<SystemControlPage> {
   Future<void> _unpauseSystem() async {
     setState(() => _isProcessing = true);
     try {
-      final url = '${AuthService.apiBaseUrl}/api/system/unpause';
+      final url = '${AuthService.apiBaseUrl}/system/unpause';
       print('📡 [SYSTEM] POST $url');
-      
+
       final response = await http.post(
         Uri.parse(url),
       );
 
       print('📥 [SYSTEM] Unpause response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         print('✅ [SYSTEM] Resumed successfully');
         _showSnackBar('System resumed successfully', Colors.green);

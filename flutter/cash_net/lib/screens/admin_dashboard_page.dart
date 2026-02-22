@@ -36,7 +36,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     try {
       final url = '${AuthService.apiBaseUrl}/api/admin/dashboard';
       print('📡 API CALL: GET $url');
-      
+
       final response = await http
           .get(
             Uri.parse(url),
@@ -44,12 +44,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
           .timeout(const Duration(seconds: 5));
 
       print('📥 RESPONSE: Status ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('✅ DATA LOADED: ${data.keys.join(', ')}');
         print('📊 Content: $data');
-        
+
         setState(() {
           _dashboardData = data;
           _isLoading = false;
@@ -669,25 +669,23 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 itemBuilder: (context, index) {
                   final item = _navItems[index];
                   final isSelected = _selectedIndex == index;
-                  
+
                   return ListTile(
                     leading: Icon(
                       item.icon,
-                      color: isSelected 
+                      color: isSelected
                           ? const Color(0xFFFF3860)
                           : const Color(0xFF64748B),
                     ),
                     title: Text(
                       item.label,
                       style: TextStyle(
-                        color: isSelected 
-                            ? const Color(0xFFFF3860)
-                            : Colors.white,
+                        color:
+                            isSelected ? const Color(0xFFFF3860) : Colors.white,
                         fontFamily: 'monospace',
                         fontSize: 13,
-                        fontWeight: isSelected 
-                            ? FontWeight.bold 
-                            : FontWeight.normal,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                     selected: isSelected,
