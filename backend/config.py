@@ -28,6 +28,14 @@ class Settings(BaseSettings):
 
     # Market Data
     coindesk_api_key: str = os.getenv("COINDESK_API_KEY", "")
+
+    # Email (SMTP) settings for threat alert notifications
+    smtp_host: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user: str = os.getenv("SMTP_USER", "")
+    smtp_password: str = os.getenv("SMTP_PASSWORD", "")
+    smtp_from_name: str = os.getenv("SMTP_FROM_NAME", "CashNet Threat Monitor")
+    alert_email_enabled: bool = os.getenv("ALERT_EMAIL_ENABLED", "true").lower() == "true"
     
     # Contract Addresses
     access_control_address: str = os.getenv("ACCESS_CONTROL_ADDRESS", "")
