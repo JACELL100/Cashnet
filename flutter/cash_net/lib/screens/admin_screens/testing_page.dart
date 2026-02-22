@@ -112,16 +112,25 @@ class _TestingPageState extends State<TestingPage> {
     });
 
     try {
+      final url = '${AuthService.apiBaseUrl}/api/testing/run-test';
+      print('📡 [TESTING] POST $url');
+      print('📊 [TESTING] Running test: $testId ($testName)');
+      
       final response = await http
           .post(
-            Uri.parse('${AuthService.apiBaseUrl}/api/testing/run-test'),
+            Uri.parse(url),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({'test_id': testId}),
           )
           .timeout(const Duration(seconds: 10));
 
+      print('📥 [TESTING] Response: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('✅ [TESTING] Test passed: ${data['message'] ?? 'Success'}');
+        print('📊 [TESTING] Data: ${data['data']}');
+        
         setState(() {
           final index = _results.indexWhere(
               (r) => r.name == testName && r.status == TestStatus.pending);
@@ -136,6 +145,7 @@ class _TestingPageState extends State<TestingPage> {
           }
         });
       } else {
+        print('⚠️ [TESTING] Test failed with ${response.statusCode}');
         setState(() {
           final index = _results.indexWhere(
               (r) => r.name == testName && r.status == TestStatus.pending);
