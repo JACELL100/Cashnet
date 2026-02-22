@@ -111,35 +111,56 @@ class _StressTestPageState extends State<StressTestPage> {
     });
 
     try {
-      final url = '${AuthService.apiBaseUrl}/api/testing/stress-test';
+      // Map test IDs to backend attack types
+      final attackTypeMap = {
+        'withdrawal': 'liquidity_poisoning',
+        'price_crash': 'oracle_manipulation',
+        'bank_run': 'flash_loan_exploit',
+        'flash_loan_exploit': 'flash_loan_exploit',
+        'sandwich_mega': 'sandwich_mega',
+        'oracle_manipulation': 'oracle_manipulation',
+        'wash_trading': 'wash_trading',
+        'liquidity_poisoning': 'liquidity_poisoning',
+      };
+
+      final attackType = attackTypeMap[testId] ?? testId;
+
+      final url = '${AuthService.apiBaseUrl}/api/threats/simulate';
       print('📡 [STRESS_TEST] POST $url');
-      print('📊 [STRESS_TEST] Running test: $testId with severity: $severity');
-      
+      print(
+          '📊 [STRESS_TEST] Running test: $testId (mapped to: $attackType) with severity: $severity');
+
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'test_type': testId,
-          'severity': severity,
+          'attack_type': attackType,
+          'params': {
+            'severity': severity,
+            'intensity': severity / 100.0,
+          },
         }),
       );
 
       print('📥 [STRESS_TEST] Response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('✅ [STRESS_TEST] Completed successfully');
         print('📊 [STRESS_TEST] Result: $data');
-        
+
         setState(() {
           _testResult = data['data'] ?? data;
         });
         _showSnackBar('Stress test completed!', Colors.green);
       } else {
         print('⚠️ [STRESS_TEST] Failed with ${response.statusCode}');
-        _showSnackBar('Test failed', Colors.red);
+        final errorBody = response.body;
+        print('📄 [STRESS_TEST] Error body: $errorBody');
+        _showSnackBar('Test failed: ${response.statusCode}', Colors.red);
       }
     } catch (e) {
+      print('❌ [STRESS_TEST] Error: $e');
       _showSnackBar('Error: $e', Colors.red);
     } finally {
       setState(() => _runningTest = null);

@@ -24,9 +24,9 @@ class _ParticipantsPageState extends State<ParticipantsPage> {
     setState(() => _isLoading = true);
 
     try {
-      final url = '${AuthService.apiBaseUrl}/api/participants';
+      final url = '${AuthService.apiBaseUrl}/participants';
       print('📡 [PARTICIPANTS] API CALL: GET $url');
-      
+
       final response = await http
           .get(
             Uri.parse(url),
@@ -37,9 +37,10 @@ class _ParticipantsPageState extends State<ParticipantsPage> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('✅ [PARTICIPANTS] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'List with ${(data is List ? data.length : 0)} items'}');
+        print(
+            '✅ [PARTICIPANTS] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'List with ${(data is List ? data.length : 0)} items'}');
         print('📊 [PARTICIPANTS] Content: $data');
-        
+
         setState(() {
           _participants = (data is Map && data.containsKey('data'))
               ? data['data']
@@ -47,7 +48,8 @@ class _ParticipantsPageState extends State<ParticipantsPage> {
           _isLoading = false;
         });
       } else {
-        print('⚠️ [PARTICIPANTS] API returned ${response.statusCode}, using mock data');
+        print(
+            '⚠️ [PARTICIPANTS] API returned ${response.statusCode}, using mock data');
         _loadMockData();
       }
     } catch (e) {

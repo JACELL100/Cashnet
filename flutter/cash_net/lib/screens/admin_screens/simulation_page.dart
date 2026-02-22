@@ -43,8 +43,9 @@ class _SimulationPageState extends State<SimulationPage> {
 
   Future<void> _fetchData() async {
     try {
-      print('📡 [SIMULATION] API CALLS: Fetching status, agents, activity, scenarios');
-      
+      print(
+          '📡 [SIMULATION] API CALLS: Fetching status, agents, activity, scenarios');
+
       final responses = await Future.wait([
         http.get(Uri.parse('${AuthService.apiBaseUrl}/api/simulation/status')),
         http.get(Uri.parse('${AuthService.apiBaseUrl}/api/agents')),
@@ -54,7 +55,8 @@ class _SimulationPageState extends State<SimulationPage> {
             Uri.parse('${AuthService.apiBaseUrl}/api/scenarios/available')),
       ]);
 
-      print('📥 [SIMULATION] RESPONSES: [${responses[0].statusCode}, ${responses[1].statusCode}, ${responses[2].statusCode}, ${responses[3].statusCode}]');
+      print(
+          '📥 [SIMULATION] RESPONSES: [${responses[0].statusCode}, ${responses[1].statusCode}, ${responses[2].statusCode}, ${responses[3].statusCode}]');
 
       if (mounted) {
         setState(() {
@@ -71,12 +73,14 @@ class _SimulationPageState extends State<SimulationPage> {
           if (responses[2].statusCode == 200) {
             final data = jsonDecode(responses[2].body);
             _activityFeed = data['data'] ?? data ?? [];
-            print('✅ [SIMULATION] Activity feed loaded: ${_activityFeed.length} items');
+            print(
+                '✅ [SIMULATION] Activity feed loaded: ${_activityFeed.length} items');
           }
           if (responses[3].statusCode == 200) {
             final data = jsonDecode(responses[3].body);
             _scenarios = data is List ? data : [];
-            print('✅ [SIMULATION] Scenarios loaded: ${_scenarios.length} items');
+            print(
+                '✅ [SIMULATION] Scenarios loaded: ${_scenarios.length} items');
           }
           _isLoading = false;
         });
@@ -94,8 +98,9 @@ class _SimulationPageState extends State<SimulationPage> {
     try {
       final url = '${AuthService.apiBaseUrl}/api/simulation/start';
       print('📡 [SIMULATION] POST $url');
-      print('📊 [SIMULATION] Params: max_steps=$_maxSteps, tick_delay=$_tickDelay');
-      
+      print(
+          '📊 [SIMULATION] Params: max_steps=$_maxSteps, tick_delay=$_tickDelay');
+
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -106,7 +111,7 @@ class _SimulationPageState extends State<SimulationPage> {
       );
 
       print('📥 [SIMULATION] Start response: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         print('✅ [SIMULATION] Started successfully');
         _showSnackBar('Simulation started', Colors.green);
@@ -126,9 +131,8 @@ class _SimulationPageState extends State<SimulationPage> {
     try {
       final url = '${AuthService.apiBaseUrl}/api/simulation/stop';
       print('📡 [SIMULATION] POST $url');
-      
-      await http
-          .post(Uri.parse(url));
+
+      await http.post(Uri.parse(url));
       print('✅ [SIMULATION] Stopped successfully');
       _showSnackBar('Simulation stopped', Colors.orange);
       await _fetchData();
@@ -141,9 +145,8 @@ class _SimulationPageState extends State<SimulationPage> {
     try {
       final url = '${AuthService.apiBaseUrl}/api/simulation/pause';
       print('📡 [SIMULATION] POST $url');
-      
-      await http
-          .post(Uri.parse(url));
+
+      await http.post(Uri.parse(url));
       print('✅ [SIMULATION] Paused successfully');
       _showSnackBar('Simulation paused', Colors.orange);
       await _fetchData();
@@ -156,9 +159,8 @@ class _SimulationPageState extends State<SimulationPage> {
     try {
       final url = '${AuthService.apiBaseUrl}/api/simulation/resume';
       print('📡 [SIMULATION] POST $url');
-      
-      await http
-          .post(Uri.parse(url));
+
+      await http.post(Uri.parse(url));
       print('✅ [SIMULATION] Resumed successfully');
       _showSnackBar('Simulation resumed', Colors.green);
       await _fetchData();
@@ -169,22 +171,33 @@ class _SimulationPageState extends State<SimulationPage> {
 
   Future<void> _applyScenario(String scenarioType) async {
     try {
-      final url = '${AuthService.apiBaseUrl}/api/scenarios/apply';
+      final url = '${AuthService.apiBaseUrl}/api/scenarios/run';
       print('📡 [SIMULATION] POST $url');
-      print('📊 [SIMULATION] Applying scenario: $scenarioId');
-      
+      print('📊 [SIMULATION] Applying scenario: $scenarioType');
+
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'scenario_type': scenarioType}),
+        body: jsonEncode({
+          'scenario_type': scenarioType,
+          'intensity': 1.0,
+          'tick_delay': 0.5,
+        }),
       );
 
+      print('📥 [SIMULATION] Scenario response: ${response.statusCode}');
+
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('✅ [SIMULATION] Scenario started with job_id: ${data['job_id']}');
         _showSnackBar('Scenario applied: $scenarioType', Colors.blue);
       } else {
+        print('⚠️ [SIMULATION] Failed with ${response.statusCode}');
+        print('📄 [SIMULATION] Error body: ${response.body}');
         _showSnackBar('Failed to apply scenario', Colors.red);
       }
     } catch (e) {
+      print('❌ [SIMULATION] Error: $e');
       _showSnackBar('Error: $e', Colors.red);
     }
   }

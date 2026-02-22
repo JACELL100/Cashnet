@@ -26,7 +26,7 @@ class _AgentsPageState extends State<AgentsPage> {
     try {
       final url = '${AuthService.apiBaseUrl}/api/agents';
       print('📡 [AGENTS] API CALL: GET $url');
-      
+
       final response = await http
           .get(
             Uri.parse(url),
@@ -34,12 +34,13 @@ class _AgentsPageState extends State<AgentsPage> {
           .timeout(const Duration(seconds: 5));
 
       print('📥 [AGENTS] RESPONSE: Status ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('✅ [AGENTS] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'List with ${(data is List ? data.length : 0)} items'}');
+        print(
+            '✅ [AGENTS] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'List with ${(data is List ? data.length : 0)} items'}');
         print('📊 [AGENTS] Content: $data');
-        
+
         setState(() {
           _agents = (data is Map && data.containsKey('data'))
               ? data['data']
@@ -47,7 +48,8 @@ class _AgentsPageState extends State<AgentsPage> {
           _isLoading = false;
         });
       } else {
-        print('⚠️ [AGENTS] API returned ${response.statusCode}, using mock data');
+        print(
+            '⚠️ [AGENTS] API returned ${response.statusCode}, using mock data');
         _loadMockData();
       }
     } catch (e) {
