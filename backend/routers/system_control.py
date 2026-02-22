@@ -4,14 +4,16 @@ System Control Router - Admin functions for pause/unpause and emergency controls
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from datetime import datetime
 import json
 from pathlib import Path
 
 from database import get_db
-from models import AdminAuditor, AdminAuditorRoleEnum
+from models import AdminAuditor, AdminAuditorRoleEnum, LogCategoryEnum
 from blockchain_service import blockchain_service
 from config import settings
 from routers.auth import get_current_admin_or_auditor
+from logging_utils import log_success, log_error, log_warn, log_info
 
 router = APIRouter(prefix="/system", tags=["system-control"])
 
@@ -99,6 +101,11 @@ async def pause_system(
         # Check if already paused
         is_paused = blockchain_service.call_contract_function("AccessControl", "paused")
         if is_paused:
+            log_info(
+                LogCategoryEnum.SYSTEM,
+                "System Control",
+                f"Pause request received but system already paused (admin: {current_user.email})"
+            )
             return PauseResponse(
                 success=True,
                 message="System is already paused",
@@ -106,21 +113,50 @@ async def pause_system(
             )
         
         # Send pause transaction
+        log_warn(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"⏸ EMERGENCY PAUSE initiated by admin: {current_user.email}",
+            metadata={"admin_id": current_user.id, "admin_email": current_user.email}
+        )
+        
         tx_hash = blockchain_service.send_transaction(
             "AccessControl",
             "pauseAll"
         )
         
+        log_success(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"✅ System PAUSED successfully - All blockchain operations frozen",
+            metadata={
+                "tx_hash": tx_hash,
+                "admin_id": current_user.id,
+                "admin_email": current_user.email,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+        
         return PauseResponse(
             success=True,
-            message="System paused successfully. All operations are now frozen.",
+            message="System paused successfully. All blockchain operations are now frozen.",
             tx_hash=tx_hash,
             paused=True
         )
     except Exception as e:
+        log_error(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"❌ Failed to pause system: {str(e)}",
+            metadata={"admin_email": current_user.email, "error": str(e)}
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to pause system: {str(e)}"
+            detail={
+                "error": "PAUSE_FAILED",
+                "message": f"Failed to pause system: {str(e)}",
+                "suggestion": "Check blockchain connection and try again."
+            }
         )
 
 
@@ -150,6 +186,11 @@ async def unpause_system(
         # Check if already unpaused
         is_paused = blockchain_service.call_contract_function("AccessControl", "paused")
         if not is_paused:
+            log_info(
+                LogCategoryEnum.SYSTEM,
+                "System Control",
+                f"Unpause request received but system already active (admin: {current_user.email})"
+            )
             return PauseResponse(
                 success=True,
                 message="System is already active",
@@ -157,19 +198,48 @@ async def unpause_system(
             )
         
         # Send unpause transaction
+        log_info(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"▶ SYSTEM RESUME initiated by admin: {current_user.email}",
+            metadata={"admin_id": current_user.id, "admin_email": current_user.email}
+        )
+        
         tx_hash = blockchain_service.send_transaction(
             "AccessControl",
             "unpauseAll"
         )
         
+        log_success(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"✅ System RESUMED successfully - All blockchain operations restored",
+            metadata={
+                "tx_hash": tx_hash,
+                "admin_id": current_user.id,
+                "admin_email": current_user.email,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+        
         return PauseResponse(
             success=True,
-            message="System resumed successfully. All operations are now active.",
+            message="System resumed successfully. All blockchain operations are now active.",
             tx_hash=tx_hash,
             paused=False
         )
     except Exception as e:
+        log_error(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"❌ Failed to unpause system: {str(e)}",
+            metadata={"admin_email": current_user.email, "error": str(e)}
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to unpause system: {str(e)}"
+            detail={
+                "error": "UNPAUSE_FAILED",
+                "message": f"Failed to unpause system: {str(e)}",
+                "suggestion": "Check blockchain connection and try again."
+            }
         )

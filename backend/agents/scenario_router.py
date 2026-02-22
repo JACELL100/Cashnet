@@ -279,6 +279,7 @@ async def _continuous_swap_attack():
     global _attack_running
     
     swap_count = 0
+    consecutive_errors = 0
     direction = "PALLADIUM_TO_BADASSIUM"  # Start direction
     
     print("\n🔥 Starting continuous swap attack...")
@@ -288,11 +289,16 @@ async def _continuous_swap_attack():
     
     try:
         while _attack_running and simulation_runner.status == "running":
+            # Check stop flag at the start of each iteration
+            if not _attack_running:
+                print("\n🛑 Attack stopped by user (loop check)")
+                break
+                
             try:
                 # Check if blockchain integrator is still available
                 if not simulation_runner.blockchain_integrator:
                     print("⚠️  Blockchain integrator not available, waiting...")
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(1)
                     continue
                 
                 # Alternate swap direction
@@ -306,7 +312,11 @@ async def _continuous_swap_attack():
                     )
                     if tx_hash:
                         swap_count += 1
+                        consecutive_errors = 0  # Reset error counter on success
                         print(f"   ✅ Swap #{swap_count}: PALLADIUM → BADASSIUM | TX: {tx_hash[:16]}...")
+                    else:
+                        consecutive_errors += 1
+                        print(f"   ⚠️  Swap failed (no tx hash returned)")
                     
                     # Also execute in pool simulation
                     try:
@@ -326,7 +336,11 @@ async def _continuous_swap_attack():
                     )
                     if tx_hash:
                         swap_count += 1
+                        consecutive_errors = 0  # Reset error counter on success
                         print(f"   ✅ Swap #{swap_count}: BADASSIUM → PALLADIUM | TX: {tx_hash[:16]}...")
+                    else:
+                        consecutive_errors += 1
+                        print(f"   ⚠️  Swap failed (no tx hash returned)")
                     
                     # Also execute in pool simulation
                     try:
@@ -336,16 +350,39 @@ async def _continuous_swap_attack():
                     
                     direction = "PALLADIUM_TO_BADASSIUM"
                 
-                # Small delay between swaps to avoid network congestion
-                await asyncio.sleep(3)
+                # Stop if too many consecutive errors
+                if consecutive_errors >= 5:
+                    print(f"\n❌ Stopping attack due to {consecutive_errors} consecutive errors")
+                    _attack_running = False
+                    break
+                
+                # Delay between swaps (longer if errors occurred)
+                # Check stop flag every 0.5 seconds during delay
+                delay = 5 if consecutive_errors > 0 else 3
+                for _ in range(int(delay * 2)):
+                    if not _attack_running:
+                        print("\n🛑 Attack stopped during delay")
+                        break
+                    await asyncio.sleep(0.5)
                 
             except asyncio.CancelledError:
                 print("\n🛑 Attack cancelled by user")
                 raise
             except Exception as e:
-                print(f"⚠️  Swap error (will retry): {e}")
-                import traceback
-                traceback.print_exc()
+                consecutive_errors += 1
+                print(f"⚠️  Swap error #{consecutive_errors} (will retry): {e}")
+                
+                # Only print full traceback for first few errors
+                if consecutive_errors <= 2:
+                    import traceback
+                    traceback.print_exc()
+                
+                # Stop if too many consecutive errors
+                if consecutive_errors >= 5:
+                    print(f"\n❌ Stopping attack due to {consecutive_errors} consecutive errors")
+                    _attack_running = False
+                    break
+                    
                 await asyncio.sleep(5)  # Longer delay on error, then continue
                 
     except asyncio.CancelledError:
@@ -353,6 +390,20 @@ async def _continuous_swap_attack():
     finally:
         _attack_running = False
         print(f"\n🛑 Continuous attack stopped. Total swaps executed: {swap_count}")
+
+
+@router.get("/attack-status")
+async def get_attack_status():
+    """Get current attack status."""
+    global _attack_running, _continuous_attack_task
+    
+    is_running = _attack_running and (_continuous_attack_task is not None and not _continuous_attack_task.done())
+    
+    return {
+        "attack_running": is_running,
+        "task_exists": _continuous_attack_task is not None,
+        "task_done": _continuous_attack_task.done() if _continuous_attack_task else True,
+    }
 
 
 @router.post("/demo-attack")
@@ -409,6 +460,7 @@ async def run_demo_attack():
     
     return {
         "success": True,
+        "attack_running": True,
         "message": "Continuous attack started! Swaps will execute until you press STOP.",
         "data": {
             "attack_name": "Continuous On-Chain Swap Attack",
@@ -419,7 +471,53 @@ async def run_demo_attack():
             "status": "running",
             "max_steps": 10000,
             "wallet": wallet,
-            "etherscan": f"https://sepolia.etherscan.io/address/{wallet}"
+            "etherscan": f"https://sepolia.etherscan.io/address/{wallet}",
+            "etherscan_wallet": f"https://sepolia.etherscan.io/address/{wallet}"
         }
+    }
+
+
+@router.post("/stop-attack")
+async def stop_attack():
+    """Stop the ongoing continuous attack."""
+    global _continuous_attack_task, _attack_running
+    
+    print(f"\n🛑 Stop attack requested. Current state: _attack_running={_attack_running}")
+    
+    if not _attack_running and (not _continuous_attack_task or _continuous_attack_task.done()):
+        print("   ℹ️  No attack running")
+        return {
+            "success": True,
+            "message": "No attack is currently running.",
+            "attack_running": False
+        }
+    
+    # Stop the attack immediately
+    _attack_running = False
+    print("   ✅ Set _attack_running = False")
+    
+    # Cancel the task if it exists and wait for it to finish
+    if _continuous_attack_task and not _continuous_attack_task.done():
+        print("   🛑 Cancelling attack task...")
+        _continuous_attack_task.cancel()
+        try:
+            await asyncio.wait_for(_continuous_attack_task, timeout=5.0)
+            print("   ✅ Attack task completed")
+        except asyncio.CancelledError:
+            print("   ✅ Attack task cancelled successfully")
+        except asyncio.TimeoutError:
+            print("   ⚠️  Attack task cancellation timed out (forcing stop)")
+        except Exception as e:
+            print(f"   ⚠️  Error during attack task cancellation: {e}")
+    
+    # Give a moment for any pending transactions to finish
+    await asyncio.sleep(0.5)
+    
+    print("   ✅ Attack stopped by user")
+    
+    return {
+        "success": True,
+        "message": "Attack stopped successfully.",
+        "attack_running": False
     }
 

@@ -8,29 +8,13 @@ from pydantic import BaseModel
 from database import get_db
 from blockchain_service import blockchain_service
 from config import settings
+from middleware import check_system_not_paused
 from web3 import Web3
 import json
 import models
 from pathlib import Path
 
 router = APIRouter(prefix="/pool", tags=["Liquidity Pool"])
-
-
-def check_system_paused():
-    """Check if system is paused and raise exception if it is"""
-    try:
-        if "AccessControl" in blockchain_service.contracts:
-            is_paused = blockchain_service.call_contract_function("AccessControl", "paused")
-            if is_paused:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="System is paused. All operations are currently frozen."
-                )
-    except HTTPException:
-        raise
-    except Exception as e:
-        # If we can't check pause status, allow operation but log warning
-        print(f"Warning: Could not check pause status: {e}")
 
 _ABI_DIR = Path(__file__).parent.parent.parent / "contracts" / "abi"
 
@@ -325,7 +309,7 @@ async def get_transactions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/add-liquidity")
+@router.post("/add-liquidity", dependencies=[Depends(check_system_not_paused)])
 async def add_liquidity(
     request: AddLiquidityRequest,
     db: Session = Depends(get_db),
@@ -335,7 +319,6 @@ async def add_liquidity(
     Flow: approve PAL → approve BAD → addLiquidity(amountA, amountB)
     LP tokens are minted to the operator account by the contract.
     """
-    check_system_paused()
     try:
         pool_address = settings.liquidity_pool_address
         amount_a_wei = _to_wei(request.amount_a)
@@ -365,7 +348,7 @@ async def add_liquidity(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/remove-liquidity")
+@router.post("/remove-liquidity", dependencies=[Depends(check_system_not_paused)])
 async def remove_liquidity(
     request: RemoveLiquidityRequest,
     db: Session = Depends(get_db),
@@ -395,7 +378,7 @@ async def remove_liquidity(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/swap")
+@router.post("/swap", dependencies=[Depends(check_system_not_paused)])
 async def swap_tokens(
     request: SwapRequest,
     db: Session = Depends(get_db),
@@ -404,7 +387,6 @@ async def swap_tokens(
     Swap PAL ↔ BAD via the on-chain constant-product AMM (0.3 % fee).
     Flow: approve token_in → swap(tokenIn, amountIn)
     """
-    check_system_paused()
     try:
         pool         = _pool_contract()
         pool_address = settings.liquidity_pool_address
