@@ -195,7 +195,7 @@ export default function IdentityPage() {
             </form>
 
             {/* Connect Wallet */}
-            <div className="pt-4 border-t border-[color:var(--color-border)]">
+            <div className="pt-4 border-t border-(--color-border)">
               <button className="btn outline w-full text-xs py-2 flex items-center justify-center gap-2">
                 <span>🦊</span>
                 <span>Connect MetaMask</span>
@@ -210,7 +210,7 @@ export default function IdentityPage() {
             </h3>
             <div className="space-y-2 text-xs">
               {ROLES.map((role) => (
-                <div key={role} className="flex items-center justify-between p-2 bg-[color:var(--color-bg-accent)] rounded">
+                <div key={role} className="flex items-center justify-between p-2 bg-(--color-bg-accent) rounded">
                   <span className="font-mono text-text-primary">{role}</span>
                   <div className="flex gap-1">
                     <span className="text-success">✓</span>

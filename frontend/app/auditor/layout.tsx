@@ -31,7 +31,8 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
     if (!hasHydrated) return;
     if (isAuthPage) return;
     if (!isAuthenticated || !user) { router.push('/auditor/login'); return; }
-    if (user.role !== 'AUDITOR') { router.push('/auditor/login'); }
+    // Allow both ADMIN and AUDITOR roles (ADMIN has all privileges)
+    if (user.role !== 'AUDITOR' && user.role !== 'ADMIN') { router.push('/auditor/login'); }
   }, [hasHydrated, isAuthenticated, user, router, isAuthPage]);
 
   if (!hasHydrated) {
@@ -44,7 +45,8 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
 
   if (isAuthPage) return <>{children}</>;
 
-  if (!isAuthenticated || user?.role !== 'AUDITOR') {
+  // Allow both ADMIN and AUDITOR roles (ADMIN has all privileges)
+  if (!isAuthenticated || (user?.role !== 'AUDITOR' && user?.role !== 'ADMIN')) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
         <LoadingHex />

@@ -52,6 +52,12 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // Set authentication token
+  void setToken(String token) {
+    _token = token;
+    notifyListeners();
+  }
+
   Future<bool> loginWithWallet({
     required String walletAddress,
     required String signature,

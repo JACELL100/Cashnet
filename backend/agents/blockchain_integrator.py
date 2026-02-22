@@ -119,8 +119,27 @@ class BlockchainIntegrator:
 
     def _get_contract_address(self, contract_name: str) -> Optional[str]:
         """Get deployed contract address from settings or environment."""
-        env_key = f"{contract_name.upper()}_ADDRESS"
-        address = os.getenv(env_key) or getattr(settings, env_key.lower(), None)
+        # Map contract names to settings attribute names
+        settings_map = {
+            "LendingPool": "lending_pool_address",
+            "LiquidityPool": "liquidity_pool_address",
+            "CreditRegistry": "credit_registry_address",
+            "CollateralVault": "collateral_vault_address",
+            "AccessControl": "access_control_address",
+            "IdentityRegistry": "identity_registry_address",
+        }
+        
+        settings_attr = settings_map.get(contract_name)
+        address = None
+        
+        # Try settings first
+        if settings_attr:
+            address = getattr(settings, settings_attr, None)
+        
+        # Fallback to environment variable
+        if not address:
+            env_key = f"{contract_name.upper()}_ADDRESS"
+            address = os.getenv(env_key)
         
         # Fallback to a mock address for development
         if not address:
@@ -134,6 +153,7 @@ class BlockchainIntegrator:
             }
             return mock_addresses.get(contract_name)
         return address
+
     
     async def _load_token_contracts(self):
         """Load Palladium and Badassium token contracts."""

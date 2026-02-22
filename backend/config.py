@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     # Blockchain
     sepolia_rpc_url: str = os.getenv("SEPOLIA_RPC_URL", "")
     private_key: str = os.getenv("PRIVATE_KEY", "")
+    enable_blockchain_txs: bool = os.getenv("ENABLE_BLOCKCHAIN_TXS", "false").lower() == "true"
+
+    # AI / LLM
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+
+    # Market Data
+    coindesk_api_key: str = os.getenv("COINDESK_API_KEY", "")
     
     # Contract Addresses
     access_control_address: str = os.getenv("ACCESS_CONTROL_ADDRESS", "")

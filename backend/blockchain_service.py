@@ -130,7 +130,7 @@ class BlockchainService:
         )
         
         # Send transaction
-        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
         
         # Wait for receipt
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)

@@ -39,13 +39,32 @@ class AdminAuditorRoleEnum(str, enum.Enum):
     AUDITOR = "AUDITOR"
 
 
+class LogLevelEnum(str, enum.Enum):
+    """System log levels"""
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARN = "WARN"
+    ERROR = "ERROR"
+    SUCCESS = "SUCCESS"
+
+
+class LogCategoryEnum(str, enum.Enum):
+    """System log categories"""
+    TRANSACTION = "TRANSACTION"
+    ALERT = "ALERT"
+    AUTH = "AUTH"
+    SYSTEM = "SYSTEM"
+    API = "API"
+    DATABASE = "DATABASE"
+
+
 class AdminAuditor(Base):
     """Admin and Auditor accounts authenticated via Google SSO"""
     __tablename__ = "adminandauditor"
 
     id = Column(Integer, primary_key=True, index=True)
-    uid = Column(String, unique=True, index=True, nullable=False)  # Google sub (UID)
-    email = Column(String, unique=True, index=True, nullable=False)
+    uid = Column(String, index=True, nullable=False)  # Google sub (UID) - removed unique constraint
+    email = Column(String, index=True, nullable=False)  # Removed unique constraint to allow multiple roles
     name = Column(String, nullable=False)
     picture = Column(String)                                         # Google profile picture
     role = Column(Enum(AdminAuditorRoleEnum), nullable=False)
@@ -123,3 +142,18 @@ class Borrower(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_login = Column(DateTime(timezone=True))
     is_active = Column(Integer, default=1)  # 1 = active, 0 = inactive
+
+
+class SystemLog(Base):
+    """System event logs for monitoring and auditing"""
+    __tablename__ = "system_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    level = Column(Enum(LogLevelEnum), nullable=False, index=True)
+    category = Column(Enum(LogCategoryEnum), nullable=False, index=True)
+    source = Column(String, nullable=False)  # e.g., "Backend API", "Authentication", "Database"
+    message = Column(Text, nullable=False)
+    log_metadata = Column(Text)  # JSON string for additional data (renamed from metadata to avoid SQLAlchemy conflict)
+    user_id = Column(String)  # Optional: wallet address or email
+    request_id = Column(String)  # Optional: for request tracing

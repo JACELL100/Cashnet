@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers import participants, pool, lending, alerts, simulations
 from typing import Dict, Any, Optional
-# simulation_runner removed for L1-only mode
+from agents.simulation_runner import simulation_runner
 from agents.fraud_monitor import FraudMonitor
 
 # Standalone fraud monitor (persists across requests, no simulation loop needed)
@@ -22,34 +22,33 @@ router = APIRouter(prefix="/api", tags=["API Adapter"])
 # ============================================================================
 
 @router.post("/simulation/start")
-async def start_simulation(db: Session = Depends(get_db)):
-    """Mock start to satisfy frontend, we run on L1 now"""
-    return {
-        "success": True,
-        "data": {
-            "id": 1,
-            "status": "running on L1",
-            "message": "Connected to Sepolia"
-        }
-    }
+async def start_simulation(body: Dict[str, Any] = None):
+    """Start the real multi-agent simulation with blockchain integration."""
+    if body is None:
+        body = {}
+    result = await simulation_runner.start(
+        max_steps=body.get("max_steps", 200),
+        tick_delay=body.get("tick_delay", 0.5),
+    )
+    return {"success": True, "data": result}
 
 
 @router.get("/simulation/status")
 async def get_simulation_status():
-    return {
-        "success": True, 
-        "data": {"status": "running", "tick": 0, "agents_count": 0, "transactions": 0, "alerts": 0}
-    }
+    """Get real-time simulation status from the running engine."""
+    return {"success": True, "data": simulation_runner.get_status()}
 
 
 @router.post("/simulation/pause")
 async def pause_simulation():
-    return {"success": True, "data": {"status": "paused"}}
+    result = await simulation_runner.pause()
+    return {"success": True, "data": result}
 
 
 @router.post("/simulation/resume")
 async def resume_simulation():
-    return {"success": True, "data": {"status": "running"}}
+    result = await simulation_runner.resume()
+    return {"success": True, "data": result}
 
 
 @router.post("/simulation/stop")
@@ -97,7 +96,7 @@ async def stop_simulation(db: Session = Depends(get_db)):
 
 @router.get("/simulation/summary")
 async def get_simulation_summary():
-    return {"success": True, "data": {}}
+    return {"success": True, "data": simulation_runner.get_summary()}
 
 
 # ============================================================================
@@ -106,7 +105,11 @@ async def get_simulation_summary():
 
 @router.get("/agents")
 async def list_agents():
-    # Fallback to DB participants
+    """Get all live simulation agents with their real-time stats."""
+    sim_agents = simulation_runner.get_agents()
+    if sim_agents:
+        return {"success": True, "data": sim_agents}
+    # Fallback to DB participants when simulation is idle
     from models import Participant
     from database import SessionLocal
     db = SessionLocal()
@@ -140,31 +143,10 @@ async def update_agent(agent_id: str, data: Dict[str, Any]):
 
 
 @router.get("/agents/activity-feed")
-async def get_activity_feed():
-    """Get recent agent activity"""
-    # Fallback to DB transactions
-    from models import Transaction
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        transactions = db.query(Transaction).order_by(
-            Transaction.timestamp.desc()
-        ).limit(50).all()
-        return {
-            "success": True,
-            "data": [
-                {
-                    "id": str(tx.id),
-                    "wallet": tx.wallet,
-                    "type": tx.type,
-                    "amount": tx.amount,
-                    "timestamp": tx.timestamp.isoformat()
-                }
-                for tx in transactions
-            ]
-        }
-    finally:
-        db.close()
+async def get_activity_feed(limit: int = 50):
+    """Get recent agent activity from live simulation."""
+    feed = simulation_runner.get_activity_feed(limit)
+    return {"success": True, "data": feed}
 
 
 # ============================================================================
@@ -349,21 +331,24 @@ async def trigger_liquidation(user_wallet: str):
 
 @router.get("/threats/scores")
 async def get_threat_scores():
-    """Get threat scores from Python fraud monitor"""
-    scores = _fraud_monitor.get_threat_scores()
-    if scores:
-        return {"success": True, "data": scores}
-    
-    return {
-        "success": True,
-        "data": []
-    }
+    """Get threat scores from the live simulation fraud monitor."""
+    # Prefer simulation_runner's fraud monitor when running
+    if simulation_runner.status == "running":
+        scores = simulation_runner.fraud_monitor.get_threat_scores()
+    else:
+        scores = _fraud_monitor.get_threat_scores()
+    return {"success": True, "data": scores or []}
 
 
 @router.get("/threats/alerts")
 async def get_alerts():
-    """Get threat alerts from fraud monitor + DB"""
-    fraud_alerts = _fraud_monitor.get_alerts(limit=50)
+    """Get threat alerts from the live simulation fraud monitor."""
+    # Prefer simulation_runner's fraud monitor when running
+    if simulation_runner.status == "running":
+        fraud_alerts = simulation_runner.fraud_monitor.get_alerts(limit=50)
+    else:
+        fraud_alerts = _fraud_monitor.get_alerts(limit=50)
+    
     if fraud_alerts:
         return {"success": True, "data": fraud_alerts}
     
@@ -700,24 +685,330 @@ async def get_wallet_balance(address: str):
 
 @router.get("/sim/trade-log")
 async def get_trade_log(limit: int = 100):
-    return {"success": True, "data": []}
+    return {"success": True, "data": simulation_runner.get_trade_log(limit)}
 
 
 @router.get("/sim/activity-feed")
 async def get_sim_activity_feed(limit: int = 50):
-    return {"success": True, "data": []}
+    return {"success": True, "data": simulation_runner.get_activity_feed(limit)}
 
 
 @router.get("/sim/fraud/stats")
 async def get_sim_fraud_stats():
-    return {"success": True, "data": {}}
+    return {"success": True, "data": simulation_runner.fraud_monitor.get_stats()}
 
 
 @router.get("/sim/pool")
 async def get_sim_pool():
-    return {"success": True, "data": {}}
+    return {"success": True, "data": simulation_runner.pool.to_dict()}
 
 
 @router.get("/sim/lending")
 async def get_sim_lending():
-    return {"success": True, "data": {}}
+    data = simulation_runner.lending.to_dict()
+    data["positions"] = [p.to_dict() for p in simulation_runner.lending.positions.values()]
+    return {"success": True, "data": data}
+
+
+@router.get("/sim/market")
+async def get_sim_market():
+    """Get current real market data used by agents (CoinDesk)."""
+    try:
+        await simulation_runner.market_data.fetch_all_prices()
+        return {"success": True, "data": simulation_runner.market_data.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# GROQ AI ENDPOINTS
+# ============================================================================
+
+@router.get("/ai/market-narrative")
+async def get_ai_market_narrative():
+    """Get a Groq LLM market narrative based on live CoinDesk data."""
+    try:
+        prices = await simulation_runner.market_data.fetch_all_prices()
+        btc = prices.get("BTC")
+        eth = prices.get("ETH")
+        mc = simulation_runner.market_data.get_market_condition()
+
+        from agents.groq_advisor import get_market_narrative
+        narrative = await get_market_narrative({
+            "btc_price": btc.price if btc else 0,
+            "eth_price": eth.price if eth else 0,
+            "btc_change_24h": btc.change_pct_24h if btc else 0,
+            "eth_change_24h": eth.change_pct_24h if eth else 0,
+            "sentiment": mc.sentiment,
+            "volatility": mc.volatility,
+            "risk_level": mc.risk_level,
+        })
+        return {"success": True, "data": {"narrative": narrative, "model": "llama-3.3-70b-versatile"}}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/ai/analyze-threat")
+async def ai_analyze_threat():
+    """Use Groq to analyze recent simulation events for attacks."""
+    try:
+        recent_events = simulation_runner.get_activity_feed(20)
+        from agents.groq_advisor import analyze_threat
+        analysis = await analyze_threat(recent_events, simulation_runner.pool.to_dict())
+        return {"success": True, "data": analysis}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/ai/status")
+async def get_ai_status():
+    """Get Groq LLM and CoinDesk API connectivity status."""
+    from agents.groq_advisor import _get_groq_key, _get_groq_model
+    groq_key = _get_groq_key()
+    coindesk_key = simulation_runner.market_data.api_key
+    return {
+        "success": True,
+        "data": {
+            "groq": {
+                "configured": bool(groq_key),
+                "model": _get_groq_model(),
+                "key_suffix": f"...{groq_key[-8:]}" if groq_key else None,
+            },
+            "coindesk": {
+                "configured": bool(coindesk_key),
+                "key_suffix": f"...{coindesk_key[-8:]}" if coindesk_key else None,
+            },
+            "blockchain_txs_enabled": simulation_runner.blockchain_integrator.enable_real_txs
+                if simulation_runner.blockchain_integrator else False,
+        }
+    }
+
+
+# ============================================================================
+# BLOCKCHAIN INTEGRATION ENDPOINTS
+# ============================================================================
+
+@router.get("/blockchain/stats")
+async def get_blockchain_stats():
+    """Get blockchain integration statistics (tx counts, gas used, etc.)."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        return {"success": True, "data": integrator.get_stats()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/tx-history")
+async def get_blockchain_tx_history(limit: int = 50):
+    """Get agent transaction history (both simulated and on-chain)."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        return {"success": True, "data": integrator.get_tx_history(limit)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/tx-by-contract/{contract_name}")
+async def get_txs_by_contract(contract_name: str):
+    """Get transactions filtered by contract (LiquidityPool, LendingPool, etc.)."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        return {"success": True, "data": integrator.get_tx_by_contract(contract_name)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/on-chain-state")
+async def get_on_chain_state():
+    """Query current on-chain state from deployed Sepolia contracts."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        state = await integrator.get_on_chain_state()
+        return {"success": True, "data": state}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/token-balance/{token}/{wallet}")
+async def get_token_balance(token: str, wallet: str):
+    """Get token balance (PALLADIUM or BADASSIUM) for a wallet address."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        balance = await integrator.get_token_balance(token, wallet)
+        return {
+            "success": True,
+            "data": {
+                "token": token.upper(),
+                "wallet": wallet,
+                "balance": balance,
+                "formatted": f"{balance:,.4f}",
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/blockchain/execute-swap")
+async def execute_blockchain_swap(body: Dict[str, Any]):
+    """
+    Execute a REAL on-chain swap via LiquidityPool contract.
+    Requires ENABLE_BLOCKCHAIN_TXS=true in .env.local.
+    Body: { token_in, token_out, amount }
+    """
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        
+        if not integrator.enable_real_txs:
+            return {
+                "success": False,
+                "error": "On-chain transactions disabled. Set ENABLE_BLOCKCHAIN_TXS=true in .env.local"
+            }
+        
+        token_in = body.get("token_in", "PALLADIUM")
+        token_out = body.get("token_out", "BADASSIUM")
+        amount = float(body.get("amount", 0))
+        
+        if amount <= 0:
+            return {"success": False, "error": "Amount must be greater than 0"}
+        
+        # Use the configured wallet from PRIVATE_KEY
+        tx_hash = await integrator.execute_real_swap(
+            agent_wallet=None,  # Will use default from PRIVATE_KEY
+            token_in=token_in,
+            token_out=token_out,
+            amount_in=amount,
+        )
+        
+        if tx_hash:
+            return {
+                "success": True,
+                "data": {
+                    "tx_hash": tx_hash,
+                    "etherscan": f"https://sepolia.etherscan.io/tx/{tx_hash}",
+                    "token_in": token_in,
+                    "token_out": token_out,
+                    "amount": amount,
+                }
+            }
+        else:
+            return {"success": False, "error": "Swap transaction failed"}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/blockchain/record-agent-action")
+async def record_agent_action_on_chain(body: Dict[str, Any]):
+    """
+    Manually record an agent action on blockchain.
+    Body: { action_type, agent_id, data }
+    action_type: swap | liquidate | borrow | flash_loan_attack | scenario_event
+    """
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        action_type = body.get("action_type", "swap")
+        agent_id = body.get("agent_id", "manual")
+        data = body.get("data", {})
+        
+        tx = None
+        if action_type == "swap":
+            tx = await integrator.record_swap(
+                agent_id=agent_id,
+                token_in=data.get("token_in", "PALLADIUM"),
+                amount_in=data.get("amount_in", 0),
+                amount_out=data.get("amount_out", 0),
+                price_impact=data.get("price_impact", 0),
+                execute_on_chain=data.get("execute_on_chain", False),
+            )
+        elif action_type == "liquidate":
+            tx = await integrator.record_liquidation(
+                liquidator_id=agent_id,
+                target_wallet=data.get("target_wallet", "0x0"),
+                debt_covered=data.get("debt_covered", 0),
+                collateral_seized=data.get("collateral_seized", 0),
+                bonus_pct=data.get("bonus_pct", 0),
+            )
+        elif action_type == "borrow":
+            tx = await integrator.record_borrow(
+                borrower_id=agent_id,
+                amount=data.get("amount", 0),
+                collateral=data.get("collateral", 0),
+                interest_rate=data.get("interest_rate", 0),
+            )
+        elif action_type == "flash_loan_attack":
+            tx = await integrator.record_flash_loan_attack(
+                attacker_id=agent_id,
+                flash_amount=data.get("flash_amount", 0),
+                profit=data.get("profit", 0),
+                liquidations_triggered=data.get("liquidations_triggered", 0),
+                attack_type=data.get("attack_type", "unknown"),
+            )
+        elif action_type == "scenario_event":
+            tx = await integrator.record_scenario_event(
+                scenario_type=data.get("scenario_type", "unknown"),
+                phase=data.get("phase", "unknown"),
+                event_type=data.get("event_type", "unknown"),
+                damage=data.get("damage", 0),
+                severity=data.get("severity", "low"),
+            )
+        
+        if tx:
+            return {"success": True, "data": tx.to_dict()}
+        else:
+            return {"success": False, "error": "Failed to record action"}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/contract-addresses")
+async def get_contract_addresses():
+    """Get all deployed contract addresses on Sepolia."""
+    from config import settings
+    return {
+        "success": True,
+        "data": {
+            "network": "Sepolia",
+            "rpc_url": settings.sepolia_rpc_url[:40] + "..." if settings.sepolia_rpc_url else None,
+            "contracts": {
+                "AccessControl": settings.access_control_address,
+                "IdentityRegistry": settings.identity_registry_address,
+                "CreditRegistry": settings.credit_registry_address,
+                "CollateralVault": settings.collateral_vault_address,
+                "LendingPool": settings.lending_pool_address,
+                "LiquidityPool": settings.liquidity_pool_address,
+                "Palladium": settings.palladium_address,
+                "Badassium": settings.badassium_address,
+            },
+            "real_txs_enabled": settings.enable_blockchain_txs,
+        }
+    }
+
+
+@router.post("/blockchain/toggle-real-txs")
+async def toggle_real_blockchain_txs(body: Dict[str, Any]):
+    """
+    Toggle real on-chain transaction execution at runtime.
+    Body: { enabled: bool }
+    """
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        enabled = body.get("enabled", False)
+        integrator.enable_real_txs = enabled
+        return {
+            "success": True,
+            "data": {
+                "real_txs_enabled": integrator.enable_real_txs,
+                "message": f"Real blockchain transactions {'enabled' if enabled else 'disabled'}"
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

@@ -129,10 +129,10 @@ export default function ThreatsPage() {
               <div
                 key={score.axis}
                 className={`p-4 rounded border ${score.status === 'critical'
-                    ? 'bg-[rgba(255,56,96,0.1)] border-danger'
-                    : score.status === 'warning'
-                      ? 'bg-[rgba(255,182,68,0.1)] border-warn'
-                      : 'bg-[rgba(0,212,99,0.1)] border-success'
+                  ? 'bg-[rgba(255,56,96,0.1)] border-danger'
+                  : score.status === 'warning'
+                    ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                    : 'bg-[rgba(0,212,99,0.1)] border-success'
                   }`}
               >
                 <div className="font-mono font-bold text-text-primary text-sm mb-2">
@@ -142,10 +142,10 @@ export default function ThreatsPage() {
                   <div className="flex-1 h-2 bg-[color:var(--color-bg-accent)] rounded overflow-hidden">
                     <div
                       className={`h-full ${score.status === 'critical'
-                          ? 'bg-danger'
-                          : score.status === 'warning'
-                            ? 'bg-warn'
-                            : 'bg-success'
+                        ? 'bg-danger'
+                        : score.status === 'warning'
+                          ? 'bg-warn'
+                          : 'bg-success'
                         }`}
                       style={{ width: `${score.score}%` }}
                     />
@@ -189,10 +189,10 @@ export default function ThreatsPage() {
             <div
               key={alert.id}
               className={`p-4 rounded border ${alert.severity === 'critical'
-                  ? 'bg-[rgba(255,56,96,0.1)] border-danger'
-                  : alert.severity === 'high'
-                    ? 'bg-[rgba(255,182,68,0.1)] border-warn'
-                    : 'bg-[rgba(0,212,255,0.1)] border-accent'
+                ? 'bg-[rgba(255,56,96,0.1)] border-danger'
+                : alert.severity === 'high'
+                  ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                  : 'bg-[rgba(0,212,255,0.1)] border-accent'
                 }`}
             >
               <div className="flex items-start justify-between">
@@ -224,65 +224,95 @@ export default function ThreatsPage() {
         </div>
       </div>
 
-      {/* Attack Patterns */}
+      {/* Attack Patterns (Derived from Alerts) */}
       <div className="card space-y-4">
         <h3 className="text-sm font-mono font-bold text-text-primary uppercase">Attack Pattern Library</h3>
         <div className="space-y-3">
-          {[
-            { name: 'Flash Loan Attack', instances: 3, riskLevel: 'high' },
-            { name: 'Sandwich Attack', instances: 7, riskLevel: 'critical' },
-            { name: 'Price Oracle Exploit', instances: 1, riskLevel: 'high' },
-            { name: 'Reentrancy', instances: 0, riskLevel: 'medium' },
-            { name: 'Governance Takeover', instances: 0, riskLevel: 'low' },
-          ].map((pattern) => (
-            <div key={pattern.name} className="flex items-center justify-between p-3 bg-[color:var(--color-bg-accent)] rounded">
-              <div>
-                <div className="font-mono font-bold text-text-primary text-sm">{pattern.name}</div>
-                <div className="text-xs text-text-tertiary font-mono">
-                  {pattern.instances} instance{pattern.instances !== 1 ? 's' : ''} detected
+          {(() => {
+            const patterns = [
+              { name: 'Flash Loan Attack', type: 'FLASH_LOAN' },
+              { name: 'Wash Trading', type: 'WASH_TRADING' },
+              { name: 'Oracle Manipulation', type: 'ORACLE_MANIPULATION' },
+              { name: 'Liquidity Poisoning', type: 'LIQUIDITY_POISONING' },
+              { name: 'Pump & Dump', type: 'PUMP_DUMP' },
+            ];
+
+            return patterns.map((p) => {
+              const instances = alerts.filter(a => a.type === p.type || a.type?.includes(p.name)).length;
+              const hasCritical = alerts.some(a => (a.type === p.type || a.type?.includes(p.name)) && (a.severity === 'critical' || a.severity === 'CRITICAL'));
+              const hasHigh = alerts.some(a => (a.type === p.type || a.type?.includes(p.name)) && (a.severity === 'high' || a.severity === 'HIGH'));
+
+              const riskLevel = hasCritical ? 'critical' : hasHigh ? 'high' : instances > 0 ? 'medium' : 'low';
+
+              return (
+                <div key={p.name} className="flex items-center justify-between p-3 bg-[color:var(--color-bg-accent)] rounded">
+                  <div>
+                    <div className="font-mono font-bold text-text-primary text-sm">{p.name}</div>
+                    <div className="text-xs text-text-tertiary font-mono">
+                      {instances} instance{instances !== 1 ? 's' : ''} detected
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      riskLevel === 'critical'
+                        ? 'critical'
+                        : riskLevel === 'high'
+                          ? 'high'
+                          : riskLevel === 'medium'
+                            ? 'medium'
+                            : 'success'
+                    }
+                  >
+                    {riskLevel.toUpperCase()}
+                  </Badge>
                 </div>
-              </div>
-              <Badge
-                variant={
-                  pattern.riskLevel === 'critical'
-                    ? 'critical'
-                    : pattern.riskLevel === 'high'
-                      ? 'high'
-                      : pattern.riskLevel === 'medium'
-                        ? 'medium'
-                        : 'success'
-                }
-              >
-                {pattern.riskLevel.toUpperCase()}
-              </Badge>
-            </div>
-          ))}
+              );
+            });
+          })()}
         </div>
       </div>
 
-      {/* Contract Status */}
+      {/* Contract Status (Derived from Scores) */}
       <div className="card space-y-4">
-        <h3 className="text-sm font-mono font-bold text-text-primary uppercase">Contract Status</h3>
+        <h3 className="text-sm font-mono font-bold text-text-primary uppercase">System Health</h3>
         <div className="grid grid-cols-2 gap-3">
-          {[
-            { name: 'Protocol', status: 'normal' },
-            { name: 'Lending', status: 'normal' },
-            { name: 'Oracle', status: 'warning' },
-            { name: 'Governance', status: 'normal' },
-          ].map((contract) => (
+          {threatScores.map((score) => (
             <div
-              key={contract.name}
-              className={`p-3 rounded border flex items-center justify-between ${contract.status === 'normal'
-                  ? 'bg-[rgba(0,212,99,0.1)] border-success'
-                  : 'bg-[rgba(255,182,68,0.1)] border-warn'
+              key={score.axis}
+              className={`p-3 rounded border flex items-center justify-between ${score.status === 'normal'
+                ? 'bg-[rgba(0,212,99,0.1)] border-success'
+                : score.status === 'warning'
+                  ? 'bg-[rgba(255,182,68,0.1)] border-warn'
+                  : 'bg-[rgba(255,56,96,0.1)] border-danger'
                 }`}
             >
               <span className="font-mono font-bold text-text-primary text-sm">
-                {contract.name}
+                {score.axis}
               </span>
-              <button className="text-xs font-mono px-2 py-1 rounded hover:opacity-70">
-                {contract.status === 'normal' ? '✓ ACTIVE' : '⚠ PAUSE'}
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-text-tertiary">
+                  {score.status === 'normal' ? '✓ NOMINAL' : '⚠ DISTRESS'}
+                </span>
+                <div className={`w-2 h-2 rounded-full ${score.status === 'normal' ? 'bg-success animate-pulse' : score.status === 'warning' ? 'bg-warn animate-bounce' : 'bg-danger animate-ping'}`} />
+              </div>
+            </div>
+          ))}
+          {/* Static check for tokens as they are core infrastructure */}
+          {[
+            { name: 'Palladium (PAL)', status: 'normal' },
+            { name: 'Badassium (BAD)', status: 'normal' },
+          ].map(token => (
+            <div
+              key={token.name}
+              className="p-3 rounded border flex items-center justify-between bg-[rgba(0,212,99,0.1)] border-success"
+            >
+              <span className="font-mono font-bold text-text-primary text-sm">
+                {token.name}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-text-tertiary">✓ NOMINAL</span>
+                <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+              </div>
             </div>
           ))}
         </div>

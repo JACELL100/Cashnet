@@ -11,6 +11,8 @@ import base64, json
 from database import get_db
 from models import AdminAuditor, AdminAuditorRoleEnum
 from config import settings
+from logging_utils import log_success, log_error, log_warn, log_info
+from models import LogCategoryEnum
 import os
 
 # HTTP Bearer token scheme for protected endpoints
@@ -78,12 +80,14 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     """
     Verify Google ID token. Lookup UID in adminandauditor table.
     - If found   â†’ return user + JWT
-    - If missing â†’ 403 "Admin or Auditor access only"
-    """
+    - If missing â†’ 403 "Admin or Auditor access only"    
+    Note: Users can have multiple roles (e.g., both ADMIN and AUDITOR).
+    We return the highest privilege role (ADMIN > AUDITOR).    """
     # 1. Verify Firebase ID token
     try:
         decoded = firebase_auth.verify_id_token(body.credential)
     except Exception as e:
+        log_error(LogCategoryEnum.AUTH, "Authentication", f"Invalid Firebase token: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid Firebase token: {e}")
 
     uid: str = decoded["uid"]
@@ -92,15 +96,11 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     picture: str = decoded.get("picture", "")
 
     # 2. Check provisioned table — email is the canonical key; uid is back-filled on first login
-    record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
+    # Note: User may have multiple roles (ADMIN, AUDITOR), so get ALL records
+    records = db.query(AdminAuditor).filter(AdminAuditor.email == email).all()
 
-    # Back-fill / update the real UID whenever it changes or was a placeholder
-    if record and record.uid != uid:
-        record.uid = uid
-        db.commit()
-        db.refresh(record)
-
-    if not record:
+    if not records:
+        log_warn(LogCategoryEnum.AUTH, "Authentication", f"Access denied for unauthorized user: {email}", user_id=email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -110,19 +110,36 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
             },
         )
 
-    # 3. Update last_login
-    record.last_login = datetime.utcnow()
+    # Back-fill / update the real UID and last_login for ALL role records
+    for record in records:
+        if record.uid != uid:
+            record.uid = uid
+        record.last_login = datetime.utcnow()
+    
     db.commit()
 
+    # 3. Determine primary role (ADMIN takes precedence over AUDITOR)
+    roles = [r.role.value for r in records]
+    primary_role = "ADMIN" if "ADMIN" in roles else roles[0]
+
+    # Log successful login
+    log_success(
+        LogCategoryEnum.AUTH,
+        "Authentication",
+        f"User login successful - {email} ({primary_role})",
+        user_id=email,
+        metadata={"uid": uid, "role": primary_role, "method": "Google SSO"}
+    )
+
     # 4. Issue JWT
-    token = create_jwt({"uid": uid, "email": email, "role": record.role.value})
+    token = create_jwt({"uid": uid, "email": email, "role": primary_role, "roles": roles})
 
     return UserOut(
         uid=uid,
         email=email,
         name=name,
         picture=picture,
-        role=record.role.value,
+        role=primary_role,
         token=token,
     )
 

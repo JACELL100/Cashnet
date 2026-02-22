@@ -11,7 +11,7 @@ from schemas import (
     RepayRequest,
     HealthFactorResponse
 )
-# No longer using simulation_runner
+from agents.simulation_runner import simulation_runner
 
 router = APIRouter(prefix="/lending", tags=["Lending & Borrowing"])
 
