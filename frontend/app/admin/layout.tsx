@@ -40,6 +40,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const refreshSession = useAuthStore((s) => s.refreshSession);
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [threatCount, setThreatCount] = useState(0);
+
+  // Poll threat unread count
+  useEffect(() => {
+    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API}/api/threats/unread-count`);
+        if (res.ok) { const j = await res.json(); setThreatCount(j.data?.count ?? 0); }
+      } catch { /* ignore */ }
+    };
+    poll();
+    const iv = setInterval(poll, 10000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Don't guard auth pages
   const isAuthPage = pathname === '/admin/login' || pathname === '/admin/signup';
@@ -112,8 +127,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {adminNav.map((item) => (
             <Link key={item.href} href={item.href} className={`flex items-center gap-3 px-3 py-2 rounded text-sm font-mono transition-colors ${pathname === item.href ? 'bg-[#ff3860] text-white' : 'hover:bg-[color:var(--color-bg-accent)] text-text-secondary'}`}>
-              <span className="text-lg shrink-0">{item.icon}</span>
-              <span className="hidden md:inline truncate">{item.label}</span>
+              <span className="text-lg shrink-0 relative">
+                {item.icon}
+                {item.href === '/admin/threats' && threatCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-[#ff0033] text-white font-bold flex items-center justify-center" style={{ fontSize: '9px', lineHeight: 1 }}>{threatCount > 9 ? '9+' : threatCount}</span>
+                )}
+              </span>
+              <span className="hidden md:inline truncate flex items-center gap-1.5">
+                {item.label}
+                {item.href === '/admin/threats' && threatCount > 0 && (
+                  <span className="ml-auto bg-[#ff0033] text-white rounded-full font-bold" style={{ fontSize: '9px', minWidth: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{threatCount > 9 ? '9+' : threatCount}</span>
+                )}
+              </span>
             </Link>
           ))}
         </nav>

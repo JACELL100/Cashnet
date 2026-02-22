@@ -15,6 +15,7 @@ Detection Rules:
   - Coordinated pump-dump (multi-wallet buy burst + large sell)
 """
 
+import asyncio
 import time
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
@@ -480,6 +481,56 @@ class FraudMonitor:
             data=data,
         )
         self.alerts.append(alert)
+
+        # ── Groq AI analysis  + email notification for HIGH/CRITICAL ──
+        if severity in (AlertSeverity.HIGH, AlertSeverity.CRITICAL):
+            self._dispatch_groq_and_email(alert)
+
+    def _dispatch_groq_and_email(self, alert: FraudAlert):
+        """Fire-and-forget Groq analysis + email dispatch for severe alerts."""
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self._async_groq_and_email(alert))
+            else:
+                # Not inside an async context — skip
+                pass
+        except RuntimeError:
+            pass  # no event loop
+
+    async def _async_groq_and_email(self, alert: FraudAlert):
+        """Run Groq threat analysis, attach result to alert, send email."""
+        groq_analysis = None
+        try:
+            from agents.groq_advisor import analyze_threat
+            # Build a mini event list from this alert for Groq
+            events = [{
+                "event_type": alert.alert_type,
+                "agent_id": alert.agent_id,
+                "agent_type": alert.agent_type,
+                "description": alert.description,
+                "data": alert.data,
+                "timestamp": alert.timestamp,
+            }]
+            # Also include last 5 events for context
+            context_events = self.events[-5:] if self.events else []
+            groq_analysis = await analyze_threat(events + context_events, {})
+            if groq_analysis:
+                alert.data["groq_analysis"] = groq_analysis
+        except Exception as e:
+            print(f"⚠️  Groq threat analysis failed for {alert.id}: {e}")
+
+        # Send email
+        try:
+            from email_service import send_threat_alert_email
+            alert_dict = alert.to_dict()
+            import datetime
+            alert_dict["timestamp"] = datetime.datetime.fromtimestamp(
+                alert.timestamp
+            ).strftime("%Y-%m-%d %H:%M:%S UTC")
+            await send_threat_alert_email(alert_dict, groq_analysis)
+        except Exception as e:
+            print(f"⚠️  Email dispatch failed for {alert.id}: {e}")
 
     # --- Public query API -------------------------------------------------
 
