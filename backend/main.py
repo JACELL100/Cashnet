@@ -11,7 +11,7 @@ from config import settings
 # Import routers
 from agents.router import router as agents_router
 from agents.scenario_router import router as scenario_router
-from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control, blockchain
+from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control, blockchain, logs
 from routers.contract_analyzer import router as contract_analyzer_router
 from liquidity_engine.router import router as liquidity_engine_router
 from liquidity_engine.ml_router import router as ml_risk_router
@@ -41,6 +41,7 @@ app.include_router(auth.router)          # Firebase/Google SSO → /auth/*
 app.include_router(wallet_auth.router)   # Wallet/MetaMask auth → /api/auth/*
 app.include_router(system_control.router) # System pause/unpause → /system/*
 app.include_router(blockchain.router)    # Blockchain transactions → /blockchain/*
+app.include_router(logs.router)          # System logs → /api/logs/*
 app.include_router(api_adapter.router)   # Frontend API adapter → /api/*
 app.include_router(participants.router)
 app.include_router(pool.router)
@@ -58,24 +59,61 @@ app.include_router(contract_analyzer_router)
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
+    from logging_utils import log_info, log_success, log_error
+    from models import LogCategoryEnum
+    
     print("🚀 Starting Rust-eze Simulation Lab Backend...")
     
     # Initialize database
     try:
         init_db()
         print("✅ Database initialized successfully")
+        log_success(
+            LogCategoryEnum.DATABASE,
+            "Database",
+            "Database initialized successfully and connection pool created"
+        )
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
+        log_error(
+            LogCategoryEnum.DATABASE,
+            "Database",
+            f"Database initialization failed: {str(e)}"
+        )
     
     # Check blockchain connection
     try:
         if blockchain_service.is_connected():
             block_number = blockchain_service.get_block_number()
             print(f"✅ Connected to Sepolia testnet (Block: {block_number})")
+            log_success(
+                LogCategoryEnum.SYSTEM,
+                "Blockchain",
+                f"Connected to Sepolia testnet at block {block_number}",
+                metadata={"network": "sepolia", "block_number": block_number}
+            )
         else:
             print("⚠️  Blockchain connection failed")
+            log_error(
+                LogCategoryEnum.SYSTEM,
+                "Blockchain",
+                "Blockchain connection failed"
+            )
     except Exception as e:
         print(f"⚠️  Blockchain connection error: {e}")
+        log_error(
+            LogCategoryEnum.SYSTEM,
+            "Blockchain",
+            f"Blockchain connection error: {str(e)}"
+        )
+    
+    # Log server startup
+    log_success(
+        LogCategoryEnum.SYSTEM,
+        "Backend API",
+        f"Server started successfully on port {settings.api_port}",
+        metadata={"port": settings.api_port, "env": "production"}
+    )
     
     # Pre-warm Firebase public-key certificate cache so first login is fast
     try:
@@ -85,6 +123,11 @@ async def startup_event():
             timeout=4,
         )
         print("✅ Firebase cert cache pre-warmed")
+        log_info(
+            LogCategoryEnum.AUTH,
+            "Firebase",
+            "Firebase certificate cache pre-warmed"
+        )
     except Exception as _e:
         print(f"⚠️  Firebase cert pre-warm skipped: {_e}")
 
@@ -94,6 +137,11 @@ async def startup_event():
         from liquidity_engine.ml_model import get_model as get_liquidity_model
         await asyncio.get_event_loop().run_in_executor(None, get_liquidity_model)
         print("✅ DotlocalRiskModel ready")
+        log_success(
+            LogCategoryEnum.SYSTEM,
+            "ML Model",
+            "DotlocalRiskModel initialized and ready"
+        )
     except Exception as e:
         print(f"⚠️  Liquidity ML model init failed: {e}")
 

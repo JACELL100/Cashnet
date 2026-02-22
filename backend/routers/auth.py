@@ -11,6 +11,8 @@ import base64, json
 from database import get_db
 from models import AdminAuditor, AdminAuditorRoleEnum
 from config import settings
+from logging_utils import log_success, log_error, log_warn, log_info
+from models import LogCategoryEnum
 import os
 
 # HTTP Bearer token scheme for protected endpoints
@@ -85,6 +87,7 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     try:
         decoded = firebase_auth.verify_id_token(body.credential)
     except Exception as e:
+        log_error(LogCategoryEnum.AUTH, "Authentication", f"Invalid Firebase token: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid Firebase token: {e}")
 
     uid: str = decoded["uid"]
@@ -97,6 +100,7 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     records = db.query(AdminAuditor).filter(AdminAuditor.email == email).all()
 
     if not records:
+        log_warn(LogCategoryEnum.AUTH, "Authentication", f"Access denied for unauthorized user: {email}", user_id=email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -117,6 +121,15 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     # 3. Determine primary role (ADMIN takes precedence over AUDITOR)
     roles = [r.role.value for r in records]
     primary_role = "ADMIN" if "ADMIN" in roles else roles[0]
+
+    # Log successful login
+    log_success(
+        LogCategoryEnum.AUTH,
+        "Authentication",
+        f"User login successful - {email} ({primary_role})",
+        user_id=email,
+        metadata={"uid": uid, "role": primary_role, "method": "Google SSO"}
+    )
 
     # 4. Issue JWT
     token = create_jwt({"uid": uid, "email": email, "role": primary_role, "roles": roles})
