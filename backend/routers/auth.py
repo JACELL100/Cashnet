@@ -78,8 +78,9 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     """
     Verify Google ID token. Lookup UID in adminandauditor table.
     - If found   â†’ return user + JWT
-    - If missing â†’ 403 "Admin or Auditor access only"
-    """
+    - If missing â†’ 403 "Admin or Auditor access only"    
+    Note: Users can have multiple roles (e.g., both ADMIN and AUDITOR).
+    We return the highest privilege role (ADMIN > AUDITOR).    """
     # 1. Verify Firebase ID token
     try:
         decoded = firebase_auth.verify_id_token(body.credential)
@@ -92,15 +93,10 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
     picture: str = decoded.get("picture", "")
 
     # 2. Check provisioned table — email is the canonical key; uid is back-filled on first login
-    record = db.query(AdminAuditor).filter(AdminAuditor.email == email).first()
+    # Note: User may have multiple roles (ADMIN, AUDITOR), so get ALL records
+    records = db.query(AdminAuditor).filter(AdminAuditor.email == email).all()
 
-    # Back-fill / update the real UID whenever it changes or was a placeholder
-    if record and record.uid != uid:
-        record.uid = uid
-        db.commit()
-        db.refresh(record)
-
-    if not record:
+    if not records:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -110,19 +106,27 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
             },
         )
 
-    # 3. Update last_login
-    record.last_login = datetime.utcnow()
+    # Back-fill / update the real UID and last_login for ALL role records
+    for record in records:
+        if record.uid != uid:
+            record.uid = uid
+        record.last_login = datetime.utcnow()
+    
     db.commit()
 
+    # 3. Determine primary role (ADMIN takes precedence over AUDITOR)
+    roles = [r.role.value for r in records]
+    primary_role = "ADMIN" if "ADMIN" in roles else roles[0]
+
     # 4. Issue JWT
-    token = create_jwt({"uid": uid, "email": email, "role": record.role.value})
+    token = create_jwt({"uid": uid, "email": email, "role": primary_role, "roles": roles})
 
     return UserOut(
         uid=uid,
         email=email,
         name=name,
         picture=picture,
-        role=record.role.value,
+        role=primary_role,
         token=token,
     )
 

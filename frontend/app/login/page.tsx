@@ -36,7 +36,7 @@ const roleConfig: Record<UserRole, { title: string; icon: string; description: s
     icon: '⎇',
     description: 'Access credit',
     color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
-    dashboardPath: '/dashboard/credit',
+    dashboardPath: '/dashboard',
   },
 };
 
@@ -124,7 +124,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[color:var(--color-bg-primary)] grid grid-cols-1 md:grid-cols-2">
+    <div className="min-h-screen bg-(--color-bg-primary) grid grid-cols-1 md:grid-cols-2">
       {/* Left Panel - Branding */}
       <div className="hidden md:flex flex-col justify-start gap-10 p-8 bg-gradient-to-b from-[color:var(--color-bg-secondary)] to-[color:var(--color-bg-primary)] border-r border-[color:var(--color-border)]">
         <Link href="/" className="flex items-center gap-3">
@@ -153,7 +153,7 @@ export default function LoginPage() {
           </div>
 
           {/* Mini Terminal */}
-          <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4 text-xs font-mono space-y-1">
+          <div className="bg-(--color-bg-primary) border border-(--color-border) rounded p-4 text-xs font-mono space-y-1">
             <div className="text-accent">→ logging in as {selectedRole.toLowerCase()}</div>
             <div className="text-success">✓ signature verification enabled</div>
             <div className="text-warn">⚠ connect your wallet to continue</div>
@@ -203,7 +203,7 @@ export default function LoginPage() {
 
           {/* Wallet Connection */}
           <div className="space-y-6">
-            <div className="flex flex-col items-center gap-4 p-8 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-bg-secondary)]">
+            <div className="flex flex-col items-center gap-4 p-8 border border-(--color-border) rounded-lg bg-(--color-bg-secondary)">
               <div className="text-6xl mb-2">🦊</div>
               <h3 className="text-lg font-bold font-mono text-text-primary">
                 MetaMask & Wallet Login
@@ -211,7 +211,7 @@ export default function LoginPage() {
               <p className="text-text-secondary text-sm font-mono text-center">
                 Sign a message with MetaMask or any Web3 wallet. No gas fees required.
               </p>
-              <div className="text-xs text-text-secondary font-mono mt-2 p-3 bg-[color:var(--color-bg-primary)] rounded border border-[color:var(--color-border)]">
+              <div className="text-xs text-text-secondary font-mono mt-2 p-3 bg-(--color-bg-primary) rounded border border-(--color-border)">
                 💡 <strong>MetaMask users:</strong> Choose "Browser" for extension or "WalletConnect" for QR code (mobile)
               </div>
               

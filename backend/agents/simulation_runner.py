@@ -23,6 +23,7 @@ from agents.base import (
     LendingState,
     Mempool,
     TradeAction,
+    PendingTx,
 )
 from agents.retail_trader import RetailTrader
 from agents.whale_agent import WhaleAgent

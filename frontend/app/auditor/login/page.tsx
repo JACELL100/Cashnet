@@ -2,14 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 
 export default function AuditorLoginPage() {
-  const router = useRouter();
   const loginWithGoogleCredential = useAuthStore((s) => s.loginWithGoogleCredential);
   const addToast = useUIStore((s) => s.addToast);
   const [loading, setLoading] = useState(false);
@@ -22,14 +20,15 @@ export default function AuditorLoginPage() {
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
       const { role } = await loginWithGoogleCredential(idToken);
-      if (role !== 'AUDITOR') {
+      // Allow both ADMIN and AUDITOR roles (ADMIN has all privileges)
+      if (role !== 'AUDITOR' && role !== 'ADMIN') {
         useAuthStore.getState().logout();
         setAccessDenied(true);
         setLoading(false);
         return;
       }
-      addToast({ message: 'Welcome, Auditor', severity: 'success' });
-      router.push('/auditor');
+      addToast({ message: `Welcome, ${role}`, severity: 'success' });
+      window.location.href = '/auditor';
     } catch (err: any) {
       setLoading(false);
       if (err?.code === 'access_denied') {
@@ -41,8 +40,8 @@ export default function AuditorLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[color:var(--color-bg-primary)] grid grid-cols-1 md:grid-cols-2">
-      <div className="hidden md:flex flex-col justify-between p-8 bg-[color:var(--color-bg-secondary)] border-r border-[color:var(--color-border)]">
+    <div className="min-h-screen bg-(--color-bg-primary) grid grid-cols-1 md:grid-cols-2">
+      <div className="hidden md:flex flex-col justify-between p-8 bg-(--color-bg-secondary) border-r border-(--color-border)">
         <Link href="/" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-[#f0a500] rounded flex items-center justify-center text-sm font-bold text-white">CN</div>
           <span className="font-mono text-lg font-bold text-text-primary">cashnet <span className="text-[#f0a500]">auditor</span></span>
@@ -60,7 +59,7 @@ export default function AuditorLoginPage() {
               </div>
             ))}
           </div>
-          <div className="p-4 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded text-xs font-mono space-y-1">
+          <div className="p-4 bg-(--color-bg-primary) border border-(--color-border) rounded text-xs font-mono space-y-1">
             <div className="text-[#f0a500]">◆ 247 events recorded</div>
             <div className="text-[#ff3860]">⚠ 3 active alerts</div>
             <div className="text-success">✓ last audit: 2 hours ago</div>
@@ -116,10 +115,10 @@ export default function AuditorLoginPage() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[color:var(--color-border)]" />
+                <div className="w-full border-t border-(--color-border)" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="px-2 bg-[color:var(--color-bg-primary)] text-text-tertiary font-mono">auditor · google sso only</span>
+                <span className="px-2 bg-(--color-bg-primary) text-text-tertiary font-mono">auditor · google sso only</span>
               </div>
             </div>
 

@@ -147,7 +147,7 @@ export default function AdminPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((k) => (
-          <div key={k.label} className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-4">
+          <div key={k.label} className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-4">
             <div className="text-xs font-mono text-text-tertiary mb-2">{k.label}</div>
             <div className="text-3xl font-bold font-mono" style={{ color: k.color }}>{k.value}</div>
             <div className="text-xs font-mono text-text-tertiary mt-1">{k.sub}</div>
@@ -159,7 +159,7 @@ export default function AdminPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Agents Widget */}
-        <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+        <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-mono font-bold text-text-primary">◈ Agents</h2>
             <Link href="/admin/agents" className="text-xs font-mono text-[#b367ff] hover:underline">
@@ -174,7 +174,7 @@ export default function AdminPage() {
               { label: 'Active', value: String(activeAgents.length), color: '#22c55e' },
               { label: 'Net PnL', value: (totalPnl >= 0 ? '+' : '') + fmt(totalPnl), color: totalPnl >= 0 ? '#22c55e' : '#ff3860' },
             ].map((s) => (
-              <div key={s.label} className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-2 text-center">
+              <div key={s.label} className="rounded border border-(--color-border) bg-(--color-bg-primary) p-2 text-center">
                 <div className="text-xs font-mono text-text-tertiary mb-0.5">{s.label}</div>
                 <div className="text-sm font-bold font-mono" style={{ color: s.color }}>{s.value}</div>
               </div>
@@ -188,7 +188,7 @@ export default function AdminPage() {
               const icon = typeIcon[a.type] ?? '◌';
               const pnl = a.pnl ?? 0;
               return (
-                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-[color:var(--color-border)] last:border-0">
+                <div key={a.id} className="flex items-center justify-between py-1.5 border-b border-(--color-border) last:border-0">
                   <div className="flex items-center gap-2">
                     <span style={{ color }} className="text-sm">{icon}</span>
                     <div>
@@ -215,7 +215,7 @@ export default function AdminPage() {
         </div>
 
         {/* Threats Widget */}
-        <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+        <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-mono font-bold text-text-primary">⚠ Threats</h2>
             <Link href="/admin/threats" className="text-xs font-mono text-[#f0a500] hover:underline">
@@ -230,7 +230,7 @@ export default function AdminPage() {
               { label: 'Critical', value: String(criticalAlerts.length), color: criticalAlerts.length > 0 ? '#ff0033' : '#22c55e' },
               { label: 'Resolved', value: String(activeAlerts.filter(a => a.resolved).length), color: '#22c55e' },
             ].map((s) => (
-              <div key={s.label} className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-bg-primary)] p-2 text-center">
+              <div key={s.label} className="rounded border border-(--color-border) bg-(--color-bg-primary) p-2 text-center">
                 <div className="text-xs font-mono text-text-tertiary mb-0.5">{s.label}</div>
                 <div className="text-sm font-bold font-mono" style={{ color: s.color }}>{s.value}</div>
               </div>
@@ -247,7 +247,7 @@ export default function AdminPage() {
                     <span className="text-xs font-mono text-text-secondary">{ts.axis}</span>
                     <span className="text-xs font-mono font-bold" style={{ color: barColor }}>{ts.score}</span>
                   </div>
-                  <div className="h-1.5 bg-[color:var(--color-bg-primary)] rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-(--color-bg-primary) rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-700"
                       style={{ width: `${ts.score}%`, background: barColor }} />
                   </div>
@@ -258,7 +258,7 @@ export default function AdminPage() {
 
           {/* top unresolved alert */}
           {unresolvedAlerts.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-[color:var(--color-border)]">
+            <div className="mt-4 pt-3 border-t border-(--color-border)">
               {(() => {
                 const a = unresolvedAlerts[0];
                 const sc = a.severity === 'critical' ? '#ff0033' : a.severity === 'high' ? '#ff3860' : a.severity === 'medium' ? '#f0a500' : '#22c55e';
@@ -289,7 +289,7 @@ export default function AdminPage() {
       {/* ── Participants / Quick Actions ───────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Role Breakdown */}
-        <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+        <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-5">
           <h2 className="text-sm font-mono font-bold text-text-primary mb-4">Participant Breakdown</h2>
           <div className="space-y-3">
             {roleBreakdown.map((r) => (
@@ -299,7 +299,7 @@ export default function AdminPage() {
                   <span className="text-xs font-mono text-text-secondary">{r.role}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="w-24 h-1.5 bg-[color:var(--color-bg-primary)] rounded-full overflow-hidden">
+                  <div className="w-24 h-1.5 bg-(--color-bg-primary) rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${(r.count / 128) * 100}%`, background: r.color }} />
                   </div>
                   <span className="text-xs font-mono" style={{ color: r.color }}>{r.count}</span>
@@ -310,7 +310,7 @@ export default function AdminPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+        <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-5">
           <h2 className="text-sm font-mono font-bold text-text-primary mb-4">Quick Actions</h2>
           <div className="space-y-3">
             <Link href="/admin/agents" className="block w-full py-3 font-mono text-sm text-center bg-[rgba(179,103,255,0.1)] border border-[#b367ff] text-[#b367ff] rounded hover:bg-[rgba(179,103,255,0.2)] transition-colors">
@@ -327,12 +327,12 @@ export default function AdminPage() {
       </div>
 
       {/* Recent Registrations */}
-      <div className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
+      <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-5">
         <h2 className="text-sm font-mono font-bold text-text-primary mb-4">Recent Wallet Registrations</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-xs font-mono">
             <thead>
-              <tr className="text-text-tertiary border-b border-[color:var(--color-border)]">
+              <tr className="text-text-tertiary border-b border-(--color-border)">
                 <th className="text-left py-2 pr-6">Wallet</th>
                 <th className="text-left py-2 pr-6">Role</th>
                 <th className="text-left py-2 pr-6">Status</th>
@@ -341,7 +341,7 @@ export default function AdminPage() {
             </thead>
             <tbody>
               {recentRegistrations.map((r, i) => (
-                <tr key={i} className="border-b border-[color:var(--color-border)] last:border-0">
+                <tr key={i} className="border-b border-(--color-border) last:border-0">
                   <td className="py-3 pr-6 text-text-primary">{r.wallet}</td>
                   <td className="py-3 pr-6 text-[#00d4ff]">{r.role}</td>
                   <td className="py-3 pr-6">

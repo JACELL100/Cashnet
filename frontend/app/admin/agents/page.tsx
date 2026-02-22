@@ -190,7 +190,7 @@ export default function AgentsPage() {
     setLiveTransactions([]);
     
     try {
-      const response = await api('/api/scenarios/demo-attack', { method: 'POST' });
+      const response = await api('/api/scenarios/demo-attack', { method: 'POST' }) as any;
       if (!response) {
         throw new Error("Invalid response from server");
       }
@@ -202,10 +202,10 @@ export default function AgentsPage() {
       }
       
       // Show success message
-      alert(`✅ Continuous Attack Started!\n\n${response.message}\n\nWatch the Activity Feed below for live blockchain confirmations.\n\n🔗 Etherscan: ${response.etherscan_wallet}\n\n⚠️ Click STOP button to end the attack.`);
+      alert(`✅ Continuous Attack Started!\n\n${response.message || 'Attack initiated'}\n\nWatch the Activity Feed below for live blockchain confirmations.\n\n🔗 Etherscan: ${response.etherscan_wallet || 'N/A'}\n\n⚠️ Click STOP button to end the attack.`);
       
       await fetchAll();
-    } catch (error) {
+    } catch (error: any) {
       setLiveTransactions([{
         id: 'error',
         type: 'Failed',
@@ -322,7 +322,7 @@ export default function AgentsPage() {
 
       {/* ── Real Market Data Banner ───────────────────────────────────── */}
       {simStatus?.market_data && (
-        <div className="card p-4 bg-gradient-to-r from-[rgba(0,212,99,0.08)] to-[rgba(56,189,248,0.08)] border border-(--color-accent) rounded-lg">
+        <div className="card p-4 bg-linear-to-r from-[rgba(0,212,99,0.08)] to-[rgba(56,189,248,0.08)] border border-(--color-accent) rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-lg">📡</span>
@@ -439,7 +439,7 @@ export default function AgentsPage() {
                   {isLoading ? 'STARTING...' : '▶ START'}
                 </button>
                 <button
-                  className="btn text-xs py-2 px-5 bg-gradient-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
+                  className="btn text-xs py-2 px-5 bg-linear-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
                   onClick={runDemoAttack}
                   disabled={isLoading}
                   title="Execute 100+ transaction attack demo with Palladium & Badassium tokens"
@@ -454,7 +454,7 @@ export default function AgentsPage() {
                   ⏸ PAUSE
                 </button>
                 <button
-                  className="btn text-xs py-2 px-5 bg-gradient-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
+                  className="btn text-xs py-2 px-5 bg-linear-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
                   onClick={runDemoAttack}
                   disabled={isLoading}
                   title="Execute 100+ transaction attack demo with Palladium & Badassium tokens"
@@ -593,17 +593,17 @@ export default function AgentsPage() {
       )}
 
       {/* ── Pool / Lending Live Stats ─────────────────────────────────── */}
-      {simStatus && (
+      {simStatus && simStatus.pool && simStatus.lending && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          <StatBox label="Reserve A" value={`$${(simStatus.pool.reserve_a / 1000).toFixed(1)}k`} />
-          <StatBox label="Reserve B" value={`$${(simStatus.pool.reserve_b / 1000).toFixed(1)}k`} />
-          <StatBox label="Price A/B" value={simStatus.pool.price_a_per_b.toFixed(4)} />
-          <StatBox label="Pool Volume" value={`$${(simStatus.pool.total_volume / 1000).toFixed(1)}k`} />
-          <StatBox label="Total Collateral" value={`$${(simStatus.lending.total_collateral / 1000).toFixed(1)}k`} />
+          <StatBox label="Reserve A" value={`$${((simStatus.pool.reserve_a || 0) / 1000).toFixed(1)}k`} />
+          <StatBox label="Reserve B" value={`$${((simStatus.pool.reserve_b || 0) / 1000).toFixed(1)}k`} />
+          <StatBox label="Price A/B" value={(simStatus.pool.price_a_per_b || 0).toFixed(4)} />
+          <StatBox label="Pool Volume" value={`$${((simStatus.pool.total_volume || 0) / 1000).toFixed(1)}k`} />
+          <StatBox label="Total Collateral" value={`$${((simStatus.lending.total_collateral || 0) / 1000).toFixed(1)}k`} />
           <StatBox
             label="Liquidatable"
-            value={String(simStatus.lending.liquidatable_count)}
-            danger={simStatus.lending.liquidatable_count > 0}
+            value={String(simStatus.lending.liquidatable_count || 0)}
+            danger={(simStatus.lending.liquidatable_count || 0) > 0}
           />
         </div>
       )}

@@ -14,7 +14,7 @@ const roleDefaultPaths: Record<UserRole, string> = {
   ADMIN: '/dashboard',
   AUDITOR: '/dashboard/audit',
   LENDER: '/dashboard/lending',
-  BORROWER: '/dashboard/credit',
+  BORROWER: '/dashboard',
 };
 
 export default function DashboardLayout({
@@ -49,7 +49,7 @@ export default function DashboardLayout({
 
   if (!hasHydrated) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+      <div className="flex items-center justify-center min-h-screen bg-(--color-bg-primary)">
         <div className="text-center">
           <div className="text-4xl font-bold text-accent font-mono mb-4">CSH</div>
           <p className="text-text-secondary font-mono">Loading...</p>
@@ -61,7 +61,7 @@ export default function DashboardLayout({
   // If hydrated but not authenticated, Next.js will handle the transition
   if (!isAuthenticated || !user) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+      <div className="flex items-center justify-center min-h-screen bg-(--color-bg-primary)">
         <div className="text-center">
           <div className="text-4xl font-bold text-accent font-mono mb-4">CSH</div>
           <p className="text-text-secondary font-mono">Loading...</p>
@@ -71,7 +71,7 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[color:var(--color-bg-primary)]">
+    <div className="min-h-screen bg-(--color-bg-primary)">
       <Sidebar />
       <Header />
       <CascadeBanner />

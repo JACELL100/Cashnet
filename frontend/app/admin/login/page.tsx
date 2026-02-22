@@ -33,9 +33,9 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[color:var(--color-bg-primary)] grid grid-cols-1 md:grid-cols-2">
-      {/* Left Panel */}
-      <div className="hidden md:flex flex-col justify-between p-8 bg-[color:var(--color-bg-secondary)] border-r border-[color:var(--color-border)]">
+    <div className="min-h-screen bg-(--color-bg-primary) grid grid-cols-1 md:grid-cols-2">
+      {/* Left panel */}
+      <div className="hidden md:flex flex-col justify-between p-8 bg-(--color-bg-secondary) border-r border-(--color-border)">
         <Link href="/" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-[#ff3860] rounded flex items-center justify-center text-sm font-bold text-white">
             AD
@@ -55,7 +55,7 @@ export default function AdminLoginPage() {
               </div>
             ))}
           </div>
-          <div className="p-4 bg-[color:var(--color-bg-primary)] border border-[#ff3860] rounded text-xs font-mono space-y-1">
+          <div className="p-4 bg-(--color-bg-primary) border border-[#ff3860] rounded text-xs font-mono space-y-1">
             <div className="text-[#ff3860] font-bold">⚠ RESTRICTED ACCESS</div>
             <div className="text-text-secondary">Admin credentials are verified via Google SSO only. Unauthorized access is logged.</div>
           </div>
@@ -111,10 +111,10 @@ export default function AdminLoginPage() {
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-[color:var(--color-border)]" />
+                <div className="w-full border-t border-(--color-border)" />
               </div>
               <div className="relative flex justify-center text-xs">
-                <span className="px-2 bg-[color:var(--color-bg-primary)] text-text-tertiary font-mono">admin · google sso only</span>
+                <span className="px-2 bg-(--color-bg-primary) text-text-tertiary font-mono">admin · google sso only</span>
               </div>
             </div>
 

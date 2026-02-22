@@ -54,7 +54,7 @@ const roleConfig: Record<UserRole, { title: string; icon: string; description: s
     icon: '⎇',
     description: 'Access credit',
     color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
-    dashboardPath: '/dashboard/credit',
+    dashboardPath: '/dashboard',
     features: [
       'Credit score tracking',
       'Loan management',
@@ -149,7 +149,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[color:var(--color-bg-primary)] grid grid-cols-1 md:grid-cols-2">
+    <div className="min-h-screen bg-(--color-bg-primary) grid grid-cols-1 md:grid-cols-2">
       {/* Left Panel - Branding */}
       <div className="hidden md:flex flex-col justify-start gap-10 p-8 bg-gradient-to-b from-[color:var(--color-bg-secondary)] to-[color:var(--color-bg-primary)] border-r border-[color:var(--color-border)]">
         <Link href="/" className="flex items-center gap-3">
@@ -223,7 +223,7 @@ export default function SignupPage() {
             <p className="text-text-secondary text-sm font-mono">
               Join cashnet as {currentRole.title.toLowerCase()}
             </p>
-            <div className="text-xs text-text-secondary font-mono mt-3 p-3 bg-[color:var(--color-bg-primary)] rounded border border-[color:var(--color-border)] text-left">
+            <div className="text-xs text-text-secondary font-mono mt-3 p-3 bg-(--color-bg-primary) rounded border border-(--color-border) text-left">
               💡 <strong>MetaMask:</strong> Choose "Browser" for extension or "WalletConnect" for mobile QR
             </div>
           </div>
@@ -264,7 +264,7 @@ export default function SignupPage() {
 
           {/* Wallet Connection */}
           <div className="space-y-6">
-            <div className="flex flex-col items-center gap-4 p-8 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-bg-secondary)]">
+            <div className="flex flex-col items-center gap-4 p-8 border border-(--color-border) rounded-lg bg-(--color-bg-secondary)">
               <div className="text-6xl mb-2">🦊</div>
               <h3 className="text-lg font-bold font-mono text-text-primary">
                 Connect Your Wallet

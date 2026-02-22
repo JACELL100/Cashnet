@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers import participants, pool, lending, alerts, simulations
 from typing import Dict, Any, Optional
-# simulation_runner removed for L1-only mode
+from agents.simulation_runner import simulation_runner
 from agents.fraud_monitor import FraudMonitor
 
 # Standalone fraud monitor (persists across requests, no simulation loop needed)

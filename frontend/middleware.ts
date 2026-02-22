@@ -14,6 +14,9 @@ import type { NextRequest } from 'next/server';
  *     short-circuiting the app router entirely.
  *  2. For all other requests → adds the COOP header to the response so
  *     WalletConnect's verify SDK is also satisfied.
+ * 
+ * IMPORTANT: Using 'unsafe-none' for COOP to allow Google Sign-In popups to work.
+ * Google Sign-In requires the ability to communicate across origins.
  */
 export function middleware(request: NextRequest) {
   // HEAD requests: respond immediately with the required header
@@ -21,7 +24,7 @@ export function middleware(request: NextRequest) {
     return new NextResponse(null, {
       status: 200,
       headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+        'Cross-Origin-Opener-Policy': 'unsafe-none',
         'Cross-Origin-Embedder-Policy': 'unsafe-none',
       },
     });
@@ -29,7 +32,7 @@ export function middleware(request: NextRequest) {
 
   // All other requests: add the header to the normal response
   const response = NextResponse.next();
-  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  response.headers.set('Cross-Origin-Opener-Policy', 'unsafe-none');
   response.headers.set('Cross-Origin-Embedder-Policy', 'unsafe-none');
   return response;
 }

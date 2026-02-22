@@ -236,7 +236,7 @@ export default function DashboardPage() {
                 {item.name}
               </span>
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-[color:var(--color-bg-accent)] rounded overflow-hidden">
+                <div className="flex-1 h-2 bg-(--color-bg-accent) rounded overflow-hidden">
                   <div
                     className={`h-full transition-all ${item.health > 80
                       ? 'bg-success'
@@ -283,7 +283,7 @@ export default function DashboardPage() {
               .map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-center justify-between p-3 bg-[color:var(--color-bg-accent)] rounded"
+                  className="flex items-center justify-between p-3 bg-(--color-bg-accent) rounded"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-mono font-bold text-text-primary truncate">

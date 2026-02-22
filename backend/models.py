@@ -44,8 +44,8 @@ class AdminAuditor(Base):
     __tablename__ = "adminandauditor"
 
     id = Column(Integer, primary_key=True, index=True)
-    uid = Column(String, unique=True, index=True, nullable=False)  # Google sub (UID)
-    email = Column(String, unique=True, index=True, nullable=False)
+    uid = Column(String, index=True, nullable=False)  # Google sub (UID) - removed unique constraint
+    email = Column(String, index=True, nullable=False)  # Removed unique constraint to allow multiple roles
     name = Column(String, nullable=False)
     picture = Column(String)                                         # Google profile picture
     role = Column(Enum(AdminAuditorRoleEnum), nullable=False)

@@ -55,6 +55,9 @@ def _safe_add_columns():
     migrations = [
         "ALTER TABLE adminandauditor ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE",
         "ALTER TABLE borrowers ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE",
+        # Drop unique constraints to allow one user to have multiple roles (admin + auditor)
+        "ALTER TABLE adminandauditor DROP CONSTRAINT IF EXISTS adminandauditor_uid_key",
+        "ALTER TABLE adminandauditor DROP CONSTRAINT IF EXISTS adminandauditor_email_key",
     ]
     with engine.connect() as conn:
         for sql in migrations:

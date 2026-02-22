@@ -142,7 +142,7 @@ def deploy_contract(w3, abi, bytecode, deployer, *constructor_args, label=""):
     })
 
     signed = deployer.sign_transaction(tx)
-    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
     log(f"  Tx sent: {tx_hash.hex()}")
     log("  Waiting for confirmation…")
 
@@ -248,7 +248,7 @@ def main():
             "gas": 100_000,
         })
         signed = deployer.sign_transaction(tx)
-        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         log(f"  ✓ setLendingPool tx: {tx_hash.hex()}")
     else:
