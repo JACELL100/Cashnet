@@ -3,7 +3,7 @@
 import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
 import { parseEther, parseUnits } from 'viem';
 import { sepolia } from 'wagmi/chains';
-import { LENDING_POOL_ADDRESS, LENDING_POOL_ABI, PALLADIUM_ADDRESS, ERC20_ABI } from '@/lib/contracts';
+import { LENDING_POOL_ADDRESS, LENDING_POOL_ABI, BADASSIUM_ADDRESS, ERC20_ABI } from '@/lib/contracts';
 
 /**
  * Hook that exposes lending actions which trigger MetaMask approval popups.
@@ -35,6 +35,7 @@ export function useLendingActions() {
             abi: LENDING_POOL_ABI,
             functionName: 'depositCollateral',
             value: parseEther(ethAmount),
+            gas: 200000n, // Explicit gas limit
         });
     };
 
@@ -47,6 +48,7 @@ export function useLendingActions() {
             abi: LENDING_POOL_ABI,
             functionName: 'borrow',
             args: [parseUnits(tokenAmount, 18)],
+            gas: 300000n, // Explicit gas limit to prevent "gas limit too high" error
         });
     };
 
@@ -55,10 +57,11 @@ export function useLendingActions() {
         if (!isConnected) return alert('Connect your wallet first');
         writeContract({
             chainId: sepolia.id,
-            address: PALLADIUM_ADDRESS,
+            address: BADASSIUM_ADDRESS, // BADASSIUM is the borrow token
             abi: ERC20_ABI,
             functionName: 'approve',
             args: [LENDING_POOL_ADDRESS, parseUnits(tokenAmount, 18)],
+            gas: 100000n, // Explicit gas limit
         });
     };
 
@@ -70,6 +73,7 @@ export function useLendingActions() {
             abi: LENDING_POOL_ABI,
             functionName: 'repay',
             args: [parseUnits(tokenAmount, 18)],
+            gas: 300000n, // Explicit gas limit
         });
     };
 

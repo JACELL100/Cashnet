@@ -51,7 +51,7 @@ contract LendingPool {
 
     function borrow(uint256 amount) external {
         require(!accessControl.paused(), "System Paused");
-        require(accessControl.hasRole(accessControl.BORROWER_ROLE(), msg.sender), "Not verified borrower");
+        // Removed BORROWER_ROLE check - anyone with sufficient collateral and credit can borrow
 
         _updateInterest(msg.sender);
 

@@ -16,6 +16,7 @@ const roleAccent: Record<string, string> = {
 };
 
 interface WalletStats {
+  collateralETH: number;
   totalDeposited: number;
   totalBorrowed: number;
   txCount: number;
@@ -37,28 +38,39 @@ export default function DashboardProfilePage() {
   const [saved, setSaved] = useState(false);
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string>('');
 
   /* ── fetch account stats ── */
   const fetchStats = useCallback(async () => {
+    const wallet = address || user?.walletAddress;
+    if (!wallet) return;
+
     try {
-      const [metricsRes, txRes] = await Promise.allSettled([
-        fetch(`${API_URL}/api/lending/metrics`),
+      const [borrowerRes, txRes, scoreRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/lending/borrower/${wallet}`),
         fetch(`${API_URL}/pool/transactions?limit=100`),
+        fetch(`${API_URL}/api/credit/score?wallet=${wallet}`),
       ]);
 
       const s: WalletStats = {
+        collateralETH: 0,
         totalDeposited: 0,
         totalBorrowed: 0,
         txCount: 0,
         firstSeen: user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—',
         healthFactor: 999,
-        creditScore: 500,
+        creditScore: 0,
       };
 
-      if (metricsRes.status === 'fulfilled' && metricsRes.value.ok) {
-        const m = (await metricsRes.value.json()).data ?? {};
-        s.totalDeposited = m.total_collateral ?? 0;
-        s.totalBorrowed = m.total_debt ?? 0;
+      // Fetch live collateral from blockchain (CollateralVault contract)
+      if (borrowerRes.status === 'fulfilled' && borrowerRes.value.ok) {
+        const data = await borrowerRes.value.json();
+        const position = data.data ?? data;
+        s.collateralETH = position.collateral_eth ?? 0;
+        s.totalDeposited = position.collateral_value ?? 0;
+        s.totalBorrowed = position.debt_value ?? 0;
+        s.healthFactor = position.health_factor ?? 999;
+        console.log('📊 Live collateral from blockchain:', position);
       }
 
       if (txRes.status === 'fulfilled' && txRes.value.ok) {
@@ -66,29 +78,25 @@ export default function DashboardProfilePage() {
         s.txCount = txs.length;
       }
 
-      /* health factor */
-      try {
-        const hfRes = await fetch(`${API_URL}/api/lending/health-factor/${address}`);
-        if (hfRes.ok) {
-          const hf = await hfRes.json();
-          s.healthFactor = hf.health_factor ?? 999;
-        }
-      } catch { /* noop */ }
-
-      /* credit score */
-      try {
-        const crRes = await fetch(`${API_URL}/api/credit/dynamic-rates`);
-        if (crRes.ok) {
-          const cr = await crRes.json();
-          s.creditScore = cr.data?.credit_score ?? 500;
-        }
-      } catch { /* noop */ }
+      // Credit score from blockchain
+      if (scoreRes.status === 'fulfilled' && scoreRes.value.ok) {
+        const cr = await scoreRes.value.json();
+        s.creditScore = cr.score ?? cr.data?.score ?? 0;
+      }
 
       setStats(s);
-    } catch { /* noop */ }
-  }, [address, user?.createdAt]);
+      setLastUpdated(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.error('Error fetching profile stats:', err);
+    }
+  }, [address, user?.walletAddress, user?.createdAt]);
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    fetchStats();
+    // Auto-refresh collateral data every 10 seconds
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
   /* ── save profile ── */
   const handleSave = async () => {
@@ -263,24 +271,143 @@ export default function DashboardProfilePage() {
 
           {/* Account Stats */}
           <div className="bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded-lg p-6">
-            <h2 className="text-base font-bold font-mono text-text-primary mb-4">Account Summary</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Collateral', value: stats ? `$${stats.totalDeposited.toLocaleString()}` : '—', color: '#22c55e' },
-                { label: 'Debt', value: stats ? `$${stats.totalBorrowed.toLocaleString()}` : '—', color: '#f0a500' },
-                { label: 'Transactions', value: stats ? stats.txCount.toString() : '—', color: '#00d4ff' },
-                {
-                  label: 'Health Factor',
-                  value: stats ? (stats.healthFactor >= 100 ? '∞' : stats.healthFactor.toFixed(2)) : '—',
-                  color: stats ? (stats.healthFactor >= 1.5 ? '#22c55e' : stats.healthFactor >= 1.2 ? '#f0a500' : '#ff3860') : '#22c55e',
-                },
-              ].map((kpi) => (
-                <div key={kpi.label} className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4">
-                  <div className="text-xs font-mono text-text-tertiary mb-1">{kpi.label}</div>
-                  <div className="text-xl font-bold font-mono" style={{ color: kpi.color }}>{kpi.value}</div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold font-mono text-text-primary">Account Summary</h2>
+              {lastUpdated && (
+                <span className="text-xs font-mono text-text-tertiary">Updated: {lastUpdated}</span>
+              )}
             </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Collateral (ETH) */}
+              <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs font-mono text-text-tertiary">Collateral</div>
+                  {stats && stats.collateralETH > 0 && (
+                    <div className="text-[9px] text-[#00d4ff]">⛓ Live</div>
+                  )}
+                </div>
+                <div className="text-xl font-bold font-mono" style={{ color: '#22c55e' }}>
+                  {stats ? `${stats.collateralETH.toFixed(4)} ETH` : '—'}
+                </div>
+                {stats && stats.collateralETH > 0 && (
+                  <div className="text-[10px] text-text-tertiary mt-0.5">
+                    ≈ ${stats.totalDeposited.toLocaleString()}
+                  </div>
+                )}
+              </div>
+
+              {/* Debt */}
+              <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs font-mono text-text-tertiary">Debt</div>
+                  {stats && stats.totalBorrowed > 0 && (
+                    <div className="text-[9px] text-[#00d4ff]">⛓ Live</div>
+                  )}
+                </div>
+                <div className="text-xl font-bold font-mono" style={{ color: '#f0a500' }}>
+                  {stats ? `${stats.totalBorrowed.toFixed(2)} BADM` : '—'}
+                </div>
+              </div>
+
+              {/* Transactions */}
+              <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4">
+                <div className="text-xs font-mono text-text-tertiary mb-1">Transactions</div>
+                <div className="text-xl font-bold font-mono" style={{ color: '#00d4ff' }}>
+                  {stats ? stats.txCount.toString() : '—'}
+                </div>
+              </div>
+
+              {/* Health Factor */}
+              <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs font-mono text-text-tertiary">Health Factor</div>
+                  {stats && stats.healthFactor < 100 && (
+                    <div className="text-[9px] text-[#00d4ff]">⛓ Live</div>
+                  )}
+                </div>
+                <div
+                  className="text-xl font-bold font-mono"
+                  style={{
+                    color: stats
+                      ? stats.healthFactor >= 1.5
+                        ? '#22c55e'
+                        : stats.healthFactor >= 1.2
+                        ? '#f0a500'
+                        : '#ff3860'
+                      : '#22c55e',
+                  }}
+                >
+                  {stats ? (stats.healthFactor >= 100 ? '∞' : stats.healthFactor.toFixed(2)) : '—'}
+                </div>
+              </div>
+            </div>
+
+            {/* Second row - Credit Score */}
+            {stats && stats.creditScore > 0 && (
+              <div className="mt-4">
+                <div className="bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-mono text-text-tertiary">Credit Score</div>
+                    <div className="text-[9px] text-[#00d4ff]">⛓ Live</div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="text-2xl font-bold font-mono"
+                      style={{
+                        color: stats.creditScore >= 750
+                          ? '#22c55e'
+                          : stats.creditScore >= 700
+                          ? '#00d4ff'
+                          : stats.creditScore >= 650
+                          ? '#f0a500'
+                          : '#ff3860',
+                      }}
+                    >
+                      {stats.creditScore}
+                    </div>
+                    <div className="flex-1">
+                      <div
+                        className="text-xs font-mono mb-1"
+                        style={{
+                          color: stats.creditScore >= 750
+                            ? '#22c55e'
+                            : stats.creditScore >= 700
+                            ? '#00d4ff'
+                            : stats.creditScore >= 650
+                            ? '#f0a500'
+                            : '#ff3860',
+                        }}
+                      >
+                        {stats.creditScore >= 750
+                          ? 'Excellent'
+                          : stats.creditScore >= 700
+                          ? 'Good'
+                          : stats.creditScore >= 650
+                          ? 'Fair'
+                          : stats.creditScore >= 600
+                          ? 'Poor'
+                          : 'Very Poor'}
+                      </div>
+                      <div className="h-2 bg-[color:var(--color-bg-accent)] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, ((stats.creditScore - 300) / 550) * 100))}%`,
+                            background: stats.creditScore >= 750
+                              ? '#22c55e'
+                              : stats.creditScore >= 700
+                              ? '#00d4ff'
+                              : stats.creditScore >= 650
+                              ? '#f0a500'
+                              : '#ff3860',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Activity */}

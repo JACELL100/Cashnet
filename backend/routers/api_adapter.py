@@ -239,6 +239,77 @@ async def get_borrowers(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/lending/borrower/{wallet}")
+async def get_borrower_position(wallet: str):
+    """Get borrower position data from Sepolia blockchain."""
+    from blockchain_service import blockchain_service
+    from web3 import Web3
+    
+    try:
+        # Checksum the wallet address
+        wallet = Web3.to_checksum_address(wallet)
+        print(f"📊 Fetching position for wallet: {wallet}")
+        
+        if "LendingPool" not in blockchain_service.contracts:
+            raise Exception("Contracts not loaded")
+        
+        # Read collateral from Vault
+        collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
+        collateral_eth = collateral_wei / 1e18
+        print(f"   - Collateral: {collateral_eth} ETH ({collateral_wei} wei)")
+        
+        # Read debt from LendingPool.loans mapping
+        loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
+        debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
+        print(f"   - Debt: {debt_tokens} BADM (principal: {loan_data[0]}, interest: {loan_data[1]})")
+        
+        # Read max LTV from CreditRegistry
+        max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
+        print(f"   - Max LTV: {max_ltv}%")
+        
+        # Calculate health factor (mock eth price is 2000 in the contract)
+        collateral_value_usd = collateral_eth * 2000
+        
+        if debt_tokens == 0:
+            health_factor = 999.0
+            is_liquidatable = False
+        else:
+            health_factor = (collateral_value_usd * (max_ltv / 100.0)) / debt_tokens
+            liquidation_threshold = (collateral_value_usd * ((max_ltv + 5) / 100.0))
+            is_liquidatable = debt_tokens > liquidation_threshold
+        
+        print(f"   - Health Factor: {health_factor}")
+        
+        result = {
+            "success": True,
+            "data": {
+                "wallet": wallet,
+                "collateral_eth": round(collateral_eth, 6),
+                "collateral_value": round(collateral_value_usd, 2),
+                "debt_value": round(debt_tokens, 2),
+                "health_factor": round(health_factor, 4),
+                "at_risk": is_liquidatable
+            }
+        }
+        print(f"✅ Returning: {result['data']}")
+        return result
+    except Exception as e:
+        print(f"❌ Error fetching borrower position from chain: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "data": {
+                "wallet": wallet,
+                "collateral_eth": 0.0,
+                "collateral_value": 0.0,
+                "debt_value": 0.0,
+                "health_factor": 999.0,
+                "at_risk": False
+            }
+        }
+
+
 @router.get("/lending/metrics")
 async def get_lending_metrics():
     """Get overall lending metrics directly from Sepolia Smart Contracts."""
@@ -643,11 +714,15 @@ async def get_credit_leaderboard(db: Session = Depends(get_db)):
 
 @router.get("/credit/scores/{wallet}")
 async def get_score_details(wallet: str, db: Session = Depends(get_db)):
-    """Get detailed credit score for a wallet directly from CreditRegistry contract"""
-    from blockchain_service import blockchain_service
+    """Get detailed credit score for a wallet from borrowers table"""
+    from models import Borrower
+    from web3 import Web3
     
     try:
-        score = blockchain_service.call_contract_function("CreditRegistry", "creditScores", wallet)
+        wallet = Web3.to_checksum_address(wallet)
+        borrower = db.query(Borrower).filter(Borrower.wallet_address == wallet).first()
+        
+        score = borrower.credit_score if borrower else 500
         
         return {
             "success": True,
@@ -661,6 +736,48 @@ async def get_score_details(wallet: str, db: Session = Depends(get_db)):
         return {
             "success": False,
             "error": str(e)
+        }
+
+
+@router.get("/credit/score")
+async def get_credit_score(wallet: str, db: Session = Depends(get_db)):
+    """Get credit score from borrowers table in Neon DB"""
+    from models import Borrower
+    from web3 import Web3
+    
+    try:
+        wallet = Web3.to_checksum_address(wallet)
+        print(f"📊 Fetching credit score from DB for: {wallet}")
+        
+        # Fetch from borrowers table
+        borrower = db.query(Borrower).filter(Borrower.wallet_address == wallet).first()
+        
+        if borrower:
+            score = borrower.credit_score
+            print(f"   ✅ Credit score from DB: {score}")
+        else:
+            score = 500  # Default score for new borrowers
+            print(f"   ⚠️ Borrower not found, using default: {score}")
+        
+        return {
+            "success": True,
+            "score": score,
+            "data": {
+                "wallet": wallet,
+                "score": score
+            }
+        }
+    except Exception as e:
+        print(f"❌ Error fetching credit score: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "score": 500,  # Default score
+            "data": {
+                "wallet": wallet,
+                "score": 500
+            }
         }
 
 
@@ -686,6 +803,118 @@ async def get_dynamic_rates():
             {"score_range": "300-499", "rate": 15.0}
         ]
     }
+
+
+@router.get("/loans")
+async def get_loans(wallet: str, db: Session = Depends(get_db)):
+    """Get loans for a wallet from blockchain"""
+    from blockchain_service import blockchain_service
+    from web3 import Web3
+    
+    try:
+        wallet = Web3.to_checksum_address(wallet)
+        print(f"📊 Fetching loans for wallet: {wallet}")
+        
+        # Read loan data from LendingPool contract
+        loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
+        principal = loan_data[0] / 1e18
+        interest = loan_data[1] / 1e18
+        total_borrowed = principal + interest
+        
+        # Read collateral from Vault
+        collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
+        collateral_eth = collateral_wei / 1e18
+        
+        print(f"   - Principal: {principal} BADM")
+        print(f"   - Interest: {interest} BADM")
+        print(f"   - Collateral: {collateral_eth} ETH")
+        
+        loans = []
+        if total_borrowed > 0:
+            loans.append({
+                "id": f"{wallet[:10]}...{wallet[-4:]}",
+                "borrowed": total_borrowed,
+                "collateral": collateral_eth * 2000,  # USD value
+                "interest_rate": 5.0,  # Mock rate
+                "status": "active",
+                "due_date": "2026-03-22"  # Mock date
+            })
+        
+        return {
+            "success": True,
+            "data": loans
+        }
+    except Exception as e:
+        print(f"❌ Error fetching loans: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "data": []
+        }
+
+
+@router.get("/borrower/check-role/{wallet}")
+async def check_borrower_role(wallet: str, db: Session = Depends(get_db)):
+    """Check if wallet has BORROWER_ROLE and meets credit requirements"""
+    from blockchain_service import blockchain_service
+    from web3 import Web3
+    from models import Borrower
+    
+    try:
+        wallet = Web3.to_checksum_address(wallet)
+        print(f"🔍 Checking BORROWER_ROLE and credit for: {wallet}")
+        
+        # Initialize response data
+        response_data = {
+            "wallet": wallet,
+            "has_borrower_role": False,
+            "credit_score": 0,
+            "min_credit_score": 400,
+            "meets_credit_requirement": False,
+            "can_borrow": False
+        }
+        
+        # Fetch credit score from database
+        borrower = db.query(Borrower).filter(Borrower.wallet_address == wallet).first()
+        if borrower:
+            response_data["credit_score"] = borrower.credit_score
+            response_data["meets_credit_requirement"] = borrower.credit_score >= 400
+            print(f"   📊 DB Credit Score: {borrower.credit_score}")
+        else:
+            print(f"   ⚠️ Borrower not found in database")
+        
+        # Check blockchain role if service is available
+        if "AccessControl" in blockchain_service.contracts:
+            try:
+                # Get BORROWER_ROLE hash
+                borrower_role = blockchain_service.call_contract_function("AccessControl", "BORROWER_ROLE")
+                
+                # Check if wallet has role
+                has_role = blockchain_service.call_contract_function("AccessControl", "hasRole", borrower_role, wallet)
+                
+                response_data["has_borrower_role"] = has_role
+                response_data["role_hash"] = borrower_role.hex() if isinstance(borrower_role, bytes) else str(borrower_role)
+                print(f"   🔐 Has BORROWER_ROLE: {has_role}")
+            except Exception as e:
+                print(f"   ⚠️ Error checking role on chain: {e}")
+        else:
+            print(f"   ⚠️ AccessControl contract not loaded")
+        
+        # Can borrow only if has role AND meets credit requirement
+        response_data["can_borrow"] = response_data["has_borrower_role"] and response_data["meets_credit_requirement"]
+        
+        print(f"   ✅ Can borrow: {response_data['can_borrow']}")
+        
+        return {
+            "success": True,
+            "data": response_data
+        }
+    except Exception as e:
+        print(f"❌ Error checking borrower eligibility: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

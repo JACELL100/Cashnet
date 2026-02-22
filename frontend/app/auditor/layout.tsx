@@ -12,10 +12,7 @@ const auditorNav = [
   { href: '/auditor/events', label: 'Event Log', icon: '◆' },
   { href: '/auditor/alerts', label: 'Fraud Alerts', icon: '⚠' },
   { href: '/auditor/credit', label: 'Credit Scores', icon: '✓' },
-  { href: '/auditor/wallets', label: 'Wallet Profiles', icon: '⊙' },
-  { href: '/auditor/reports', label: 'Reports', icon: '≈' },
   { href: '/auditor/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
-  { href: '/auditor/settings', label: 'Settings', icon: '⚙' },
 ];
 
 export default function AuditorLayout({ children }: { children: React.ReactNode }) {

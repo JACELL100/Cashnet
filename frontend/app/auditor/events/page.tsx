@@ -38,8 +38,81 @@ export default function EventLogPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isPaused, setIsPaused] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [eventCount, setEventCount] = useState({ total: 0, alerts: 0, transactions: 0 });
+  const [eventCount, setEventCount] = useState({ total: 0, alerts: 0, transactions: 0, errors: 0 });
   const logContainerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch simulation activity feed
+  const fetchActivityFeed = async () => {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/sim/activity-feed?limit=100`;
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const events = data.data || [];
+        return events.map((event: any) => {
+          // Determine if this is an alert or error
+          const isAlert = event.event_type?.includes('alert') || 
+                         event.event_type?.includes('fraud') || 
+                         event.event_type?.includes('attack') ||
+                         event.event_type?.includes('liquidation') ||
+                         event.data?.severity;
+          
+          const isError = event.event_type?.includes('error') || 
+                         event.event_type?.includes('failed') ||
+                         event.data?.status === 'failed';
+          
+          const isTransaction = event.event_type?.includes('swap') || 
+                                event.event_type?.includes('blockchain') ||
+                                event.event_type?.includes('approval') ||
+                                event.data?.tx_hash;
+          
+          let level: LogLevel = 'INFO';
+          if (isError) level = 'ERROR';
+          else if (isAlert) level = 'WARN';
+          else if (isTransaction && event.event_type?.includes('confirmed')) level = 'SUCCESS';
+          
+          return {
+            id: `feed-${event.timestamp}-${Math.random()}`,
+            timestamp: new Date(event.timestamp * 1000),
+            category: isTransaction ? 'TRANSACTION' as EventCategory : isAlert ? 'ALERT' as EventCategory : 'SYSTEM' as EventCategory,
+            level: level,
+            source: event.agent_name || event.agent_type || 'System',
+            message: event.data?.description || event.data?.narrative || event.event_type || 'Unknown event',
+            metadata: event.data,
+          };
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch activity feed:', error);
+    }
+    return [];
+  };
+
+  // Fetch fraud alerts
+  const fetchAlerts = async () => {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/threats/alerts`;
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        const alerts = data.data || [];
+        return alerts.map((alert: any) => ({
+          id: `alert-${alert.id}`,
+          timestamp: new Date(alert.timestamp),
+          category: 'ALERT' as EventCategory,
+          level: alert.severity === 'critical' || alert.severity === 'high' ? 'ERROR' as LogLevel : 'WARN' as LogLevel,
+          source: 'FraudMonitor',
+          message: `${alert.type}: ${alert.description}`,
+          metadata: { ...alert, wallet: alert.wallet },
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch alerts:', error);
+    }
+    return [];
+  };
 
   // Fetch system logs from backend
   const fetchSystemLogs = async () => {
@@ -76,26 +149,38 @@ export default function EventLogPage() {
   const loadEvents = async () => {
     if (isPaused) return;
 
-    // Fetch real system logs from backend (includes all categories)
-    const systemLogs = await fetchSystemLogs();
+    // Fetch all data sources in parallel
+    const [systemLogs, activityFeed, alertsData] = await Promise.all([
+      fetchSystemLogs(),
+      fetchActivityFeed(),
+      fetchAlerts(),
+    ]);
 
-    setEvents(systemLogs);
+    // Combine all events
+    const allEvents = [...systemLogs, ...activityFeed, ...alertsData];
+    
+    // Sort by timestamp descending (newest first)
+    allEvents.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    setEvents(allEvents);
     
     // Count by category
-    const alertCount = systemLogs.filter((e: LogEvent) => e.category === 'ALERT').length;
-    const transactionCount = systemLogs.filter((e: LogEvent) => e.category === 'TRANSACTION').length;
+    const alertCount = allEvents.filter((e: LogEvent) => e.category === 'ALERT').length;
+    const transactionCount = allEvents.filter((e: LogEvent) => e.category === 'TRANSACTION').length;
+    const errorCount = allEvents.filter((e: LogEvent) => e.level === 'ERROR').length;
     
     setEventCount({
-      total: systemLogs.length,
+      total: allEvents.length,
       alerts: alertCount,
       transactions: transactionCount,
+      errors: errorCount,
     });
   };
 
   // Initial load and polling
   useEffect(() => {
     loadEvents();
-    const interval = setInterval(loadEvents, 5000); // Refresh every 5 seconds
+    const interval = setInterval(loadEvents, 2500); // Refresh every 2.5 seconds for real-time feel
     return () => clearInterval(interval);
   }, [isPaused]);
 
@@ -164,7 +249,7 @@ export default function EventLogPage() {
       </div>
 
       {/* Stats Bar */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-5 gap-4">
         <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-4">
           <div className="text-xs font-mono text-text-tertiary mb-1">Total Events</div>
           <div className="text-2xl font-bold font-mono text-[#00d4ff]">{eventCount.total}</div>
@@ -176,6 +261,10 @@ export default function EventLogPage() {
         <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-4">
           <div className="text-xs font-mono text-text-tertiary mb-1">Alerts</div>
           <div className="text-2xl font-bold font-mono text-[#ff3860]">{eventCount.alerts}</div>
+        </div>
+        <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-4">
+          <div className="text-xs font-mono text-text-tertiary mb-1">Errors</div>
+          <div className="text-2xl font-bold font-mono text-[#ff3860] animate-pulse">{eventCount.errors}</div>
         </div>
         <div className="rounded-lg border border-(--color-border) bg-(--color-bg-secondary) p-4">
           <div className="text-xs font-mono text-text-tertiary mb-1">Filtered</div>
@@ -298,10 +387,16 @@ export default function EventLogPage() {
               </div>
             </div>
           ) : (
-            filteredEvents.map((event, index) => (
+            filteredEvents.map((event, index) => {
+              const isAlert = event.category === 'ALERT' || event.level === 'ERROR';
+              const hasMetadata = event.metadata && Object.keys(event.metadata).length > 0;
+              
+              return (
               <div
                 key={event.id}
-                className="flex items-start gap-3 hover:bg-[rgba(255,255,255,0.02)] py-1 px-2 -mx-2 rounded transition-colors group"
+                className={`flex items-start gap-3 py-1 px-2 -mx-2 rounded transition-colors group ${
+                  isAlert ? 'hover:bg-[rgba(255,56,96,0.05)] border-l-2 border-l-[#ff3860] pl-3' : 'hover:bg-[rgba(255,255,255,0.02)]'
+                }`}
               >
                 {/* Timestamp */}
                 <div className="shrink-0 text-[#5a6270] select-none">
@@ -336,18 +431,46 @@ export default function EventLogPage() {
                 </div>
 
                 {/* Message */}
-                <div className="flex-1 text-[#c7cdd8] break-all">
+                <div className={`flex-1 break-all ${
+                  event.level === 'ERROR' ? 'text-[#ff8fa3] font-semibold' :
+                  event.level === 'WARN' ? 'text-[#ffc266]' :
+                  event.level === 'SUCCESS' ? 'text-[#7ce8ac]' :
+                  'text-[#c7cdd8]'
+                }`}>
                   {event.message}
+                  
+                  {/* Show transaction hash if available */}
+                  {event.metadata?.tx_hash && (
+                    <a 
+                      href={`https://sepolia.etherscan.io/tx/${event.metadata.tx_hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 text-[#00d4ff] hover:text-[#00b8e6] underline"
+                    >
+                      [{event.metadata.tx_hash.slice(0, 10)}...]
+                    </a>
+                  )}
+                  
+                  {/* Show wallet address if available */}
+                  {event.metadata?.wallet && (
+                    <span className="ml-2 text-[#b367ff] text-[10px]">
+                      wallet: {event.metadata.wallet}
+                    </span>
+                  )}
                 </div>
 
                 {/* Metadata Indicator */}
-                {event.metadata && (
-                  <div className="shrink-0 text-[#b367ff] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" title={JSON.stringify(event.metadata, null, 2)}>
+                {hasMetadata && (
+                  <div 
+                    className="shrink-0 text-[#b367ff] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-[10px]" 
+                    title={JSON.stringify(event.metadata, null, 2)}
+                  >
                     &#123;...&#125;
                   </div>
                 )}
               </div>
-            ))
+            )
+            })
           )}
         </div>
       </div>
