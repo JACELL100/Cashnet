@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 const SEPOLIA = 'https://sepolia.etherscan.io';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -15,12 +15,12 @@ const healthColor = (h: number) =>
 const fmt = (v: number, dec = 2) =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: dec }).format(v);
 
-const fmtUSD = (v: number) =>
-  v >= 1_000_000
-    ? `$${(v / 1e6).toFixed(2)}M`
-    : v >= 1_000
-      ? `$${(v / 1e3).toFixed(1)}K`
-      : `$${v.toFixed(2)}`;
+const fmtETH = (v: number) =>
+  v >= 1_000
+    ? `${(v / 1e3).toFixed(2)}K ETH`
+    : v >= 1
+      ? `${v.toFixed(4)} ETH`
+      : `${v.toFixed(6)} ETH`;
 
 const shortAddr = (addr: string) =>
   addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '—';
@@ -200,7 +200,7 @@ export default function BorrowersPage() {
     },
     {
       label: 'Total Borrowed',
-      value: fmtUSD(totalBorrows),
+      value: fmtETH(totalBorrows),
       color: '#b367ff',
       icon: '⟁',
     },
@@ -363,11 +363,11 @@ export default function BorrowersPage() {
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: 'var(--color-text-secondary)' }}>Collateral</span>
-                      <span style={{ color: '#22c55e' }}>{fmtUSD(myPosition.collateral_value)}</span>
+                      <span style={{ color: '#22c55e' }}>{fmtETH(myPosition.collateral_value)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: 'var(--color-text-secondary)' }}>Debt</span>
-                      <span style={{ color: '#f0a500' }}>{fmtUSD(myPosition.debt_value)}</span>
+                      <span style={{ color: '#f0a500' }}>{fmtETH(myPosition.debt_value)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span style={{ color: 'var(--color-text-secondary)' }}>Health Factor</span>
@@ -538,11 +538,11 @@ export default function BorrowersPage() {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--color-text-secondary)' }}>Collateral</span>
-                  <span style={{ color: '#22c55e' }}>{fmtUSD(lookupResult.collateral_value)}</span>
+                  <span style={{ color: '#22c55e' }}>{fmtETH(lookupResult.collateral_value)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--color-text-secondary)' }}>Debt</span>
-                  <span style={{ color: '#f0a500' }}>{fmtUSD(lookupResult.debt_value)}</span>
+                  <span style={{ color: '#f0a500' }}>{fmtETH(lookupResult.debt_value)}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span style={{ color: 'var(--color-text-secondary)' }}>Health Factor</span>
@@ -677,12 +677,12 @@ export default function BorrowersPage() {
 
                     {/* Collateral */}
                     <td className="px-4 py-3" style={{ color: '#22c55e' }}>
-                      {fmtUSD(b.collateral)}
+                      {fmtETH(b.collateral)}
                     </td>
 
                     {/* Borrowed */}
                     <td className="px-4 py-3" style={{ color: '#f0a500' }}>
-                      {fmtUSD(b.borrowed)}
+                      {fmtETH(b.borrowed)}
                     </td>
 
                     {/* Health Factor */}
@@ -742,8 +742,8 @@ function filteredSummary(rows: BorrowerPosition[]) {
   const totalCollateral = rows.reduce((s, b) => s + b.collateral, 0);
   const totalBorrowed = rows.reduce((s, b) => s + b.borrowed, 0);
   const dangerCount = rows.filter((b) => b.status === 'danger').length;
-  const fmtUSD = (v: number) =>
-    v >= 1_000_000 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1_000 ? `$${(v / 1e3).toFixed(1)}K` : `$${v.toFixed(2)}`;
+  const fmtETH = (v: number) =>
+    v >= 1_000 ? `${(v / 1e3).toFixed(2)}K ETH` : v >= 1 ? `${v.toFixed(4)} ETH` : `${v.toFixed(6)} ETH`;
 
   return (
     <div
@@ -751,10 +751,10 @@ function filteredSummary(rows: BorrowerPosition[]) {
       style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
     >
       <div>
-        Total collateral: <span className="text-white">{fmtUSD(totalCollateral)}</span>
+        Total collateral: <span className="text-white">{fmtETH(totalCollateral)}</span>
       </div>
       <div>
-        Total borrowed: <span style={{ color: '#f0a500' }}>{fmtUSD(totalBorrowed)}</span>
+        Total borrowed: <span style={{ color: '#f0a500' }}>{fmtETH(totalBorrowed)}</span>
       </div>
       <div>
         Danger positions: <span style={{ color: '#ff3860' }}>{dangerCount}</span>

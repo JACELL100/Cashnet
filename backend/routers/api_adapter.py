@@ -214,29 +214,185 @@ async def get_liquidity_events(db: Session = Depends(get_db)):
 
 @router.get("/lending/borrowers")
 async def get_borrowers(db: Session = Depends(get_db)):
-    """Get all borrowers with health factors from live simulation."""
-    positions = simulation_runner.lending.positions
-    if positions:
+    """Get all borrowers from database with on-chain health factors."""
+    from models import Borrower
+    from blockchain_service import blockchain_service
+    
+    try:
+        # Get all active borrowers from database
+        borrowers = db.query(Borrower).filter(Borrower.is_active == 1).all()
+        
+        if not borrowers:
+            return {
+                "success": True,
+                "data": []
+            }
+        
+        result = []
+        for borrower in borrowers:
+            try:
+                # Fetch on-chain data for each borrower
+                wallet = borrower.wallet_address
+                
+                # Read collateral from Vault
+                collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
+                collateral_eth = collateral_wei / 1e18
+                
+                # Read debt from LendingPool.loans mapping
+                loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
+                debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
+                
+                # Read max LTV from CreditRegistry
+                max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
+                
+                # Calculate health factor using ETH values directly
+                if debt_tokens == 0:
+                    health_factor = 999.0
+                    at_risk = False
+                else:
+                    # Health factor = (collateral * LTV) / debt
+                    health_factor = (collateral_eth * (max_ltv / 100.0)) / debt_tokens
+                    liquidation_threshold = (collateral_eth * ((max_ltv + 5) / 100.0))
+                    at_risk = debt_tokens > liquidation_threshold
+                
+                # Only include borrowers with collateral or debt
+                if collateral_eth > 0 or debt_tokens > 0:
+                    result.append({
+                        "id": str(borrower.id),
+                        "wallet": wallet,
+                        "collateral_value": round(collateral_eth, 6),
+                        "debt_value": round(debt_tokens, 6),
+                        "health_factor": round(health_factor, 4),
+                        "at_risk": at_risk,
+                        "credit_score": borrower.credit_score or 500,
+                        "name": borrower.name,
+                        "email": borrower.email,
+                        "last_login": borrower.last_login.isoformat() if borrower.last_login else None,
+                    })
+            except Exception as e:
+                # If blockchain call fails for a borrower, skip them
+                print(f"Error fetching data for borrower {borrower.wallet_address}: {e}")
+                continue
+        
         return {
             "success": True,
-            "data": [
-                {
-                    "id": wallet,
-                    "wallet": wallet,
-                    "collateral_value": round(pos.collateral, 2),
-                    "debt_value": round(pos.debt, 2),
-                    "health_factor": round(pos.health_factor, 4),
-                    "at_risk": pos.is_liquidatable,
-                    "credit_score": pos.credit_profile.current_score,
-                }
-                for wallet, pos in positions.items()
-            ],
+            "data": result
+        }
+    except Exception as e:
+        print(f"Error fetching borrowers: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "data": []
         }
 
-    return {
-        "success": True,
-        "data": []
-    }
+
+@router.post("/lending/request-borrower-role")
+async def request_borrower_role(body: Dict[str, Any], db: Session = Depends(get_db)):
+    """
+    Request BORROWER_ROLE for a wallet address.
+    This endpoint auto-grants the role (simpler than requiring admin approval).
+    """
+    from blockchain_service import blockchain_service
+    from models import Borrower
+    
+    wallet_address = body.get("wallet_address")
+    if not wallet_address:
+        return {
+            "success": False,
+            "error": "wallet_address is required"
+        }
+    
+    try:
+        # Check if borrower exists in database
+        borrower = db.query(Borrower).filter(Borrower.wallet_address == wallet_address).first()
+        if not borrower:
+            # Create borrower if doesn't exist
+            from secrets import token_hex
+            borrower = Borrower(
+                wallet_address=wallet_address,
+                nonce=token_hex(16),
+                is_active=1,
+                credit_score=500
+            )
+            db.add(borrower)
+            db.commit()
+        
+        # Get the BORROWER_ROLE hash from contract
+        role_hash = blockchain_service.call_contract_function("AccessControl", "BORROWER_ROLE")
+        
+        # Check if user already has the role
+        has_role = blockchain_service.call_contract_function(
+            "AccessControl",
+            "hasRole",
+            role_hash,
+            wallet_address
+        )
+        
+        if has_role:
+            return {
+                "success": True,
+                "message": "Wallet already has BORROWER role",
+                "has_role": True
+            }
+        
+        # Grant the BORROWER_ROLE
+        print(f"🔑 Auto-granting BORROWER_ROLE to {wallet_address}")
+        tx_hash = blockchain_service.send_transaction(
+            "AccessControl",
+            "grantRole",
+            role_hash,
+            wallet_address
+        )
+        
+        print(f"✅ BORROWER_ROLE granted to {wallet_address}, tx: {tx_hash}")
+        
+        return {
+            "success": True,
+            "message": "BORROWER role granted successfully",
+            "tx_hash": tx_hash,
+            "has_role": True
+        }
+    except Exception as e:
+        print(f"❌ Error granting BORROWER_ROLE to {wallet_address}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Failed to grant BORROWER role. Please contact administrator.",
+            "has_role": False
+        }
+
+
+@router.get("/lending/check-borrower-role/{wallet_address}")
+async def check_borrower_role(wallet_address: str):
+    """Check if a wallet address has the BORROWER_ROLE"""
+    from blockchain_service import blockchain_service
+    
+    try:
+        # Get the BORROWER_ROLE hash from contract
+        role_hash = blockchain_service.call_contract_function("AccessControl", "BORROWER_ROLE")
+        
+        # Check if user has the role
+        has_role = blockchain_service.call_contract_function(
+            "AccessControl",
+            "hasRole",
+            role_hash,
+            wallet_address
+        )
+        
+        return {
+            "success": True,
+            "wallet_address": wallet_address,
+            "has_role": has_role,
+            "message": "Has BORROWER role" if has_role else "Does not have BORROWER role"
+        }
+    except Exception as e:
+        print(f"Error checking BORROWER_ROLE for {wallet_address}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "has_role": False
+        }
 
 
 @router.get("/lending/borrower/{wallet}")

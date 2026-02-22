@@ -27,6 +27,7 @@ const allNavItems = [
   { href: '/dashboard/threats', label: 'Threats', icon: '⚠', roles: ['ADMIN', 'AUDITOR'] },
   { href: '/dashboard/credit', label: 'Credit', icon: '✓', roles: ['ADMIN', 'BORROWER', 'LENDER'] },
   { href: '/dashboard/audit', label: 'Audit', icon: '◆', roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dashboard/market-intelligence', label: 'Markets', icon: '◈', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
   { href: '/dashboard/contract-analyzer', label: 'SC Analyzer', icon: '⬡', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
   { href: '/dashboard/settings', label: 'Settings', icon: '⚙', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
   { href: '/dashboard/profile', label: 'Profile', icon: '⛯', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },

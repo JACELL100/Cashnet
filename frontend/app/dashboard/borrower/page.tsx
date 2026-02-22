@@ -8,7 +8,7 @@ import { useBalance } from 'wagmi';
 import { formatEther } from 'viem';
 import { BADASSIUM_ADDRESS } from '@/lib/contracts';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 const SEPOLIA = 'https://sepolia.etherscan.io';
 
 const hfColor = (h: number) =>

@@ -15,7 +15,8 @@ export interface User {
   token?: string; // JWT from backend (for Admin/Auditor)
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+// Use deployed backend by default, can override with env var
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 
 interface AuthState {
   user: User | null;
@@ -36,8 +37,6 @@ interface AuthState {
   setError: (error: string | null) => void;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -55,7 +54,6 @@ export const useAuthStore = create<AuthState>()(
       loginWithWallet: async (walletAddress: string, signature: string, name?: string, email?: string, role?: UserRole) => {
         set({ loading: true, error: null });
         try {
-          // Verify signature with backend (nonce already obtained by caller)
           const verifyResponse = await fetch(`${API_BASE_URL}/api/auth/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -76,7 +74,6 @@ export const useAuthStore = create<AuthState>()(
 
           const authData = await verifyResponse.json();
 
-          // Create user object with the selected role (or from backend if provided)
           const userRole: UserRole = authData.role || role || 'BORROWER';
           const user: User = {
             id: walletAddress,
@@ -125,16 +122,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /**
-       * Real Google SSO for Admin / Auditor.
-       * Sends the Google ID token to the backend, which verifies it and checks
-       * the `adminandauditor` table. Throws with { code: 'access_denied' } if
-       * the user is not provisioned.
-       */
       loginWithGoogleCredential: async (credential: string) => {
         set({ loading: true, error: null });
         try {
-          const res = await fetch(`${API_BASE}/auth/google`, {
+          const res = await fetch(`${API_BASE_URL}/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential }),
@@ -175,11 +166,10 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /** Silently refresh the backend JWT using a fresh Firebase ID token */
       refreshSession: async (getFirebaseIdToken: () => Promise<string>) => {
         try {
           const idToken = await getFirebaseIdToken();
-          const res = await fetch(`${API_BASE}/auth/google`, {
+          const res = await fetch(`${API_BASE_URL}/auth/google`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ credential: idToken }),
@@ -197,7 +187,6 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /** Mock Google login kept for Lender/Borrower flows that aren't yet on real auth */
       loginWithGoogle: async (role: UserRole) => {
         set({ loading: true, error: null });
         try {

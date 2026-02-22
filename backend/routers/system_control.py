@@ -152,11 +152,7 @@ async def pause_system(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "PAUSE_FAILED",
-                "message": f"Failed to pause system: {str(e)}",
-                "suggestion": "Check blockchain connection and try again."
-            }
+            detail=f"Failed to pause system: {str(e)}. Check blockchain connection and try again."
         )
 
 
@@ -237,9 +233,136 @@ async def unpause_system(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": "UNPAUSE_FAILED",
-                "message": f"Failed to unpause system: {str(e)}",
-                "suggestion": "Check blockchain connection and try again."
+            detail=f"Failed to unpause system: {str(e)}. Check blockchain connection and try again."
+        )
+
+
+class GrantRoleRequest(BaseModel):
+    wallet_address: str
+    role: str  # "BORROWER", "LENDER", "AUDITOR", "ORACLE"
+
+
+class GrantRoleResponse(BaseModel):
+    success: bool
+    message: str
+    tx_hash: str | None = None
+    wallet_address: str
+    role: str
+
+
+@router.post("/grant-role", response_model=GrantRoleResponse)
+async def grant_role(
+    request: GrantRoleRequest,
+    current_user: AdminAuditor = Depends(get_current_admin_or_auditor),
+    db: Session = Depends(get_db)
+):
+    """
+    Grant a role to a wallet address (Admin only)
+    
+    Available roles:
+    - BORROWER: Can borrow tokens from the lending pool
+    - LENDER: Can lend tokens to the lending pool
+    - AUDITOR: Can view system logs and analytics
+    - ORACLE: Can update price feeds
+    
+    Only admins with ADMIN_ROLE on-chain can grant roles.
+    """
+    # Verify user is ADMIN
+    if current_user.role != AdminAuditorRoleEnum.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can grant roles"
+        )
+    
+    # Validate role
+    valid_roles = ["BORROWER", "LENDER", "AUDITOR", "ORACLE"]
+    if request.role.upper() not in valid_roles:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of: {', '.join(valid_roles)}"
+        )
+    
+    try:
+        # Get the role hash from the contract
+        role_name = f"{request.role.upper()}_ROLE"
+        role_hash = blockchain_service.call_contract_function("AccessControl", role_name)
+        
+        # Check if user already has the role
+        has_role = blockchain_service.call_contract_function(
+            "AccessControl", 
+            "hasRole", 
+            role_hash, 
+            request.wallet_address
+        )
+        
+        if has_role:
+            log_info(
+                LogCategoryEnum.SYSTEM,
+                "System Control",
+                f"Role grant requested but user already has role {request.role} (wallet: {request.wallet_address})"
+            )
+            return GrantRoleResponse(
+                success=True,
+                message=f"Wallet already has {request.role} role",
+                wallet_address=request.wallet_address,
+                role=request.role
+            )
+        
+        # Grant the role
+        log_info(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"🔑 Granting {request.role} role to {request.wallet_address} by admin: {current_user.email}",
+            metadata={
+                "admin_id": current_user.id,
+                "admin_email": current_user.email,
+                "wallet": request.wallet_address,
+                "role": request.role
             }
         )
+        
+        tx_hash = blockchain_service.send_transaction(
+            "AccessControl",
+            "grantRole",
+            role_hash,
+            request.wallet_address
+        )
+        
+        log_success(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"✅ {request.role} role granted successfully to {request.wallet_address}",
+            metadata={
+                "tx_hash": tx_hash,
+                "admin_id": current_user.id,
+                "admin_email": current_user.email,
+                "wallet": request.wallet_address,
+                "role": request.role,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        )
+        
+        return GrantRoleResponse(
+            success=True,
+            message=f"{request.role} role granted successfully to {request.wallet_address}",
+            tx_hash=tx_hash,
+            wallet_address=request.wallet_address,
+            role=request.role
+        )
+    except Exception as e:
+        log_error(
+            LogCategoryEnum.SYSTEM,
+            "System Control",
+            f"❌ Failed to grant {request.role} role to {request.wallet_address}: {str(e)}",
+            metadata={
+                "admin_email": current_user.email,
+                "wallet": request.wallet_address,
+                "role": request.role,
+                "error": str(e)
+            }
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to grant role: {str(e)}. Check blockchain connection and ensure you have admin privileges."
+        )
+

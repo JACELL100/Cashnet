@@ -8,7 +8,7 @@ import {
 import KPICard from "@/components/KPICard";
 import Terminal from "@/components/Terminal";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = process.env.NEXT_PUBLIC_API_URL ?? "https://cash-net.onrender.com";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

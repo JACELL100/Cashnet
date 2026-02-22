@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 
 export default function CreditPage() {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);

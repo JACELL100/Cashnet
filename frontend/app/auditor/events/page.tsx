@@ -117,7 +117,7 @@ export default function EventLogPage() {
   // Fetch system logs from backend
   const fetchSystemLogs = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/logs/?limit=200`;
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com'}/api/logs/?limit=200`;
       console.log('Fetching logs from:', url);
       const response = await fetch(url);
       console.log('Response status:', response.status);

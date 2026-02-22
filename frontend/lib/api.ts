@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -107,6 +107,15 @@ export const marketApi = {
   getPrice: (symbol: string) => apiRequest(`/agents-sim/market/price/${symbol}`),
   getCondition: () => apiRequest('/agents-sim/market/condition'),
   getAll: () => apiRequest('/agents-sim/market/all'),
+};
+
+/* === MARKET INTELLIGENCE API === */
+export const marketIntelApi = {
+  getOverview: () => apiRequest('/api/market-intel/overview'),
+  getCandles: (symbol: string, days?: number, interval?: string) =>
+    apiRequest(`/api/market-intel/candles/${symbol}?days=${days ?? 90}&interval=${interval ?? '1d'}`),
+  getVulnerabilities: () => apiRequest('/api/market-intel/vulnerabilities'),
+  getAiAnalysis: () => apiRequest('/api/market-intel/ai-analysis', { method: 'POST' }),
 };
 
 /* === AGENT API === */
