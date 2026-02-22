@@ -49,7 +49,6 @@ export default function DashboardPage() {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [healthMatrix, setHealthMatrix] = useState<HealthItem[]>([
     { name: 'AMM', health: 0 },
-    { name: 'Lending', health: 0 },
     { name: 'Oracle', health: 0 },
     { name: 'Systemic', health: 0 },
   ]);
@@ -121,7 +120,7 @@ export default function DashboardPage() {
           'MEV': 'AMM',
           'Flash Loan': 'Oracle',
           'Liquidity': 'AMM',
-          'Cascade': 'Lending',
+          'Cascade': 'Systemic',
           'Price': 'Oracle',
           'Systemic': 'Systemic',
         };
@@ -133,7 +132,6 @@ export default function DashboardPage() {
         }
         setHealthMatrix([
           { name: 'AMM', health: Math.round(avg(agg['AMM'])) },
-          { name: 'Lending', health: Math.round(avg(agg['Lending'])) },
           { name: 'Oracle', health: Math.round(avg(agg['Oracle'])) },
           { name: 'Systemic', health: Math.round(avg(agg['Systemic'])) },
         ]);
