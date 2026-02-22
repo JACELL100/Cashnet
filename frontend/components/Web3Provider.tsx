@@ -7,32 +7,34 @@ import { sepolia } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ReactNode, useState, useEffect } from 'react';
 import {
+  injectedWallet,
   metaMaskWallet,
-  rainbowWallet,
-  walletConnectWallet,
   coinbaseWallet,
-  trustWallet,
+  walletConnectWallet,
 } from '@rainbow-me/rainbowkit/wallets';
 
-// Configure connectors with MetaMask QR support
-const connectors = connectorsForWallets(
-  [
-    {
-      groupName: 'Recommended',
-      wallets: [
-        metaMaskWallet,
-        rainbowWallet,
-        walletConnectWallet,
-        coinbaseWallet,
-        trustWallet,
-      ],
-    },
-  ],
+// Only include WalletConnect when a real project ID is configured.
+// The relay server rejects invalid IDs, which causes an unhandled
+// "Connection interrupted while trying to subscribe" rejection.
+const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
+const hasValidProjectId = wcProjectId && wcProjectId !== 'demo-project-id' && wcProjectId !== 'YOUR_PROJECT_ID';
+
+// Prioritise the injected (browser-extension) connector so MetaMask opens
+// instantly without waiting for the WalletConnect relay handshake.
+const walletGroups = [
   {
-    appName: 'Cashnet',
-    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID',
-  }
-);
+    groupName: 'Installed',
+    wallets: [injectedWallet, metaMaskWallet, coinbaseWallet],
+  },
+  ...(hasValidProjectId
+    ? [{ groupName: 'Others', wallets: [walletConnectWallet] }]
+    : []),
+];
+
+const connectors = connectorsForWallets(walletGroups, {
+  appName: 'Cashnet',
+  projectId: wcProjectId || 'unused',
+});
 
 // Configure wagmi (wagmi 2.x compatible)
 // ssr: true defers hydration state-updates to useEffect, preventing
@@ -76,6 +78,7 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
+          initialChain={sepolia}
           theme={darkTheme({
             accentColor: '#10b981',
             accentColorForeground: 'white',

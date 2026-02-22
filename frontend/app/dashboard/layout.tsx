@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import CascadeBanner from '@/components/CascadeBanner';
 import { ToastContainer } from '@/components/Toast';
+import LoadingHex from '@/components/LoadingHex';
 import { useAuthStore, UserRole } from '@/store/authStore';
 import { useSimulationStore } from '@/store/simulationStore';
 
@@ -14,7 +15,7 @@ const roleDefaultPaths: Record<UserRole, string> = {
   ADMIN: '/dashboard',
   AUDITOR: '/dashboard/audit',
   LENDER: '/dashboard/lending',
-  BORROWER: '/dashboard',
+  BORROWER: '/dashboard/credit',
 };
 
 export default function DashboardLayout({
@@ -49,11 +50,8 @@ export default function DashboardLayout({
 
   if (!hasHydrated) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-(--color-bg-primary)">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-accent font-mono mb-4">CSH</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <LoadingHex />
       </div>
     );
   }
@@ -61,17 +59,14 @@ export default function DashboardLayout({
   // If hydrated but not authenticated, Next.js will handle the transition
   if (!isAuthenticated || !user) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-(--color-bg-primary)">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-accent font-mono mb-4">CSH</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
+        <LoadingHex />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-(--color-bg-primary)">
+    <div className="min-h-screen bg-[color:var(--color-bg-primary)]">
       <Sidebar />
       <Header />
       <CascadeBanner />

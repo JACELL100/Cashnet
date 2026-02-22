@@ -2,427 +2,250 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSignMessage } from 'wagmi';
+import { loginWithWallet, api } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
-import { useAuthStore, UserRole } from '@/store/authStore';
-import { useSimulationStore } from '@/store/simulationStore';
+import type { UserRole } from '@/store/authStore';
 
-const roleConfig: Record<UserRole, { title: string; icon: string; description: string; color: string; dashboardPath: string; features: string[] }> = {
-  ADMIN: {
-    title: 'Administrator',
-    icon: '⚙',
-    description: 'Full platform access',
-    color: 'text-purple-400 border-purple-400/50 bg-purple-400/10',
-    dashboardPath: '/dashboard',
-    features: [
-      'Full system administration',
-      'User management & permissions',
-      'Platform configuration',
-      'All module access',
-    ],
-  },
-  AUDITOR: {
-    title: 'Auditor',
-    icon: '◆',
-    description: 'Audit & compliance',
-    color: 'text-amber-400 border-amber-400/50 bg-amber-400/10',
-    dashboardPath: '/dashboard/audit',
-    features: [
-      'Transaction audit trails',
-      'Compliance verification',
-      'Smart contract reviews',
-      'Risk assessment reports',
-    ],
-  },
-  LENDER: {
-    title: 'Lender',
-    icon: '≈',
-    description: 'Provide liquidity',
-    color: 'text-emerald-400 border-emerald-400/50 bg-emerald-400/10',
-    dashboardPath: '/dashboard/lending',
-    features: [
-      'Liquidity pool management',
-      'Interest rate optimization',
-      'Portfolio analytics',
-      'Yield strategies',
-    ],
-  },
-  BORROWER: {
-    title: 'Borrower',
-    icon: '⎇',
-    description: 'Access credit',
-    color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
-    dashboardPath: '/dashboard',
-    features: [
-      'Credit score tracking',
-      'Loan management',
-      'Collateral monitoring',
-      'Payment scheduling',
-    ],
-  },
+const roleConfig: Record<string, { label: string; slug: string; path: string; accent: string; features: string[] }> = {
+  ADMIN:    { label: 'Admin',    slug: 'admin',    path: '/admin',            accent: '#ff3860', features: ['System governance & oversight', 'User provisioning', 'Token minting controls', 'Protocol parameter tuning'] },
+  AUDITOR:  { label: 'Auditor',  slug: 'auditor',  path: '/auditor',          accent: '#f0a500', features: ['Real-time transaction auditing', 'Risk scoring & alerts', 'Compliance report generation', 'Cross-pool analytics'] },
+  LENDER:   { label: 'Lender',   slug: 'lender',   path: '/lender',           accent: '#b367ff', features: ['Liquidity pool management', 'Competitive APY earnings', 'Portfolio diversification', 'Automated interest accrual'] },
+  BORROWER: { label: 'Borrower', slug: 'credit',   path: '/dashboard/credit', accent: '#00d4ff', features: ['On-chain credit scoring', 'Multi-asset collateral', 'Competitive borrow rates', 'Flexible repayment terms'] },
 };
 
 export default function SignupPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const addToast = useUIStore((state) => state.addToast);
-  const loginWithWallet = useAuthStore((state) => state.loginWithWallet);
-  const setUserId = useSimulationStore((state) => state.setUserId);
-
+  const addToast = useUIStore((s) => s.addToast);
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
-  // Get role from query params
-  const roleParam = searchParams.get('role') as UserRole | null;
-  const [selectedRole, setSelectedRole] = useState<UserRole>(roleParam || 'BORROWER');
+  const [selectedRole, setSelectedRole] = useState<string>('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // Redirect to landing page if no role is selected
   useEffect(() => {
-    if (!roleParam) {
-      router.replace('/');
-    }
-  }, [roleParam, router]);
+    const r = searchParams.get('role')?.toUpperCase();
+    if (r && roleConfig[r]) setSelectedRole(r);
+  }, [searchParams]);
 
-  const currentRole = roleConfig[selectedRole];
+  const accent = selectedRole ? roleConfig[selectedRole].accent : '#00d4ff';
 
-  // Handle wallet connection and signup
   const handleSignup = async () => {
-    if (!address || !isConnected) {
-      addToast({
-        message: 'Please connect your wallet first',
-        severity: 'warning',
-      });
-      return;
-    }
+    if (!isConnected || !address) { setErrorMsg('Connect your wallet first'); return; }
+    if (!selectedRole) { setErrorMsg('Select a role first'); return; }
+    setErrorMsg('');
+    setLoading(true);
 
     try {
-      // Get nonce from backend
-      const nonceResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/nonce`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: address }),
-      });
+      const nonceRes = await api.post('/api/auth/nonce', { wallet_address: address });
+      const nonceData = (nonceRes as { data?: { message?: string }; message?: string })?.data ?? nonceRes;
+      const message = (nonceData as { message?: string })?.message;
+      if (!message) throw new Error('Failed to get nonce');
 
-      if (!nonceResponse.ok) {
-        throw new Error('Failed to get authentication nonce');
-      }
-
-      const { message } = await nonceResponse.json();
-
-      // Request signature from user
       const signature = await signMessageAsync({ message });
+      const data = await loginWithWallet(address, signature, name.trim() || undefined, email.trim() || undefined, selectedRole as UserRole);
 
-      // Authenticate with backend (signup + login in one step) with role
-      await loginWithWallet(address, signature, name || undefined, email || undefined, selectedRole);
-
-      // Get updated user state after authentication
-      const authState = useAuthStore.getState();
-      
-      if (authState.isAuthenticated && authState.user) {
-        setUserId(authState.user.id);
-        addToast({
-          message: `Welcome to cashnet, ${authState.user.name || currentRole.title}!`,
-          severity: 'success',
-        });
-        
-        // Role-based redirect
-        const dashboardPath = roleConfig[authState.user.role].dashboardPath;
-        
-        // Use requestAnimationFrame for immediate redirect after state update
-        requestAnimationFrame(() => {
-          router.replace(dashboardPath);
-        });
-      } else {
-        throw new Error('Authentication succeeded but user state not updated');
-      }
-    } catch (error) {
-      console.error('Signup error:', error);
-      addToast({
-        message: error instanceof Error ? error.message : 'Signup failed',
-        severity: 'error',
+      useAuthStore.setState({
+        user: { id: data.uid, email: data.email ?? email ?? '', name: data.name ?? name ?? address, role: data.role as UserRole, plan: 'starter', createdAt: Date.now(), avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${address}`, token: data.token },
+        token: data.token, isAuthenticated: true, loading: false,
       });
+      addToast({ message: `Welcome to CashNet, ${data.name ?? name ?? 'anon'}!`, severity: 'success' });
+      window.location.href = roleConfig[selectedRole].path;
+    } catch (err: unknown) {
+      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : 'Registration failed');
     }
   };
 
+  const inputCls = `w-full h-11 px-3 text-sm bg-[#080c1a] border border-[#1e2540] rounded-lg outline-none text-white placeholder:text-[#3a4358] transition-all focus:border-[${accent}] focus:shadow-[0_0_0_3px_rgba(0,212,255,0.1)]`;
+
   return (
-    <div className="min-h-screen bg-(--color-bg-primary) grid grid-cols-1 md:grid-cols-2">
-      {/* Left Panel - Branding */}
-      <div className="hidden md:flex flex-col justify-start gap-10 p-8 bg-gradient-to-b from-[color:var(--color-bg-secondary)] to-[color:var(--color-bg-primary)] border-r border-[color:var(--color-border)]">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-accent rounded flex items-center justify-center text-base font-bold text-[color:var(--color-bg-primary)]">
-            CN
+    <div className="min-h-screen flex bg-[#060a18]">
+      {/* ── Branding Panel ─────────────────────────────── */}
+      <div className="hidden lg:flex lg:w-[480px] xl:w-[520px] flex-col justify-between p-10 relative overflow-hidden bg-[#0a0f1f]">
+        <div className="absolute top-0 left-0 w-[3px] h-full transition-all duration-500" style={{ background: `linear-gradient(180deg, ${accent}, transparent 70%)` }} />
+
+        <svg className="absolute inset-0 w-full h-full opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="hexS" width="56" height="100" patternUnits="userSpaceOnUse" patternTransform="scale(1.2)">
+              <path d="M28 2L54 18V50L28 66L2 50V18Z" fill="none" stroke="white" strokeWidth="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#hexS)" />
+        </svg>
+
+        <Link href="/" className="relative z-10 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center border border-[#1e2540] transition-all duration-300" style={{ background: `${accent}12` }}>
+            <span className="text-xs font-bold transition-all duration-300" style={{ color: accent }}>CN</span>
           </div>
-          <span className="font-mono text-lg font-bold text-text-primary">cashnet</span>
+          <div>
+            <span className="text-sm font-semibold text-white tracking-tight">CashNet</span>
+            <span className="text-[10px] uppercase tracking-[0.15em] block text-[#5a6478]">DeFi Platform</span>
+          </div>
         </Link>
 
-        <div className="space-y-8">
-          {/* Role Badge */}
-          <div className={`inline-flex items-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
-            <span className="text-2xl">{currentRole.icon}</span>
-            <div>
-              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
-              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
-            </div>
-          </div>
-
-          {/* Features */}
+        <div className="relative z-10 space-y-8">
           <div>
-            <h3 className="text-text-primary font-mono font-bold mb-4">What you get as {currentRole.title}:</h3>
-            <ul className="space-y-3 text-text-secondary text-sm font-mono">
-              {currentRole.features.map((feature, idx) => (
-                <li key={idx} className="flex items-start gap-2">
-                  <span className="text-accent">✓</span>
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
+            <p className="text-[11px] uppercase tracking-[0.2em] mb-3 transition-all duration-300" style={{ color: `${accent}99` }}>
+              {selectedRole ? `${roleConfig[selectedRole].label} Registration` : 'Choose Your Path'}
+            </p>
+            <h1 className="text-[28px] font-semibold text-white leading-[1.2] tracking-tight">
+              Join the<br />Protocol.
+            </h1>
+            <p className="text-sm text-[#5a6478] leading-relaxed mt-3 max-w-[320px]">
+              Connect your wallet and select a role to start participating in decentralized finance.
+            </p>
           </div>
 
-          {/* Status Pills */}
-          <div className="flex gap-2">
-            <span className="px-3 py-1 bg-[rgba(0,212,99,0.1)] border border-success text-success rounded text-xs font-mono">
-              web3-native
-            </span>
-            <span className="px-3 py-1 bg-[rgba(0,212,255,0.1)] border border-accent text-accent rounded text-xs font-mono">
-              secure
-            </span>
+          {selectedRole ? (
+            <div className="space-y-3">
+              <p className="text-[10px] uppercase tracking-[0.15em] text-[#3a4358]">{roleConfig[selectedRole].label} Features</p>
+              {roleConfig[selectedRole].features.map((f) => (
+                <div key={f} className="flex items-center gap-3">
+                  <span className="text-[10px]" style={{ color: accent }}>⬡</span>
+                  <span className="text-[13px] text-[#8b95a5]">{f}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {['4 specialised roles', 'Wallet-first onboarding', 'Instant protocol access', 'Role-based dashboards'].map((f) => (
+                <div key={f} className="flex items-center gap-3">
+                  <span className="text-[10px] text-[#00d4ff]">⬡</span>
+                  <span className="text-[13px] text-[#8b95a5]">{f}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="rounded-lg border border-[#1e2540] bg-[#0c1224] p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-[#00d463]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
+              <span className="text-[11px] text-[#8b95a5] font-medium">Non-custodial</span>
+            </div>
+            <p className="text-[11px] text-[#3a4358] leading-relaxed">
+              Your keys, your identity. We never store or access your private key.
+            </p>
           </div>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2">
+          {selectedRole ? (
+            <span className="px-2.5 py-1 rounded text-[10px] font-medium tracking-wider border transition-all duration-300" style={{ color: accent, borderColor: `${accent}30`, background: `${accent}0a` }}>{selectedRole}</span>
+          ) : (
+            <span className="px-2.5 py-1 rounded text-[10px] font-medium tracking-wider border border-[#1e2540] text-[#3a4358]">NO ROLE</span>
+          )}
+          <span className="px-2.5 py-1 rounded text-[10px] font-medium tracking-wider border border-[#00d46330] text-[#00d463] bg-[#00d4630a]">SEPOLIA</span>
         </div>
       </div>
 
-      {/* Right Panel - Signup Form */}
-      <div className="flex flex-col justify-center items-center p-8 md:p-12">
-        <div className="w-full max-w-sm space-y-8">
-          {/* Mobile Logo */}
-          <Link href="/" className="md:hidden flex items-center gap-2 justify-center mb-8">
-            <div className="w-8 h-8 bg-accent rounded flex items-center justify-center text-xs font-bold text-[color:var(--color-bg-primary)]">
-              CN
+      {/* ── Signup Form ──────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
+        <div className="w-full max-w-[380px] space-y-7">
+          <Link href="/" className="lg:hidden flex items-center gap-2.5 justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#1e2540]" style={{ background: `${accent}12` }}>
+              <span className="text-[10px] font-bold" style={{ color: accent }}>CN</span>
             </div>
-            <span className="font-mono text-base font-bold text-text-primary">cashnet</span>
+            <span className="text-sm font-semibold text-white">CashNet</span>
           </Link>
 
-          {/* Role Badge (Mobile) */}
-          <div className={`md:hidden flex items-center justify-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
-            <span className="text-2xl">{currentRole.icon}</span>
-            <div>
-              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
-              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-white tracking-tight">Create Account</h2>
+            <p className="text-sm text-[#5a6478] mt-1">Connect wallet &amp; choose your role</p>
+          </div>
+
+          {errorMsg && (
+            <div className="p-3 rounded-lg border border-[#ff386030] bg-[#ff38600a] text-xs text-[#ff6b6b]">
+              {errorMsg}
+            </div>
+          )}
+
+          {/* Role Selector */}
+          <div className="space-y-2">
+            <label className="text-[11px] uppercase tracking-[0.1em] text-[#5a6478]">Select Role</label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(roleConfig).map(([key, cfg]) => (
+                <button key={key} onClick={() => setSelectedRole(key)}
+                  className="p-3 rounded-lg border text-left transition-all"
+                  style={{
+                    borderColor: selectedRole === key ? `${cfg.accent}50` : '#1e2540',
+                    background: selectedRole === key ? `${cfg.accent}0a` : '#0c1224',
+                  }}>
+                  <div className="text-xs font-medium transition-colors" style={{ color: selectedRole === key ? cfg.accent : '#8b95a5' }}>
+                    {cfg.label}
+                  </div>
+                  <div className="text-[10px] text-[#3a4358] mt-0.5">/{cfg.slug}</div>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Heading */}
-          <div className="text-center space-y-2">
-            <div className="text-5xl mb-2">{currentRole.icon}</div>
-            <h1 className="text-3xl font-bold font-mono text-text-primary">
-              Get Started
-            </h1>
-            <p className="text-text-secondary text-sm font-mono">
-              Join cashnet as {currentRole.title.toLowerCase()}
-            </p>
-            <div className="text-xs text-text-secondary font-mono mt-3 p-3 bg-(--color-bg-primary) rounded border border-(--color-border) text-left">
-              💡 <strong>MetaMask:</strong> Choose "Browser" for extension or "WalletConnect" for mobile QR
-            </div>
-          </div>
-
-          {/* Optional Profile Info */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="name" className="form-label text-xs">
-                Display Name (Optional)
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="form-input"
-                placeholder="Your name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="email" className="form-label text-xs">
-                Email (Optional)
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="form-input"
-                placeholder="your@email.com"
-              />
-              <p className="text-xs text-text-tertiary font-mono">
-                Optional: for notifications and updates
-              </p>
-            </div>
+          {/* Optional Profile Fields */}
+          <div className="space-y-3">
+            <label className="text-[11px] uppercase tracking-[0.1em] text-[#5a6478]">Profile <span className="normal-case text-[#3a4358]">(optional)</span></label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Display name" className={inputCls} />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (for notifications)" className={inputCls} />
           </div>
 
           {/* Wallet Connection */}
-          <div className="space-y-6">
-            <div className="flex flex-col items-center gap-4 p-8 border border-(--color-border) rounded-lg bg-(--color-bg-secondary)">
-              <div className="text-6xl mb-2">🦊</div>
-              <h3 className="text-lg font-bold font-mono text-text-primary">
-                Connect Your Wallet
-              </h3>
-              <p className="text-text-secondary text-sm font-mono text-center">
-                Sign up with MetaMask or any Ethereum wallet. No passwords needed!
-              </p>
-              
-              <div className="w-full mt-4">
-                <ConnectButton.Custom>
-                  {({
-                    account,
-                    chain,
-                    openAccountModal,
-                    openChainModal,
-                    openConnectModal,
-                    authenticationStatus,
-                    mounted,
-                  }: any) => {
-                    const ready = mounted && authenticationStatus !== 'loading';
-                    const connected =
-                      ready &&
-                      account &&
-                      chain &&
-                      (!authenticationStatus || authenticationStatus === 'authenticated');
+          <div className="space-y-3">
+            <label className="text-[11px] uppercase tracking-[0.1em] text-[#5a6478]">Wallet</label>
+            <ConnectButton.Custom>
+              {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
+                const connected = mounted && account && chain;
+                return (
+                  <div>
+                    {!connected ? (
+                      <button onClick={openConnectModal}
+                        className="w-full h-11 rounded-lg text-sm font-medium border border-[#1e2540] bg-[#0c1224] text-white hover:border-[#2e3550] transition-all">
+                        Connect Wallet
+                      </button>
+                    ) : (
+                      <button onClick={openAccountModal}
+                        className="w-full h-11 rounded-lg text-sm font-mono border px-4 flex items-center justify-between transition-all"
+                        style={{ borderColor: `${accent}30`, background: `${accent}08`, color: accent }}>
+                        <span>{account.displayName}</span>
+                        <span className="text-[10px] text-[#5a6478]">{chain.name}</span>
+                      </button>
+                    )}
+                  </div>
+                );
+              }}
+            </ConnectButton.Custom>
 
-                    return (
-                      <div
-                        {...(!ready && {
-                          'aria-hidden': true,
-                          style: {
-                            opacity: 0,
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                          },
-                        })}
-                      >
-                        {(() => {
-                          if (!connected) {
-                            return (
-                              <button
-                                onClick={openConnectModal}
-                                type="button"
-                                className="btn accent w-full py-3"
-                              >
-                                Connect Wallet
-                              </button>
-                            );
-                          }
-
-                          if (chain.unsupported) {
-                            return (
-                              <button
-                                onClick={openChainModal}
-                                type="button"
-                                className="btn ghost w-full py-3 border-danger text-danger"
-                              >
-                                Wrong network
-                              </button>
-                            );
-                          }
-
-                          return (
-                            <div className="flex flex-col gap-3">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={openChainModal}
-                                  type="button"
-                                  className="btn ghost flex-1 py-2 text-xs"
-                                >
-                                  {chain.hasIcon && (
-                                    <div
-                                      style={{
-                                        background: chain.iconBackground,
-                                        width: 12,
-                                        height: 12,
-                                        borderRadius: 999,
-                                        overflow: 'hidden',
-                                        marginRight: 4,
-                                      }}
-                                    >
-                                      {chain.iconUrl && (
-                                        <img
-                                          alt={chain.name ?? 'Chain icon'}
-                                          src={chain.iconUrl}
-                                          style={{ width: 12, height: 12 }}
-                                        />
-                                      )}
-                                    </div>
-                                  )}
-                                  {chain.name}
-                                </button>
-
-                                <button
-                                  onClick={openAccountModal}
-                                  type="button"
-                                  className="btn ghost flex-1 py-2 text-xs"
-                                >
-                                  {account.displayName}
-                                </button>
-                              </div>
-
-                              <button
-                                onClick={handleSignup}
-                                type="button"
-                                className="btn accent w-full py-3"
-                              >
-                                Sign Up with Wallet
-                              </button>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    );
-                  }}
-                </ConnectButton.Custom>
-              </div>
-            </div>
-
-            {/* Security Notice */}
-            <div className="bg-[rgba(0,212,255,0.05)] border border-accent rounded-lg p-4">
-              <div className="flex gap-3">
-                <div className="text-accent text-xl">🔒</div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold font-mono text-text-primary">
-                    Your Keys, Your Control
-                  </h4>
-                  <ul className="text-xs text-text-secondary font-mono space-y-1">
-                    <li>• No passwords to remember</li>
-                    <li>• You control your private keys</li>
-                    <li>• Approve each transaction yourself</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+            <button onClick={handleSignup} disabled={loading || !isConnected || !selectedRole}
+              className="w-full h-11 rounded-lg text-sm font-medium text-white disabled:opacity-40 transition-all hover:brightness-110 active:scale-[0.98]"
+              style={{ background: accent }}>
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Registering&hellip;
+                </span>
+              ) : 'Create Account'}
+            </button>
           </div>
 
-          {/* Login Link */}
-          <div className="text-center">
-            <p className="text-text-secondary text-sm font-mono">
-              Already have an account?{' '}
-              <Link
-                href={`/login?role=${selectedRole}`}
-                className="text-accent hover:text-accent-light transition-colors font-bold"
-              >
-                Sign in
-              </Link>
-            </p>
-          </div>
-
-          {/* Change Role Link */}
-          <div className="text-center">
-            <Link
-              href="/"
-              className="text-text-tertiary text-xs font-mono hover:text-text-secondary transition-colors"
-            >
-              ← Change role
+          <div className="text-center text-xs text-[#5a6478] pt-4 border-t border-[#1e2540]">
+            Already have an account?{' '}
+            <Link href={`/login${selectedRole ? `?role=${selectedRole}` : ''}`} className="font-medium hover:underline" style={{ color: accent }}>
+              Sign in &rarr;
             </Link>
+          </div>
+
+          <div className="flex items-center justify-center gap-4 text-xs text-[#3a4358]">
+            <Link href="/lender/signup" className="hover:text-[#b367ff] transition-colors">Lender</Link>
+            <span>·</span>
+            <Link href="/credit/signup" className="hover:text-[#00d4ff] transition-colors">Credit</Link>
+            <span>·</span>
+            <Link href="/auditor/signup" className="hover:text-[#f0a500] transition-colors">Auditor</Link>
+            <span>·</span>
+            <Link href="/admin/login" className="hover:text-[#ff3860] transition-colors">Admin</Link>
           </div>
         </div>
       </div>

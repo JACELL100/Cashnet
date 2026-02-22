@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { ToastContainer } from '@/components/Toast';
+import LoadingHex from '@/components/LoadingHex';
 
 const auditorNav = [
   { href: '/auditor', label: 'Overview', icon: '⊡' },
@@ -37,10 +38,7 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
   if (!hasHydrated) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">CN</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
+        <LoadingHex />
       </div>
     );
   }
@@ -51,10 +49,7 @@ export default function AuditorLayout({ children }: { children: React.ReactNode 
   if (!isAuthenticated || (user?.role !== 'AUDITOR' && user?.role !== 'ADMIN')) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-[#f0a500] font-mono mb-4">CN</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
+        <LoadingHex />
       </div>
     );
   }

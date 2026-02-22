@@ -1,370 +1,232 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount, useSignMessage } from 'wagmi';
+import { loginWithWallet, api } from '@/lib/api';
+import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
-import { useAuthStore, UserRole } from '@/store/authStore';
-import { useSimulationStore } from '@/store/simulationStore';
+import type { UserRole } from '@/store/authStore';
 
-const roleConfig: Record<UserRole, { title: string; icon: string; description: string; color: string; dashboardPath: string }> = {
-  ADMIN: {
-    title: 'Administrator',
-    icon: '⚙',
-    description: 'Full platform access',
-    color: 'text-purple-400 border-purple-400/50 bg-purple-400/10',
-    dashboardPath: '/dashboard',
-  },
-  AUDITOR: {
-    title: 'Auditor',
-    icon: '◆',
-    description: 'Audit & compliance',
-    color: 'text-amber-400 border-amber-400/50 bg-amber-400/10',
-    dashboardPath: '/dashboard/audit',
-  },
-  LENDER: {
-    title: 'Lender',
-    icon: '≈',
-    description: 'Provide liquidity',
-    color: 'text-emerald-400 border-emerald-400/50 bg-emerald-400/10',
-    dashboardPath: '/dashboard/lending',
-  },
-  BORROWER: {
-    title: 'Borrower',
-    icon: '⎇',
-    description: 'Access credit',
-    color: 'text-cyan-400 border-cyan-400/50 bg-cyan-400/10',
-    dashboardPath: '/dashboard',
-  },
+const roleConfig: Record<string, { label: string; slug: string; path: string; accent: string; features: string[] }> = {
+  ADMIN:    { label: 'Admin',    slug: 'admin',    path: '/admin',            accent: '#ff3860', features: ['System governance', 'User management', 'Token minting'] },
+  AUDITOR:  { label: 'Auditor',  slug: 'auditor',  path: '/auditor',          accent: '#f0a500', features: ['Transaction audit', 'Risk analysis', 'Compliance reports'] },
+  LENDER:   { label: 'Lender',   slug: 'lender',   path: '/lender',           accent: '#b367ff', features: ['Pool management', 'Interest earnings', 'APY tracking'] },
+  BORROWER: { label: 'Borrower', slug: 'credit',   path: '/dashboard/credit', accent: '#00d4ff', features: ['Credit building', 'Loan access', 'Collateral management'] },
 };
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const addToast = useUIStore((state) => state.addToast);
-  const loginWithWallet = useAuthStore((state) => state.loginWithWallet);
-  const setUserId = useSimulationStore((state) => state.setUserId);
-
+  const addToast = useUIStore((s) => s.addToast);
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
-  // Get role from query params
-  const roleParam = searchParams.get('role') as UserRole | null;
-  const [selectedRole, setSelectedRole] = useState<UserRole>(roleParam || 'BORROWER');
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // Redirect to landing page if no role is selected
   useEffect(() => {
-    if (!roleParam) {
-      router.replace('/');
-    }
-  }, [roleParam, router]);
+    const r = searchParams.get('role')?.toUpperCase();
+    if (r && roleConfig[r]) setSelectedRole(r);
+  }, [searchParams]);
 
-  const currentRole = roleConfig[selectedRole];
+  const accent = selectedRole ? roleConfig[selectedRole].accent : '#00d4ff';
 
-  // Handle wallet connection and authentication
-  const handleAuthenticate = async () => {
-    if (!address || !isConnected) {
-      addToast({
-        message: 'Please connect your wallet first',
-        severity: 'warning',
-      });
-      return;
-    }
+  const handleLogin = async () => {
+    if (!isConnected || !address) { setErrorMsg('Connect your wallet first'); return; }
+    if (!selectedRole) { setErrorMsg('Select a role first'); return; }
+    setErrorMsg('');
+    setLoading(true);
 
     try {
-      // Get nonce from backend
-      const nonceResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/nonce`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: address }),
-      });
+      const nonceRes = await api.post('/api/auth/nonce', { wallet_address: address });
+      const nonceData = nonceRes?.data ?? nonceRes;
+      const message = nonceData?.message;
+      if (!message) throw new Error('Failed to get nonce');
 
-      if (!nonceResponse.ok) {
-        throw new Error('Failed to get authentication nonce');
-      }
-
-      const nonceData = await nonceResponse.json();
-      const { message } = nonceData;
-
-      // Request signature from user
       const signature = await signMessageAsync({ message });
+      const data = await loginWithWallet(address, signature, undefined, undefined, selectedRole as UserRole);
 
-      // Authenticate with backend with selected role
-      await loginWithWallet(address, signature, undefined, undefined, selectedRole);
-
-      // Get updated user state after authentication
-      const authState = useAuthStore.getState();
-      
-      if (authState.isAuthenticated && authState.user) {
-        setUserId(authState.user.id);
-        addToast({
-          message: `Welcome, ${authState.user.name || currentRole.title}!`,
-          severity: 'success',
-        });
-        
-        // Role-based redirect
-        const dashboardPath = roleConfig[authState.user.role].dashboardPath;
-        
-        // Use requestAnimationFrame for immediate redirect after state update
-        requestAnimationFrame(() => {
-          router.replace(dashboardPath);
-        });
-      } else {
-        throw new Error('Authentication succeeded but user state not updated');
-      }
-    } catch (error) {
-      console.error('[AUTH] Authentication error:', error);
-      addToast({
-        message: error instanceof Error ? error.message : 'Authentication failed',
-        severity: 'error',
+      useAuthStore.setState({
+        user: { id: data.uid, email: data.email ?? '', name: data.name ?? address, role: data.role as UserRole, plan: 'starter', createdAt: Date.now(), avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${address}`, token: data.token },
+        token: data.token, isAuthenticated: true, loading: false,
       });
+      addToast({ message: `Signed in as ${roleConfig[selectedRole].label}`, severity: 'success' });
+      window.location.href = roleConfig[selectedRole].path;
+    } catch (err: unknown) {
+      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : 'Authentication failed');
     }
   };
 
   return (
-    <div className="min-h-screen bg-(--color-bg-primary) grid grid-cols-1 md:grid-cols-2">
-      {/* Left Panel - Branding */}
-      <div className="hidden md:flex flex-col justify-start gap-10 p-8 bg-gradient-to-b from-[color:var(--color-bg-secondary)] to-[color:var(--color-bg-primary)] border-r border-[color:var(--color-border)]">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-accent rounded flex items-center justify-center text-base font-bold text-[color:var(--color-bg-primary)]">
-            CN
+    <div className="min-h-screen flex bg-[#060a18]">
+      {/* ── Branding Panel ─────────────────────────────── */}
+      <div className="hidden lg:flex lg:w-[480px] xl:w-[520px] flex-col justify-between p-10 relative overflow-hidden bg-[#0a0f1f]">
+        <div className="absolute top-0 left-0 w-[3px] h-full transition-all duration-500" style={{ background: `linear-gradient(180deg, ${accent}, transparent 70%)` }} />
+
+        <svg className="absolute inset-0 w-full h-full opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="hexL" width="56" height="100" patternUnits="userSpaceOnUse" patternTransform="scale(1.2)">
+              <path d="M28 2L54 18V50L28 66L2 50V18Z" fill="none" stroke="white" strokeWidth="0.5"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#hexL)" />
+        </svg>
+
+        <Link href="/" className="relative z-10 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center border border-[#1e2540] transition-all duration-300" style={{ background: `${accent}12` }}>
+            <span className="text-xs font-bold transition-all duration-300" style={{ color: accent }}>CN</span>
           </div>
-          <span className="font-mono text-lg font-bold text-text-primary">cashnet</span>
+          <div>
+            <span className="text-sm font-semibold text-white tracking-tight">CashNet</span>
+            <span className="text-[10px] uppercase tracking-[0.15em] block text-[#5a6478]">DeFi Platform</span>
+          </div>
         </Link>
 
-        <div className="space-y-8">
-          {/* Role Badge */}
-          <div className={`inline-flex items-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
-            <span className="text-2xl">{currentRole.icon}</span>
-            <div>
-              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
-              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
-            </div>
-          </div>
-
-          {/* Quote */}
+        <div className="relative z-10 space-y-8">
           <div>
-            <blockquote className="text-text-secondary italic font-mono text-sm">
-              "Non-custodial authentication powered by your wallet signature."
-            </blockquote>
-            <p className="text-text-tertiary text-xs mt-2">— Web3 Security</p>
+            <p className="text-[11px] uppercase tracking-[0.2em] mb-3 transition-all duration-300" style={{ color: `${accent}99` }}>
+              {selectedRole ? `${roleConfig[selectedRole].label} Portal` : 'Select Your Role'}
+            </p>
+            <h1 className="text-[28px] font-semibold text-white leading-[1.2] tracking-tight">
+              Web3-Native<br />Authentication.
+            </h1>
+            <p className="text-sm text-[#5a6478] leading-relaxed mt-3 max-w-[320px]">
+              Sign in with your wallet. No passwords, no emails — just your keys, your identity.
+            </p>
           </div>
 
-          {/* Mini Terminal */}
-          <div className="bg-(--color-bg-primary) border border-(--color-border) rounded p-4 text-xs font-mono space-y-1">
-            <div className="text-accent">→ logging in as {selectedRole.toLowerCase()}</div>
-            <div className="text-success">✓ signature verification enabled</div>
-            <div className="text-warn">⚠ connect your wallet to continue</div>
-          </div>
+          {selectedRole && (
+            <div className="space-y-3">
+              {roleConfig[selectedRole].features.map((f) => (
+                <div key={f} className="flex items-center gap-3">
+                  <span className="text-[10px]" style={{ color: accent }}>⬡</span>
+                  <span className="text-[13px] text-[#8b95a5]">{f}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* Status Pills */}
-          <div className="flex gap-2">
-            <span className="px-3 py-1 bg-[rgba(0,212,99,0.1)] border border-success text-success rounded text-xs font-mono">
-              non-custodial
-            </span>
-            <span className="px-3 py-1 bg-[rgba(0,212,255,0.1)] border border-accent text-accent rounded text-xs font-mono">
-              secure
-            </span>
+          <div className="rounded-lg border border-[#1e2540] bg-[#0c1224] p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-[#00d463]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
+              <span className="text-[11px] text-[#8b95a5] font-medium">Security</span>
+            </div>
+            <p className="text-[11px] text-[#3a4358] leading-relaxed">
+              Connection uses EIP-4361 sign-in. Your private key never leaves your wallet.
+            </p>
           </div>
+        </div>
+
+        <div className="relative z-10 flex items-center gap-2">
+          {selectedRole ? (
+            <span className="px-2.5 py-1 rounded text-[10px] font-medium tracking-wider border transition-all duration-300" style={{ color: accent, borderColor: `${accent}30`, background: `${accent}0a` }}>{selectedRole}</span>
+          ) : (
+            <span className="px-2.5 py-1 rounded text-[10px] font-medium tracking-wider border border-[#1e2540] text-[#3a4358]">NO ROLE</span>
+          )}
+          <span className="px-2.5 py-1 rounded text-[10px] font-medium tracking-wider border border-[#00d46330] text-[#00d463] bg-[#00d4630a]">SEPOLIA</span>
         </div>
       </div>
 
-      {/* Right Panel - Wallet Auth */}
-      <div className="flex flex-col justify-center items-center p-8 md:p-12">
-        <div className="w-full max-w-sm space-y-8">
-          {/* Mobile Logo */}
-          <Link href="/" className="md:hidden flex items-center gap-2 justify-center mb-8">
-            <div className="w-8 h-8 bg-accent rounded flex items-center justify-center text-xs font-bold text-[color:var(--color-bg-primary)]">
-              CN
+      {/* ── Login Form ────────────────────────────────── */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
+        <div className="w-full max-w-[380px] space-y-8">
+          <Link href="/" className="lg:hidden flex items-center gap-2.5 justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#1e2540]" style={{ background: `${accent}12` }}>
+              <span className="text-[10px] font-bold" style={{ color: accent }}>CN</span>
             </div>
-            <span className="font-mono text-base font-bold text-text-primary">cashnet</span>
+            <span className="text-sm font-semibold text-white">CashNet</span>
           </Link>
 
-          {/* Role Badge (Mobile) */}
-          <div className={`md:hidden flex items-center justify-center gap-3 px-4 py-3 rounded-lg border ${currentRole.color}`}>
-            <span className="text-2xl">{currentRole.icon}</span>
-            <div>
-              <div className="font-bold font-mono text-text-primary">{currentRole.title}</div>
-              <div className="text-xs text-text-secondary font-mono">{currentRole.description}</div>
-            </div>
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-white tracking-tight">Wallet Sign In</h2>
+            <p className="text-sm text-[#5a6478] mt-1">Connect and authenticate in seconds</p>
           </div>
 
-          {/* Heading */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold font-mono text-text-primary">
-              Sign In
-            </h1>
-            <p className="text-text-secondary text-sm font-mono">
-              Connect your wallet to access cashnet as {currentRole.title.toLowerCase()}
-            </p>
+          {errorMsg && (
+            <div className="p-3 rounded-lg border border-[#ff386030] bg-[#ff38600a] text-xs text-[#ff6b6b]">
+              {errorMsg}
+            </div>
+          )}
+
+          {/* Role Selector */}
+          <div className="space-y-2">
+            <label className="text-[11px] uppercase tracking-[0.1em] text-[#5a6478]">Select Role</label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(roleConfig).map(([key, cfg]) => (
+                <button key={key} onClick={() => setSelectedRole(key)}
+                  className="p-3 rounded-lg border text-left transition-all"
+                  style={{
+                    borderColor: selectedRole === key ? `${cfg.accent}50` : '#1e2540',
+                    background: selectedRole === key ? `${cfg.accent}0a` : '#0c1224',
+                  }}>
+                  <div className="text-xs font-medium transition-colors" style={{ color: selectedRole === key ? cfg.accent : '#8b95a5' }}>
+                    {cfg.label}
+                  </div>
+                  <div className="text-[10px] text-[#3a4358] mt-0.5">/{cfg.slug}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Wallet Connection */}
-          <div className="space-y-6">
-            <div className="flex flex-col items-center gap-4 p-8 border border-(--color-border) rounded-lg bg-(--color-bg-secondary)">
-              <div className="text-6xl mb-2">🦊</div>
-              <h3 className="text-lg font-bold font-mono text-text-primary">
-                MetaMask & Wallet Login
-              </h3>
-              <p className="text-text-secondary text-sm font-mono text-center">
-                Sign a message with MetaMask or any Web3 wallet. No gas fees required.
-              </p>
-              <div className="text-xs text-text-secondary font-mono mt-2 p-3 bg-(--color-bg-primary) rounded border border-(--color-border)">
-                💡 <strong>MetaMask users:</strong> Choose "Browser" for extension or "WalletConnect" for QR code (mobile)
-              </div>
-              
-              <div className="w-full mt-4">
-                <ConnectButton.Custom>
-                  {({
-                    account,
-                    chain,
-                    openAccountModal,
-                    openChainModal,
-                    openConnectModal,
-                    authenticationStatus,
-                    mounted,
-                  }: any) => {
-                    const ready = mounted && authenticationStatus !== 'loading';
-                    const connected =
-                      ready &&
-                      account &&
-                      chain &&
-                      (!authenticationStatus || authenticationStatus === 'authenticated');
+          <div className="space-y-4">
+            <label className="text-[11px] uppercase tracking-[0.1em] text-[#5a6478]">Wallet</label>
+            <ConnectButton.Custom>
+              {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
+                const connected = mounted && account && chain;
+                return (
+                  <div>
+                    {!connected ? (
+                      <button onClick={openConnectModal}
+                        className="w-full h-11 rounded-lg text-sm font-medium border border-[#1e2540] bg-[#0c1224] text-white hover:border-[#2e3550] transition-all">
+                        Connect Wallet
+                      </button>
+                    ) : (
+                      <button onClick={openAccountModal}
+                        className="w-full h-11 rounded-lg text-sm font-mono border px-4 flex items-center justify-between transition-all"
+                        style={{ borderColor: `${accent}30`, background: `${accent}08`, color: accent }}>
+                        <span>{account.displayName}</span>
+                        <span className="text-[10px] text-[#5a6478]">
+                          {chain.name}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                );
+              }}
+            </ConnectButton.Custom>
 
-                    return (
-                      <div
-                        {...(!ready && {
-                          'aria-hidden': true,
-                          style: {
-                            opacity: 0,
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                          },
-                        })}
-                      >
-                        {(() => {
-                          if (!connected) {
-                            return (
-                              <button
-                                onClick={openConnectModal}
-                                type="button"
-                                className="btn accent w-full py-3"
-                              >
-                                Connect Wallet
-                              </button>
-                            );
-                          }
-
-                          if (chain.unsupported) {
-                            return (
-                              <button
-                                onClick={openChainModal}
-                                type="button"
-                                className="btn ghost w-full py-3 border-danger text-danger"
-                              >
-                                Wrong network
-                              </button>
-                            );
-                          }
-
-                          return (
-                            <div className="flex flex-col gap-3">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={openChainModal}
-                                  type="button"
-                                  className="btn ghost flex-1 py-2 text-xs"
-                                >
-                                  {chain.hasIcon && (
-                                    <div
-                                      style={{
-                                        background: chain.iconBackground,
-                                        width: 12,
-                                        height: 12,
-                                        borderRadius: 999,
-                                        overflow: 'hidden',
-                                        marginRight: 4,
-                                      }}
-                                    >
-                                      {chain.iconUrl && (
-                                        <img
-                                          alt={chain.name ?? 'Chain icon'}
-                                          src={chain.iconUrl}
-                                          style={{ width: 12, height: 12 }}
-                                        />
-                                      )}
-                                    </div>
-                                  )}
-                                  {chain.name}
-                                </button>
-
-                                <button
-                                  onClick={openAccountModal}
-                                  type="button"
-                                  className="btn ghost flex-1 py-2 text-xs"
-                                >
-                                  {account.displayName}
-                                </button>
-                              </div>
-
-                              <button
-                                onClick={handleAuthenticate}
-                                type="button"
-                                className="btn accent w-full py-3"
-                              >
-                                Sign In with Wallet
-                              </button>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    );
-                  }}
-                </ConnectButton.Custom>
-              </div>
-            </div>
-
-            {/* Security Notice */}
-            <div className="bg-[rgba(0,212,255,0.05)] border border-accent rounded-lg p-4">
-              <div className="flex gap-3">
-                <div className="text-accent text-xl">🔒</div>
-                <div className="space-y-1">
-                  <h4 className="text-sm font-bold font-mono text-text-primary">
-                    Secure & Non-Custodial
-                  </h4>
-                  <ul className="text-xs text-text-secondary font-mono space-y-1">
-                    <li>• We never access your private keys</li>
-                    <li>• You approve all transactions in your wallet</li>
-                    <li>• Authentication is signature-based only</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+            <button onClick={handleLogin} disabled={loading || !isConnected || !selectedRole}
+              className="w-full h-11 rounded-lg text-sm font-medium text-white disabled:opacity-40 transition-all hover:brightness-110 active:scale-[0.98]"
+              style={{ background: accent }}>
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Authenticating&hellip;
+                </span>
+              ) : 'Sign In'}
+            </button>
           </div>
 
-          {/* Sign Up Link */}
-          <div className="text-center">
-            <p className="text-text-secondary text-sm font-mono">
-              New to cashnet?{' '}
-              <Link
-                href={`/signup?role=${selectedRole}`}
-                className="text-accent hover:text-accent-light transition-colors font-bold"
-              >
-                Get started
-              </Link>
-            </p>
-          </div>
-
-          {/* Change Role Link */}
-          <div className="text-center">
-            <Link
-              href="/"
-              className="text-text-tertiary text-xs font-mono hover:text-text-secondary transition-colors"
-            >
-              ← Change role
+          <div className="text-center text-xs text-[#5a6478] pt-4 border-t border-[#1e2540]">
+            Don&apos;t have an account?{' '}
+            <Link href={`/signup${selectedRole ? `?role=${selectedRole}` : ''}`} className="font-medium hover:underline" style={{ color: accent }}>
+              Create one &rarr;
             </Link>
+          </div>
+
+          <div className="flex items-center justify-center gap-4 text-xs text-[#3a4358]">
+            <Link href="/lender/login" className="hover:text-[#b367ff] transition-colors">Lender</Link>
+            <span>·</span>
+            <Link href="/credit/login" className="hover:text-[#00d4ff] transition-colors">Credit</Link>
+            <span>·</span>
+            <Link href="/auditor/login" className="hover:text-[#f0a500] transition-colors">Auditor</Link>
+            <span>·</span>
+            <Link href="/admin/login" className="hover:text-[#ff3860] transition-colors">Admin</Link>
           </div>
         </div>
       </div>
