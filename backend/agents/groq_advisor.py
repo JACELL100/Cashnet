@@ -19,13 +19,26 @@ import aiohttp
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
-def _get_groq_key() -> str:
-    """Lazily load Groq API key from config settings (which reads .env.local)."""
+def _get_groq_keys() -> list[str]:
+    """Return all configured Groq API keys (up to 2), filtering out empty ones."""
     try:
         from config import settings
-        return settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
+        keys = [
+            settings.groq_api_key or os.getenv("GROQ_API_KEY", ""),
+            settings.groq_api_key_2 or os.getenv("GROQ_API_KEY_2", ""),
+        ]
     except Exception:
-        return os.getenv("GROQ_API_KEY", "")
+        keys = [
+            os.getenv("GROQ_API_KEY", ""),
+            os.getenv("GROQ_API_KEY_2", ""),
+        ]
+    return [k for k in keys if k]
+
+
+def _get_groq_key() -> str:
+    """Return the first available Groq API key (backwards-compat helper)."""
+    keys = _get_groq_keys()
+    return keys[0] if keys else ""
 
 
 def _get_groq_model() -> str:
@@ -113,8 +126,7 @@ async def get_agent_advice(
     Returns parsed JSON action dict. Falls back to empty dict on any error.
     Respects per-agent cooldown to avoid rate limit errors.
     """
-    groq_key = _get_groq_key()
-    if not groq_key:
+    if not _get_groq_keys():
         return {}
 
     # Rate-limit per agent
@@ -146,37 +158,40 @@ async def get_agent_advice(
         f"Based on the above, what is your next action? Reply ONLY with valid JSON."
     )
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": _get_groq_model(),
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message},
-                    ],
-                    "temperature": 0.7,
-                    "max_tokens": 200,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status != 200:
-                    return {}
-                data = await resp.json()
-                content = data["choices"][0]["message"]["content"]
-                advice = json.loads(content)
-                _advice_cache[agent_id] = advice
-                _last_call_time[agent_id] = now
-                return advice
+    payload = {
+        "model": _get_groq_model(),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "temperature": 0.7,
+        "max_tokens": 200,
+        "response_format": {"type": "json_object"},
+    }
 
-    except (aiohttp.ClientError, json.JSONDecodeError, KeyError, asyncio.TimeoutError):
-        return {}
+    for key in _get_groq_keys():
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    GROQ_API_URL,
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status == 429 or resp.status >= 500:
+                        continue  # rate-limited or server error — try next key
+                    if resp.status != 200:
+                        return {}
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    advice = json.loads(content)
+                    _advice_cache[agent_id] = advice
+                    _last_call_time[agent_id] = now
+                    return advice
+        except (aiohttp.ClientError, json.JSONDecodeError, KeyError, asyncio.TimeoutError):
+            continue  # try next key
+
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -188,8 +203,7 @@ async def get_market_narrative(market_context: Dict[str, Any]) -> Optional[str]:
     Ask Groq to produce a 1-sentence market narrative for the activity feed.
     Called by simulation_runner once per market data update.
     """
-    groq_key = _get_groq_key()
-    if not groq_key:
+    if not _get_groq_keys():
         return None
 
     user_msg = (
@@ -201,31 +215,35 @@ async def get_market_narrative(market_context: Dict[str, Any]) -> Optional[str]:
         f"Write ONE punchy sentence describing what's happening and what traders should watch."
     )
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": _get_groq_model(),
-                    "messages": [
-                        {"role": "system", "content": "You are a concise DeFi market analyst."},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "temperature": 0.8,
-                    "max_tokens": 80,
-                },
-                timeout=aiohttp.ClientTimeout(total=8),
-            ) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                return data["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return None
+    payload = {
+        "model": _get_groq_model(),
+        "messages": [
+            {"role": "system", "content": "You are a concise DeFi market analyst."},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": 0.8,
+        "max_tokens": 80,
+    }
+
+    for key in _get_groq_keys():
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    GROQ_API_URL,
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=8),
+                ) as resp:
+                    if resp.status == 429 or resp.status >= 500:
+                        continue
+                    if resp.status != 200:
+                        return None
+                    data = await resp.json()
+                    return data["choices"][0]["message"]["content"].strip()
+        except Exception:
+            continue
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -237,8 +255,7 @@ async def analyze_threat(events: list, pool_state: Dict[str, Any]) -> Dict[str, 
     Ask Groq to assess a suspicious sequence of events and rate threat level.
     Returns dict with: is_attack (bool), threat_type, severity, recommendation.
     """
-    groq_key = _get_groq_key()
-    if not groq_key or not events:
+    if not events or not _get_groq_keys():
         return {}
 
     events_str = json.dumps(events[-10:], indent=2)  # Last 10 events
@@ -252,30 +269,34 @@ async def analyze_threat(events: list, pool_state: Dict[str, Any]) -> Dict[str, 
         f"\"recommendation\": str (1 sentence)}}"
     )
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": _get_groq_model(),
-                    "messages": [
-                        {"role": "system", "content": "You are a DeFi security analyst specializing in on-chain threat detection."},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 150,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status != 200:
-                    return {}
-                data = await resp.json()
-                content = data["choices"][0]["message"]["content"]
-                return json.loads(content)
-    except Exception:
-        return {}
+    payload = {
+        "model": _get_groq_model(),
+        "messages": [
+            {"role": "system", "content": "You are a DeFi security analyst specializing in on-chain threat detection."},
+            {"role": "user", "content": user_msg},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 150,
+        "response_format": {"type": "json_object"},
+    }
+
+    for key in _get_groq_keys():
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    GROQ_API_URL,
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    if resp.status == 429 or resp.status >= 500:
+                        continue
+                    if resp.status != 200:
+                        return {}
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    return json.loads(content)
+        except Exception:
+            continue
+
+    return {}

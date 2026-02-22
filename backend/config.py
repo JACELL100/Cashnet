@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # AI / LLM
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_api_key_2: str = os.getenv("GROQ_API_KEY_2", "")
     groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # Market Data

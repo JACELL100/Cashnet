@@ -44,7 +44,7 @@ export default function EventLogPage() {
   // Fetch simulation activity feed
   const fetchActivityFeed = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/sim/activity-feed?limit=100`;
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com'}/api/sim/activity-feed?limit=100`;
       const response = await fetch(url);
       
       if (response.ok) {
@@ -92,7 +92,7 @@ export default function EventLogPage() {
   // Fetch fraud alerts
   const fetchAlerts = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/threats/alerts`;
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com'}/api/threats/alerts`;
       const response = await fetch(url);
       
       if (response.ok) {

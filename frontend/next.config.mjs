@@ -33,12 +33,19 @@ const nextConfig = {
     ];
   },
   
-  // Set workspace root to silence lockfile warning
-  outputFileTracingRoot: path.join(__dirname, '..'),
+  // Set workspace root to silence pnpm lockfile warning — only locally
+  // On Vercel this causes a doubled path bug (/vercel/path0/path0/...)
+  ...(process.env.VERCEL ? {} : { outputFileTracingRoot: path.join(__dirname, '..') }),
   
   // Optimize page loading
   experimental: {
     optimizeCss: true,
+  },
+  
+  // Turbopack configuration (Next.js 16+)
+  turbopack: {
+    // Empty config to silence Turbopack warning
+    // Most apps work fine with default Turbopack settings
   },
   
   webpack: (config, { isServer }) => {
