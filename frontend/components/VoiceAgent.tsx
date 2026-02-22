@@ -347,11 +347,11 @@ export default function VoiceAgent() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 shadow-lg shadow-cyan-500/30 flex items-center justify-center hover:scale-110 transition-transform duration-200 group"
+        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-xl bg-[color:var(--accent)] shadow-lg shadow-[rgba(0,212,255,0.25)] flex items-center justify-center hover:scale-105 hover:shadow-[0_0_24px_rgba(0,212,255,0.35)] active:scale-95 transition-all duration-200 group"
         aria-label="Open voice assistant"
       >
         <svg
-          className="w-7 h-7 text-white"
+          className="w-6 h-6 text-[color:var(--color-bg-primary)]"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -363,47 +363,63 @@ export default function VoiceAgent() {
             d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
           />
         </svg>
-        <span className="absolute -top-10 right-0 bg-black/90 text-white text-xs px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-          Voice Assistant
+        <span className="absolute -top-12 right-0 bg-[color:var(--color-bg-secondary)] text-[color:var(--text-primary)] text-xs font-medium px-3 py-2 rounded-lg border border-[color:var(--color-border)] opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-lg pointer-events-none">
+          💬 Voice Assistant
         </span>
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-96 max-w-[calc(100vw-3rem)] bg-[#0a0f1a] border border-cyan-500/30 rounded-2xl shadow-2xl shadow-cyan-500/20 overflow-hidden">
+    <div className="fixed bottom-6 right-6 z-50 w-[400px] max-w-[calc(100vw-3rem)] bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border-light)] rounded-xl shadow-2xl shadow-black/50 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="bg-gradient-to-r from-cyan-500/20 to-purple-600/20 px-4 py-3 border-b border-cyan-500/30 flex items-center justify-between">
+      <div className="px-4 py-3.5 border-b border-[color:var(--color-border)] flex items-center justify-between bg-[color:var(--color-bg-tertiary)]">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center ${isSpeaking ? 'animate-pulse' : ''}`}>
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className={`w-10 h-10 rounded-xl bg-[color:var(--accent)] flex items-center justify-center shadow-md shadow-[rgba(0,212,255,0.2)] ${isSpeaking ? 'animate-pulse' : ''}`}>
+            <svg className="w-5 h-5 text-[color:var(--color-bg-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
           </div>
           <div>
-            <h3 className="text-white font-semibold text-sm">CashNet Assistant</h3>
-            <p className="text-cyan-400 text-xs">
-              {isListening ? 'Listening...' : isSpeaking ? 'Speaking...' : 'Ready to help'}
-            </p>
+            <h3 className="text-[color:var(--text-primary)] font-semibold text-sm tracking-tight">CashNet Assistant</h3>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {isListening ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-[color:var(--warn)] animate-pulse" />
+                  <span className="text-[11px] text-[color:var(--warn)] font-medium">Listening…</span>
+                </>
+              ) : isSpeaking ? (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-[color:var(--accent)] animate-pulse" />
+                  <span className="text-[11px] text-[color:var(--accent)] font-medium">Speaking…</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-[color:var(--success)]" />
+                  <span className="text-[11px] text-[color:var(--success)] font-medium">Online</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {isSpeaking && (
             <button
               onClick={stopSpeaking}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              className="w-8 h-8 flex items-center justify-center hover:bg-[rgba(255,56,96,0.1)] rounded-lg transition-colors"
               title="Stop speaking"
             >
-              <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-[color:var(--danger)]" fill="currentColor" viewBox="0 0 24 24">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
             </button>
           )}
           <button
             onClick={() => setIsOpen(false)}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            className="w-8 h-8 flex items-center justify-center hover:bg-[color:var(--color-bg-accent)] rounded-lg transition-colors"
+            title="Close"
           >
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 text-[color:var(--text-secondary)] hover:text-[color:var(--text-primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -411,17 +427,24 @@ export default function VoiceAgent() {
       </div>
 
       {/* Messages */}
-      <div className="h-80 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-cyan-500/30 scrollbar-track-transparent">
+      <div className="h-[340px] overflow-y-auto p-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: 'var(--color-border) transparent' }}>
         {messages.map((message) => (
           <div
             key={message.id}
-            className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+            className={`flex gap-2.5 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
           >
+            {message.type === 'assistant' && (
+              <div className="w-7 h-7 rounded-lg bg-[rgba(0,212,255,0.15)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg className="w-3.5 h-3.5 text-[color:var(--accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              </div>
+            )}
             <div
-              className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm ${
+              className={`max-w-[80%] px-3.5 py-2.5 text-[13px] leading-[1.6] ${
                 message.type === 'user'
-                  ? 'bg-cyan-500/20 text-cyan-100 rounded-br-sm'
-                  : 'bg-purple-500/20 text-purple-100 rounded-bl-sm'
+                  ? 'bg-[color:var(--accent)] text-[color:var(--color-bg-primary)] font-medium rounded-2xl rounded-br-sm'
+                  : 'bg-[color:var(--color-bg-tertiary)] border border-[color:var(--color-border)] text-[color:var(--text-primary)] rounded-2xl rounded-bl-sm'
               }`}
             >
               {message.text}
@@ -432,11 +455,14 @@ export default function VoiceAgent() {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-cyan-500/30 bg-[#0d1320]">
+      <div className="p-3 border-t border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
         {!isSupported && (
-          <p className="text-yellow-400 text-xs mb-2 text-center">
-            Voice not supported in this browser. Use text input instead.
-          </p>
+          <div className="flex items-center gap-2 mb-2.5 px-3 py-2 rounded-lg bg-[rgba(255,182,68,0.08)] border border-[rgba(255,182,68,0.2)]">
+            <svg className="w-3.5 h-3.5 text-[color:var(--warn)] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <p className="text-[color:var(--warn)] text-xs">Voice not supported — use text input instead.</p>
+          </div>
         )}
         
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
@@ -444,18 +470,18 @@ export default function VoiceAgent() {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type or use voice..."
-            className="flex-1 bg-white/5 border border-cyan-500/30 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-400 transition-colors"
+            placeholder="Ask me anything…"
+            className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded-xl px-4 py-2.5 text-sm text-[color:var(--text-primary)] placeholder-[color:var(--text-tertiary)] focus:outline-none focus:border-[color:var(--accent)] focus:shadow-[0_0_0_3px_rgba(0,212,255,0.08)] transition-all"
           />
           
           {isSupported && (
             <button
               type="button"
               onClick={isListening ? stopListening : startListening}
-              className={`p-2.5 rounded-xl transition-all duration-200 ${
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
                 isListening
-                  ? 'bg-red-500 text-white animate-pulse'
-                  : 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
+                  ? 'bg-[color:var(--danger)] text-white shadow-md shadow-[rgba(255,56,96,0.3)] animate-pulse'
+                  : 'bg-[color:var(--color-bg-tertiary)] border border-[color:var(--color-border)] text-[color:var(--text-secondary)] hover:text-[color:var(--accent)] hover:border-[color:var(--accent)] hover:bg-[rgba(0,212,255,0.05)]'
               }`}
               title={isListening ? 'Stop listening' : 'Start voice input'}
             >
@@ -472,7 +498,8 @@ export default function VoiceAgent() {
           
           <button
             type="submit"
-            className="p-2.5 bg-purple-500/20 text-purple-400 rounded-xl hover:bg-purple-500/30 transition-colors"
+            disabled={!inputText.trim()}
+            className="w-10 h-10 rounded-xl flex items-center justify-center bg-[color:var(--accent)] text-[color:var(--color-bg-primary)] hover:brightness-110 active:scale-95 transition-all disabled:opacity-30 disabled:hover:brightness-100 shadow-md shadow-[rgba(0,212,255,0.2)]"
             title="Send message"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -480,7 +507,7 @@ export default function VoiceAgent() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
               />
             </svg>
           </button>
@@ -488,13 +515,18 @@ export default function VoiceAgent() {
 
         {/* Quick Actions */}
         <div className="flex flex-wrap gap-2 mt-3">
-          {['Dashboard', 'How to borrow?', 'Liquidity', 'Help'].map((action) => (
+          {[
+            { label: '📊 Dashboard', value: 'Dashboard' },
+            { label: '💰 How to borrow?', value: 'How to borrow?' },
+            { label: '🌊 Liquidity', value: 'Liquidity' },
+            { label: '❓ Help', value: 'Help' },
+          ].map((action) => (
             <button
-              key={action}
-              onClick={() => handleUserInput(action)}
-              className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-xs text-gray-400 hover:text-white hover:border-cyan-500/50 transition-colors"
+              key={action.value}
+              onClick={() => handleUserInput(action.value)}
+              className="px-3 py-1.5 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded-lg text-xs text-[color:var(--text-secondary)] hover:text-[color:var(--accent)] hover:border-[color:var(--accent)] hover:bg-[rgba(0,212,255,0.04)] transition-all"
             >
-              {action}
+              {action.label}
             </button>
           ))}
         </div>

@@ -28,7 +28,15 @@ export const metadata: Metadata = {
   title: 'cashnet Simulation Lab',
   description: 'Institutional DeFi Risk Simulation Platform',
   generator: 'dotlocal',
- 
+  icons: {
+    icon: [
+      {
+        url: '/logo.png', // Path from /public directory
+      },
+    ],
+   
+  },
+
 }
 
 export default function RootLayout({

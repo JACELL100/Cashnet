@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import { ToastContainer } from '@/components/Toast';
+import LoadingHex from '@/components/LoadingHex';
 
 const lenderNav = [
   { href: '/lender', label: 'Overview', icon: '⊡' },
@@ -37,10 +38,7 @@ export default function LenderLayout({ children }: { children: React.ReactNode }
   if (!hasHydrated) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-[#b367ff] font-mono mb-4">CN</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
+        <LoadingHex />
       </div>
     );
   }
@@ -50,10 +48,7 @@ export default function LenderLayout({ children }: { children: React.ReactNode }
   if (!isAuthenticated || user?.role !== 'LENDER') {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
-        <div className="text-center">
-          <div className="text-4xl font-bold text-[#b367ff] font-mono mb-4">CN</div>
-          <p className="text-text-secondary font-mono">Loading...</p>
-        </div>
+        <LoadingHex />
       </div>
     );
   }

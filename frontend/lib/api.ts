@@ -13,6 +13,50 @@ export class ApiError extends Error {
   }
 }
 
+/* === Low-level helpers (re-exported for wallet auth pages) === */
+export const api = {
+  get: async (url: string) => {
+    const res = await fetch(`${API_URL}${url}`, { headers: { 'Content-Type': 'application/json' } });
+    if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+    return { data: await res.json() };
+  },
+  post: async (url: string, body?: unknown) => {
+    const res = await fetch(`${API_URL}${url}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`);
+    return { data: await res.json() };
+  },
+};
+
+export async function loginWithWallet(
+  address: string,
+  signature: string,
+  name?: string,
+  email?: string,
+  role?: string
+) {
+  const res = await fetch(`${API_URL}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ wallet_address: address, signature, name, email }),
+  });
+  if (!res.ok) throw new ApiError(res.status, `Wallet login failed`);
+  const data = await res.json();
+  // Normalise the backend AuthResponse into the shape pages expect
+  return {
+    uid: data.wallet_address,
+    wallet_address: data.wallet_address,
+    name: data.name ?? null,
+    email: data.email ?? null,
+    role: role ?? 'BORROWER',
+    token: data.token,
+    created_at: data.created_at,
+  };
+}
+
 async function apiRequest<T>(
   endpoint: string,
   options?: RequestInit
