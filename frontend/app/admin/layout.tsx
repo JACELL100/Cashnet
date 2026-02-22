@@ -28,6 +28,7 @@ const adminNav = [
   { href: '/admin/threats', label: 'Threats', icon: '⚠' },
   { href: '/admin/credit', label: 'Credit', icon: '✓' },
   { href: '/admin/audit', label: 'Audit Log', icon: '◆' },
+  { href: '/dashboard/market-intelligence', label: 'Markets', icon: '◈' },
   { href: '/admin/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙' },
 ];
