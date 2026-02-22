@@ -24,13 +24,14 @@ export default function AuditorLoginPage() {
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
       const { role } = await loginWithGoogleCredential(idToken);
-      if (role !== 'AUDITOR') {
+      // Allow both AUDITOR and ADMIN roles (ADMIN has all privileges)
+      if (role !== 'AUDITOR' && role !== 'ADMIN') {
         useAuthStore.getState().logout();
         setAccessDenied(true);
         setLoading(false);
         return;
       }
-      addToast({ message: 'Welcome, Auditor', severity: 'success' });
+      addToast({ message: `Welcome, ${role}`, severity: 'success' });
       router.push('/auditor');
     } catch (err: any) {
       setLoading(false);
