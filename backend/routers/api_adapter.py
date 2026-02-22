@@ -783,3 +783,232 @@ async def get_ai_status():
         }
     }
 
+
+# ============================================================================
+# BLOCKCHAIN INTEGRATION ENDPOINTS
+# ============================================================================
+
+@router.get("/blockchain/stats")
+async def get_blockchain_stats():
+    """Get blockchain integration statistics (tx counts, gas used, etc.)."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        return {"success": True, "data": integrator.get_stats()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/tx-history")
+async def get_blockchain_tx_history(limit: int = 50):
+    """Get agent transaction history (both simulated and on-chain)."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        return {"success": True, "data": integrator.get_tx_history(limit)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/tx-by-contract/{contract_name}")
+async def get_txs_by_contract(contract_name: str):
+    """Get transactions filtered by contract (LiquidityPool, LendingPool, etc.)."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        return {"success": True, "data": integrator.get_tx_by_contract(contract_name)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/on-chain-state")
+async def get_on_chain_state():
+    """Query current on-chain state from deployed Sepolia contracts."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        state = await integrator.get_on_chain_state()
+        return {"success": True, "data": state}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/token-balance/{token}/{wallet}")
+async def get_token_balance(token: str, wallet: str):
+    """Get token balance (PALLADIUM or BADASSIUM) for a wallet address."""
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        balance = await integrator.get_token_balance(token, wallet)
+        return {
+            "success": True,
+            "data": {
+                "token": token.upper(),
+                "wallet": wallet,
+                "balance": balance,
+                "formatted": f"{balance:,.4f}",
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/blockchain/execute-swap")
+async def execute_blockchain_swap(body: Dict[str, Any]):
+    """
+    Execute a REAL on-chain swap via LiquidityPool contract.
+    Requires ENABLE_BLOCKCHAIN_TXS=true in .env.local.
+    Body: { token_in, token_out, amount }
+    """
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        
+        if not integrator.enable_real_txs:
+            return {
+                "success": False,
+                "error": "On-chain transactions disabled. Set ENABLE_BLOCKCHAIN_TXS=true in .env.local"
+            }
+        
+        token_in = body.get("token_in", "PALLADIUM")
+        token_out = body.get("token_out", "BADASSIUM")
+        amount = float(body.get("amount", 0))
+        
+        if amount <= 0:
+            return {"success": False, "error": "Amount must be greater than 0"}
+        
+        # Use the configured wallet from PRIVATE_KEY
+        tx_hash = await integrator.execute_real_swap(
+            agent_wallet=None,  # Will use default from PRIVATE_KEY
+            token_in=token_in,
+            token_out=token_out,
+            amount_in=amount,
+        )
+        
+        if tx_hash:
+            return {
+                "success": True,
+                "data": {
+                    "tx_hash": tx_hash,
+                    "etherscan": f"https://sepolia.etherscan.io/tx/{tx_hash}",
+                    "token_in": token_in,
+                    "token_out": token_out,
+                    "amount": amount,
+                }
+            }
+        else:
+            return {"success": False, "error": "Swap transaction failed"}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/blockchain/record-agent-action")
+async def record_agent_action_on_chain(body: Dict[str, Any]):
+    """
+    Manually record an agent action on blockchain.
+    Body: { action_type, agent_id, data }
+    action_type: swap | liquidate | borrow | flash_loan_attack | scenario_event
+    """
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        action_type = body.get("action_type", "swap")
+        agent_id = body.get("agent_id", "manual")
+        data = body.get("data", {})
+        
+        tx = None
+        if action_type == "swap":
+            tx = await integrator.record_swap(
+                agent_id=agent_id,
+                token_in=data.get("token_in", "PALLADIUM"),
+                amount_in=data.get("amount_in", 0),
+                amount_out=data.get("amount_out", 0),
+                price_impact=data.get("price_impact", 0),
+                execute_on_chain=data.get("execute_on_chain", False),
+            )
+        elif action_type == "liquidate":
+            tx = await integrator.record_liquidation(
+                liquidator_id=agent_id,
+                target_wallet=data.get("target_wallet", "0x0"),
+                debt_covered=data.get("debt_covered", 0),
+                collateral_seized=data.get("collateral_seized", 0),
+                bonus_pct=data.get("bonus_pct", 0),
+            )
+        elif action_type == "borrow":
+            tx = await integrator.record_borrow(
+                borrower_id=agent_id,
+                amount=data.get("amount", 0),
+                collateral=data.get("collateral", 0),
+                interest_rate=data.get("interest_rate", 0),
+            )
+        elif action_type == "flash_loan_attack":
+            tx = await integrator.record_flash_loan_attack(
+                attacker_id=agent_id,
+                flash_amount=data.get("flash_amount", 0),
+                profit=data.get("profit", 0),
+                liquidations_triggered=data.get("liquidations_triggered", 0),
+                attack_type=data.get("attack_type", "unknown"),
+            )
+        elif action_type == "scenario_event":
+            tx = await integrator.record_scenario_event(
+                scenario_type=data.get("scenario_type", "unknown"),
+                phase=data.get("phase", "unknown"),
+                event_type=data.get("event_type", "unknown"),
+                damage=data.get("damage", 0),
+                severity=data.get("severity", "low"),
+            )
+        
+        if tx:
+            return {"success": True, "data": tx.to_dict()}
+        else:
+            return {"success": False, "error": "Failed to record action"}
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/blockchain/contract-addresses")
+async def get_contract_addresses():
+    """Get all deployed contract addresses on Sepolia."""
+    from config import settings
+    return {
+        "success": True,
+        "data": {
+            "network": "Sepolia",
+            "rpc_url": settings.sepolia_rpc_url[:40] + "..." if settings.sepolia_rpc_url else None,
+            "contracts": {
+                "AccessControl": settings.access_control_address,
+                "IdentityRegistry": settings.identity_registry_address,
+                "CreditRegistry": settings.credit_registry_address,
+                "CollateralVault": settings.collateral_vault_address,
+                "LendingPool": settings.lending_pool_address,
+                "LiquidityPool": settings.liquidity_pool_address,
+                "Palladium": settings.palladium_address,
+                "Badassium": settings.badassium_address,
+            },
+            "real_txs_enabled": settings.enable_blockchain_txs,
+        }
+    }
+
+
+@router.post("/blockchain/toggle-real-txs")
+async def toggle_real_blockchain_txs(body: Dict[str, Any]):
+    """
+    Toggle real on-chain transaction execution at runtime.
+    Body: { enabled: bool }
+    """
+    from agents.blockchain_integrator import get_blockchain_integrator
+    try:
+        integrator = await get_blockchain_integrator()
+        enabled = body.get("enabled", False)
+        integrator.enable_real_txs = enabled
+        return {
+            "success": True,
+            "data": {
+                "real_txs_enabled": integrator.enable_real_txs,
+                "message": f"Real blockchain transactions {'enabled' if enabled else 'disabled'}"
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

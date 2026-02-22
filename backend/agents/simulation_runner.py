@@ -437,11 +437,17 @@ class SimulationRunner:
         for action in all_actions:
             self.trade_log.append(action.to_dict())
         
-        # 5. Record high-value swaps to blockchain (if enabled)
+        # 5. Record actions to blockchain (if enabled)
         if self.blockchain_integrator:
             for action in all_actions:
-                if action.action == "swap" and action.metadata.get("amount_in", 0) > 1000:
-                    # Record significant swaps (>1000 tokens) to blockchain
+                # Determine if we should execute on-chain based on settings and action size
+                should_execute_on_chain = (
+                    self.blockchain_integrator.enable_real_txs and
+                    action.metadata.get("amount_in", 0) > 100  # Only larger trades go on-chain
+                )
+                
+                if action.action == "swap":
+                    # Record all swaps, execute on-chain for significant ones
                     try:
                         await self.blockchain_integrator.record_swap(
                             agent_id=action.agent_id,
@@ -449,7 +455,8 @@ class SimulationRunner:
                             amount_in=action.metadata.get("amount_in", 0),
                             amount_out=action.metadata.get("amount_out", 0),
                             price_impact=action.metadata.get("price_impact", 0),
-                            execute_on_chain=False,  # Set to True to execute real swaps
+                            agent_wallet=action.metadata.get("wallet"),
+                            execute_on_chain=should_execute_on_chain,
                         )
                     except Exception as e:
                         print(f"⚠️  Failed to record swap on blockchain: {e}")
@@ -466,6 +473,31 @@ class SimulationRunner:
                         )
                     except Exception as e:
                         print(f"⚠️  Failed to record liquidation on blockchain: {e}")
+                
+                elif action.action == "borrow":
+                    # Record borrow actions
+                    try:
+                        await self.blockchain_integrator.record_borrow(
+                            borrower_id=action.agent_id,
+                            amount=action.metadata.get("amount", 0),
+                            collateral=action.metadata.get("collateral", 0),
+                            interest_rate=action.metadata.get("interest_rate", 0),
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Failed to record borrow on blockchain: {e}")
+                
+                elif action.action == "flash_loan":
+                    # Record flash loan attacks
+                    try:
+                        await self.blockchain_integrator.record_flash_loan_attack(
+                            attacker_id=action.agent_id,
+                            flash_amount=action.metadata.get("flash_amount", 0),
+                            profit=action.metadata.get("profit", 0),
+                            liquidations_triggered=action.metadata.get("liquidations_triggered", 0),
+                            attack_type=action.metadata.get("attack_type", "flash_loan"),
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Failed to record flash loan on blockchain: {e}")
 
         # 6. Clear processed mempool transactions periodically
         if self.current_step % 5 == 0:
