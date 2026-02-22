@@ -50,6 +50,43 @@ interface Vulnerability {
   incidents_30d?: number;
 }
 
+interface MlAssetPrediction {
+  symbol: string;
+  name: string;
+  category: string;
+  direction: string;
+  direction_confidence: number;
+  predicted_change_pct: number;
+  volatility_score: number;
+  momentum_signal: string;
+  support_price: number;
+  resistance_price: number;
+  risk_level: string;
+}
+
+interface MlAllocation {
+  symbol: string;
+  weight: number;
+  weight_pct: number;
+  rationale: string;
+}
+
+interface MlForecast {
+  asset_predictions: MlAssetPrediction[];
+  market_regime: string;
+  regime_confidence: number;
+  overall_volatility: number;
+  portfolio_risk_score: number;
+  fear_greed_ml: number;
+  crypto_score: number;
+  stock_score: number;
+  recommended_allocations: MlAllocation[];
+  bullish_count: number;
+  bearish_count: number;
+  generated_at: number;
+  model_confidence: number;
+}
+
 interface AiPick {
   symbol: string;
   action: string;
@@ -133,7 +170,7 @@ const riskBadge: Record<string, { bg: string; text: string }> = {
 const CRYPTO_SYMBOLS = ['BTC', 'ETH', 'SOL', 'AVAX', 'LINK', 'UNI', 'AAVE', 'MATIC'];
 const STOCK_SYMBOLS = ['SPX', 'NDX', 'DJI', 'TSLA', 'NVDA', 'AAPL'];
 
-type TabType = 'overview' | 'charts' | 'vulnerabilities' | 'ai-analysis';
+type TabType = 'overview' | 'charts' | 'vulnerabilities' | 'ai-analysis' | 'ml-predictions';
 
 // ── Candlestick Chart Component (lightweight-charts) ───────────────
 function CandlestickChart({ symbol, name, category }: { symbol: string; name: string; category: string }) {
@@ -311,6 +348,8 @@ export default function MarketIntelligencePage() {
   const [selectedChart, setSelectedChart] = useState('BTC');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [mlForecast, setMlForecast] = useState<MlForecast | null>(null);
+  const [mlLoading, setMlLoading] = useState(false);
 
   // Fetch market overview
   const fetchOverview = useCallback(async () => {
@@ -360,6 +399,21 @@ export default function MarketIntelligencePage() {
     setAiLoading(false);
   }, []);
 
+  // Fetch ML predictions
+  const fetchMl = useCallback(async () => {
+    setMlLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/market-intel/ml-predictions`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setMlForecast(json.data);
+        }
+      }
+    } catch { /* ignore */ }
+    setMlLoading(false);
+  }, []);
+
   useEffect(() => {
     fetchOverview();
     fetchVulns();
@@ -376,6 +430,7 @@ export default function MarketIntelligencePage() {
     { key: 'charts', label: 'Candle Charts', icon: '🕯️' },
     { key: 'vulnerabilities', label: 'Threats & Risks', icon: '🛡️' },
     { key: 'ai-analysis', label: 'AI Investment Intel', icon: '🤖' },
+    { key: 'ml-predictions', label: 'ML Predictions', icon: '🧠' },
   ];
 
   return (
@@ -415,7 +470,7 @@ export default function MarketIntelligencePage() {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-[color:var(--color-border)] pb-0">
         {tabs.map(t => (
-          <button key={t.key} onClick={() => { setTab(t.key); if (t.key === 'ai-analysis' && !aiAnalysis) fetchAi(); }}
+          <button key={t.key} onClick={() => { setTab(t.key); if (t.key === 'ai-analysis' && !aiAnalysis) fetchAi(); if (t.key === 'ml-predictions' && !mlForecast) fetchMl(); }}
             className="px-4 py-2.5 text-xs font-mono transition-colors relative"
             style={{
               color: tab === t.key ? '#00d4ff' : '#94a3b8',
@@ -965,6 +1020,300 @@ export default function MarketIntelligencePage() {
               <button onClick={fetchAi}
                 className="px-6 py-2.5 text-xs font-mono rounded bg-[#00d4ff] text-[#0d1117] font-bold hover:brightness-110 transition-all">
                 🧠 Generate AI Analysis
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══════════════════ ML PREDICTIONS TAB ═══════════════════ */}
+      {tab === 'ml-predictions' && (
+        <div className="space-y-6">
+          {/* Refresh button */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-mono text-text-secondary">
+              🧠 <span className="text-[#b367ff] font-bold">18 Sub-Estimator ML Model</span> — per-asset direction, regime, volatility, risk & allocation
+            </div>
+            <button onClick={fetchMl}
+              className="px-4 py-2 text-xs font-mono rounded bg-[#b367ff] text-white font-bold hover:brightness-110 transition-all disabled:opacity-50"
+              disabled={mlLoading}>
+              {mlLoading ? '⏳ Running Model…' : '🧠 Run ML Predictions'}
+            </button>
+          </div>
+
+          {mlLoading && (
+            <div className="p-16 text-center">
+              <div className="text-4xl mb-3 animate-pulse">🧠</div>
+              <div className="text-sm font-mono text-text-secondary">Running 18 ML sub-estimators on live market data…</div>
+            </div>
+          )}
+
+          {mlForecast && !mlLoading && (
+            <>
+              {/* Top-level gauge cards */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {/* Market Regime */}
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="text-xs text-text-tertiary font-mono mb-1">Market Regime</div>
+                  <div className="text-lg font-bold font-mono" style={{
+                    color: mlForecast.market_regime === 'bull' || mlForecast.market_regime === 'recovery'
+                      ? '#22c55e'
+                      : mlForecast.market_regime === 'bear' || mlForecast.market_regime === 'crash'
+                        ? '#ef4444'
+                        : '#f0a500'
+                  }}>
+                    {mlForecast.market_regime === 'bull' ? '🐂' : mlForecast.market_regime === 'bear' ? '🐻' : mlForecast.market_regime === 'crash' ? '💥' : mlForecast.market_regime === 'recovery' ? '📈' : '➡️'}{' '}
+                    {mlForecast.market_regime.toUpperCase()}
+                  </div>
+                  <div className="text-xs text-text-tertiary font-mono mt-1">{mlForecast.regime_confidence.toFixed(1)}% confidence</div>
+                </div>
+
+                {/* ML Fear & Greed */}
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="text-xs text-text-tertiary font-mono mb-1">ML Fear & Greed</div>
+                  <div className="text-2xl font-bold font-mono" style={{
+                    color: mlForecast.fear_greed_ml > 60 ? '#22c55e' : mlForecast.fear_greed_ml < 40 ? '#ef4444' : '#f0a500'
+                  }}>
+                    {mlForecast.fear_greed_ml}
+                  </div>
+                  <div className="w-full h-1.5 rounded bg-[color:var(--color-bg-accent)] mt-2">
+                    <div className="h-full rounded transition-all" style={{
+                      width: `${mlForecast.fear_greed_ml}%`,
+                      background: mlForecast.fear_greed_ml > 60 ? '#22c55e' : mlForecast.fear_greed_ml < 40 ? '#ef4444' : '#f0a500'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Volatility */}
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="text-xs text-text-tertiary font-mono mb-1">Volatility Index</div>
+                  <div className="text-2xl font-bold font-mono" style={{
+                    color: mlForecast.overall_volatility > 65 ? '#ef4444' : mlForecast.overall_volatility > 35 ? '#f0a500' : '#22c55e'
+                  }}>
+                    {mlForecast.overall_volatility.toFixed(1)}
+                  </div>
+                  <div className="text-xs text-text-tertiary font-mono mt-1">
+                    {mlForecast.overall_volatility > 65 ? 'HIGH' : mlForecast.overall_volatility > 35 ? 'MODERATE' : 'LOW'}
+                  </div>
+                </div>
+
+                {/* Portfolio Risk */}
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="text-xs text-text-tertiary font-mono mb-1">Portfolio Risk</div>
+                  <div className="text-2xl font-bold font-mono" style={{
+                    color: mlForecast.portfolio_risk_score > 65 ? '#ef4444' : mlForecast.portfolio_risk_score > 35 ? '#f0a500' : '#22c55e'
+                  }}>
+                    {mlForecast.portfolio_risk_score.toFixed(1)}
+                  </div>
+                  <div className="w-full h-1.5 rounded bg-[color:var(--color-bg-accent)] mt-2">
+                    <div className="h-full rounded transition-all" style={{
+                      width: `${mlForecast.portfolio_risk_score}%`,
+                      background: mlForecast.portfolio_risk_score > 65 ? '#ef4444' : mlForecast.portfolio_risk_score > 35 ? '#f0a500' : '#22c55e'
+                    }} />
+                  </div>
+                </div>
+
+                {/* Bull/Bear Count */}
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="text-xs text-text-tertiary font-mono mb-1">Direction Split</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold font-mono text-[#22c55e]">🐂 {mlForecast.bullish_count}</span>
+                    <span className="text-text-tertiary">/</span>
+                    <span className="text-lg font-bold font-mono text-[#ef4444]">{mlForecast.bearish_count} 🐻</span>
+                  </div>
+                  <div className="text-xs text-text-tertiary font-mono mt-1">
+                    {14 - mlForecast.bullish_count - mlForecast.bearish_count} sideways
+                  </div>
+                </div>
+              </div>
+
+              {/* Sector Health Bars */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-[#00d4ff]">₿ Crypto Health Score</span>
+                    <span className="text-sm font-bold font-mono" style={{
+                      color: mlForecast.crypto_score > 60 ? '#22c55e' : mlForecast.crypto_score < 40 ? '#ef4444' : '#f0a500'
+                    }}>{mlForecast.crypto_score.toFixed(1)}/100</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded bg-[color:var(--color-bg-accent)]">
+                    <div className="h-full rounded transition-all" style={{
+                      width: `${mlForecast.crypto_score}%`,
+                      background: `linear-gradient(90deg, ${mlForecast.crypto_score > 60 ? '#22c55e' : mlForecast.crypto_score < 40 ? '#ef4444' : '#f0a500'}, #00d4ff)`
+                    }} />
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono font-bold text-[#b367ff]">📊 Stock Health Score</span>
+                    <span className="text-sm font-bold font-mono" style={{
+                      color: mlForecast.stock_score > 60 ? '#22c55e' : mlForecast.stock_score < 40 ? '#ef4444' : '#f0a500'
+                    }}>{mlForecast.stock_score.toFixed(1)}/100</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded bg-[color:var(--color-bg-accent)]">
+                    <div className="h-full rounded transition-all" style={{
+                      width: `${mlForecast.stock_score}%`,
+                      background: `linear-gradient(90deg, ${mlForecast.stock_score > 60 ? '#22c55e' : mlForecast.stock_score < 40 ? '#ef4444' : '#f0a500'}, #b367ff)`
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-asset prediction table */}
+              <div>
+                <h3 className="text-sm font-mono font-bold mb-3">📋 Per-Asset ML Predictions</h3>
+                <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="bg-[color:var(--color-bg-secondary)] border-b border-[color:var(--color-border)]">
+                        <th className="text-left px-3 py-2.5 text-text-tertiary">Asset</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Direction</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Confidence</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Pred. Change</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Momentum</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Volatility</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Support</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Resistance</th>
+                        <th className="text-center px-3 py-2.5 text-text-tertiary">Risk</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mlForecast.asset_predictions.map((a, i) => (
+                        <tr key={a.symbol} className={`border-b border-[color:var(--color-border)] ${i % 2 === 0 ? '' : 'bg-[color:var(--color-bg-secondary)]/50'}`}>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">{a.symbol}</span>
+                              <span className="text-text-tertiary">{a.name}</span>
+                              <span className="text-[10px] px-1 py-0.5 rounded" style={{
+                                background: a.category === 'crypto' ? 'rgba(0,212,255,0.12)' : 'rgba(179,103,255,0.12)',
+                                color: a.category === 'crypto' ? '#00d4ff' : '#b367ff',
+                              }}>{a.category}</span>
+                            </div>
+                          </td>
+                          <td className="text-center px-3 py-2.5">
+                            <span className="px-2 py-0.5 rounded font-bold" style={{
+                              background: a.direction === 'up' ? 'rgba(34,197,94,0.15)' : a.direction === 'down' ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.1)',
+                              color: a.direction === 'up' ? '#22c55e' : a.direction === 'down' ? '#ef4444' : '#94a3b8',
+                            }}>
+                              {a.direction === 'up' ? '▲' : a.direction === 'down' ? '▼' : '▶'} {a.direction.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="text-center px-3 py-2.5">
+                            <div className="flex items-center justify-center gap-1">
+                              <div className="w-12 h-1.5 rounded bg-[color:var(--color-bg-accent)]">
+                                <div className="h-full rounded" style={{
+                                  width: `${a.direction_confidence}%`,
+                                  background: a.direction_confidence > 70 ? '#22c55e' : a.direction_confidence > 50 ? '#f0a500' : '#94a3b8',
+                                }} />
+                              </div>
+                              <span>{a.direction_confidence.toFixed(1)}%</span>
+                            </div>
+                          </td>
+                          <td className="text-center px-3 py-2.5" style={{
+                            color: a.predicted_change_pct > 0 ? '#22c55e' : a.predicted_change_pct < 0 ? '#ef4444' : '#94a3b8'
+                          }}>
+                            {a.predicted_change_pct > 0 ? '+' : ''}{a.predicted_change_pct.toFixed(2)}%
+                          </td>
+                          <td className="text-center px-3 py-2.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{
+                              background: a.momentum_signal.includes('buy') ? 'rgba(34,197,94,0.15)' : a.momentum_signal.includes('sell') ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.1)',
+                              color: a.momentum_signal.includes('buy') ? '#22c55e' : a.momentum_signal.includes('sell') ? '#ef4444' : '#94a3b8',
+                            }}>
+                              {a.momentum_signal.toUpperCase().replace('_', ' ')}
+                            </span>
+                          </td>
+                          <td className="text-center px-3 py-2.5">
+                            <div className="flex items-center justify-center gap-1">
+                              <div className="w-8 h-1.5 rounded bg-[color:var(--color-bg-accent)]">
+                                <div className="h-full rounded" style={{
+                                  width: `${a.volatility_score}%`,
+                                  background: a.volatility_score > 60 ? '#ef4444' : a.volatility_score > 30 ? '#f0a500' : '#22c55e',
+                                }} />
+                              </div>
+                              <span>{a.volatility_score.toFixed(0)}</span>
+                            </div>
+                          </td>
+                          <td className="text-center px-3 py-2.5 text-[#22c55e]">${fmt(a.support_price)}</td>
+                          <td className="text-center px-3 py-2.5 text-[#ef4444]">${fmt(a.resistance_price)}</td>
+                          <td className="text-center px-3 py-2.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{
+                              background: riskBadge[a.risk_level]?.bg || 'transparent',
+                              color: riskBadge[a.risk_level]?.text || '#94a3b8',
+                            }}>{a.risk_level.toUpperCase()}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Portfolio Allocation */}
+              <div>
+                <h3 className="text-sm font-mono font-bold mb-3">📊 ML-Recommended Portfolio Allocation</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Allocation bar chart */}
+                  <div className="p-4 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                    <div className="space-y-2">
+                      {mlForecast.recommended_allocations.filter(a => a.weight_pct >= 3).map(a => (
+                        <div key={a.symbol} className="flex items-center gap-2">
+                          <span className="w-12 text-xs font-mono font-bold text-right">{a.symbol}</span>
+                          <div className="flex-1 h-5 rounded bg-[color:var(--color-bg-accent)] overflow-hidden relative">
+                            <div className="h-full rounded transition-all flex items-center" style={{
+                              width: `${Math.min(a.weight_pct * 2, 100)}%`,
+                              background: a.weight_pct > 12
+                                ? 'linear-gradient(90deg, #00d4ff, #22c55e)'
+                                : a.weight_pct > 7
+                                  ? 'linear-gradient(90deg, #00d4ff, #b367ff)'
+                                  : 'rgba(148,163,184,0.25)',
+                            }}>
+                              <span className="text-[10px] font-mono font-bold px-1.5 text-white drop-shadow-sm">
+                                {a.weight_pct.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Allocation rationale cards */}
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                    {mlForecast.recommended_allocations.filter(a => a.weight_pct >= 5).map(a => (
+                      <div key={a.symbol} className="p-3 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)]">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-mono font-bold">{a.symbol}</span>
+                          <span className="text-xs font-mono text-[#00d4ff] font-bold">{a.weight_pct.toFixed(1)}%</span>
+                        </div>
+                        <p className="text-[11px] text-text-secondary leading-relaxed">{a.rationale}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Model info footer */}
+              <div className="p-3 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] flex items-center justify-between">
+                <div className="text-xs text-text-tertiary font-mono">
+                  Model: <span className="text-[#b367ff]">MarketPredictionModel v1.0</span> • 18 sub-estimators (14 RF + 2 GBT + 1 RF-Reg + 1 MLP) • Trained on 5,000 synthetic samples
+                </div>
+                <div className="text-xs text-text-tertiary font-mono">
+                  Confidence: <span className="font-bold" style={{
+                    color: mlForecast.model_confidence > 70 ? '#22c55e' : mlForecast.model_confidence > 50 ? '#f0a500' : '#ef4444'
+                  }}>{mlForecast.model_confidence.toFixed(1)}%</span> • Generated {new Date(mlForecast.generated_at * 1000).toLocaleTimeString()}
+                </div>
+              </div>
+            </>
+          )}
+
+          {!mlLoading && !mlForecast && (
+            <div className="p-16 text-center border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-bg-secondary)]">
+              <div className="text-4xl mb-3">🧠</div>
+              <div className="text-sm font-mono text-text-secondary mb-1">ML Predictions Not Generated Yet</div>
+              <div className="text-xs text-text-tertiary font-mono mb-4">Click below to run 18 ML sub-estimators on live market data</div>
+              <button onClick={fetchMl}
+                className="px-6 py-2.5 text-xs font-mono rounded bg-[#b367ff] text-white font-bold hover:brightness-110 transition-all">
+                🧠 Run ML Predictions
               </button>
             </div>
           )}

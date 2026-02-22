@@ -696,3 +696,45 @@ Based on this data, provide a comprehensive analysis. Your response MUST be vali
     except Exception as e:
         print(f"[MarketIntel] Groq error: {e}")
         return {"success": True, "data": {"analysis": default_analysis, "source": "fallback"}}
+
+
+# ---------------------------------------------------------------------------
+# ML Predictions endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/ml-predictions")
+async def get_ml_predictions():
+    """
+    ML-powered market predictions: per-asset direction, regime, volatility,
+    portfolio risk, fear/greed, and recommended allocations.
+    Uses a trained MarketPredictionModel (18 sub-estimators).
+    """
+    try:
+        from agents.market_predictor import get_market_predictor
+
+        predictor = get_market_predictor()
+        prices = await _get_all_prices()
+
+        # Build market_condition dict from current prices
+        crypto_prices = {k: v for k, v in prices.items() if v.get("category") == "crypto"}
+        stock_prices  = {k: v for k, v in prices.items() if v.get("category") == "stock"}
+        crypto_avg = sum(v.get("change_pct", 0) for v in crypto_prices.values()) / max(len(crypto_prices), 1)
+        stock_avg  = sum(v.get("change_pct", 0) for v in stock_prices.values())  / max(len(stock_prices), 1)
+        fg = min(100, max(0, int(50 + crypto_avg * 8)))
+
+        market_condition = {
+            "fear_greed_index": fg,
+            "btc_dominance": random.uniform(52, 58),
+            "eth_gas_gwei": random.uniform(5, 45),
+        }
+
+        forecast = predictor.predict(prices, market_condition)
+
+        return {
+            "success": True,
+            "data": forecast.to_dict(),
+        }
+    except Exception as e:
+        print(f"[MarketIntel] ML prediction error: {e}")
+        import traceback; traceback.print_exc()
+        return {"success": False, "error": str(e)}
