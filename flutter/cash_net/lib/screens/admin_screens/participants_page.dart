@@ -24,14 +24,22 @@ class _ParticipantsPageState extends State<ParticipantsPage> {
     setState(() => _isLoading = true);
 
     try {
+      final url = '${AuthService.apiBaseUrl}/api/participants';
+      print('📡 [PARTICIPANTS] API CALL: GET $url');
+      
       final response = await http
           .get(
-            Uri.parse('${AuthService.apiBaseUrl}/api/participants'),
+            Uri.parse(url),
           )
           .timeout(const Duration(seconds: 5));
 
+      print('📥 [PARTICIPANTS] RESPONSE: Status ${response.statusCode}');
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        print('✅ [PARTICIPANTS] DATA LOADED: ${data is Map ? data.keys.join(', ') : 'List with ${(data is List ? data.length : 0)} items'}');
+        print('📊 [PARTICIPANTS] Content: $data');
+        
         setState(() {
           _participants = (data is Map && data.containsKey('data'))
               ? data['data']
@@ -39,10 +47,11 @@ class _ParticipantsPageState extends State<ParticipantsPage> {
           _isLoading = false;
         });
       } else {
+        print('⚠️ [PARTICIPANTS] API returned ${response.statusCode}, using mock data');
         _loadMockData();
       }
     } catch (e) {
-      print('Participants fetch failed: $e');
+      print('❌ [PARTICIPANTS] Fetch failed: $e');
       _loadMockData();
     }
   }

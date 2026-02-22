@@ -196,6 +196,7 @@ class AuthResponse(BaseModel):
     email: Optional[str] = None
     token: str
     created_at: datetime
+    credit_score: int = 500
     
     class Config:
         from_attributes = True
@@ -210,6 +211,7 @@ class BorrowerResponse(BaseModel):
     created_at: datetime
     last_login: Optional[datetime] = None
     is_active: int
+    credit_score: int = 500
     
     class Config:
         from_attributes = True

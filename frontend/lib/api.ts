@@ -213,6 +213,11 @@ export const participantApi = {
       method: 'PUT',
       body: JSON.stringify({ score }),
     }),
+  updateBorrowerScore: (wallet: string, score: number) =>
+    apiRequest(`/api/auth/borrowers/${wallet}/score`, {
+      method: 'PUT',
+      body: JSON.stringify({ score }),
+    }),
 };
 
 /* === WALLET API === */

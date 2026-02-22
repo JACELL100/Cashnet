@@ -10,8 +10,23 @@ class AuthService {
     required String username,
     required String password,
   }) async {
+    // Dev credentials fallback - check first
+    if (username == 'admin' && password == 'admin123') {
+      print('Using dev credentials');
+      final user = User(
+        id: 'dev_admin',
+        walletAddress: null,
+        name: 'Dev Admin',
+        email: 'admin@cashnet.dev',
+        role: 'ADMIN',
+        plan: 'admin',
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      return AuthResponse.success(user, 'dev_admin_token');
+    }
+
     try {
-      // Try real API first
+      // Try real API for other credentials
       final response = await http
           .post(
             Uri.parse('$apiBaseUrl/api/auth/admin-login'),
@@ -39,24 +54,9 @@ class AuthService {
         return AuthResponse.error('Invalid username or password');
       }
     } catch (e) {
-      // Fallback to dev credentials if API is unavailable
-      print('API unavailable, using dev credentials: $e');
-
-      if (username == 'admin' && password == 'admin123') {
-        final user = User(
-          id: 'dev_admin',
-          walletAddress: null,
-          name: 'Dev Admin',
-          email: 'admin@cashnet.dev',
-          role: 'ADMIN',
-          plan: 'admin',
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-        );
-        return AuthResponse.success(user, 'dev_admin_token');
-      }
-
+      print('API error: $e');
       return AuthResponse.error(
-          'Network error. Dev credentials: admin/admin123');
+          'Network error. Try dev credentials: admin/admin123');
     }
   }
 
