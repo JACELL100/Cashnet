@@ -129,8 +129,11 @@ class BlockchainService:
             private_key=self.account.key
         )
         
-        # Send transaction
-        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        # Send transaction (handle both old and new web3.py versions)
+        raw_tx = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
+        if raw_tx is None:
+            raise ValueError("Could not extract raw transaction from signed transaction")
+        tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
         
         # Wait for receipt
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -151,8 +154,11 @@ class BlockchainService:
             private_key=self.account.key
         )
         
-        # Send the raw transaction
-        tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        # Send the raw transaction (handle both old and new web3.py versions)
+        raw_tx = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
+        if raw_tx is None:
+            raise ValueError("Could not extract raw transaction from signed transaction")
+        tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
         
         # Wait for receipt
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)

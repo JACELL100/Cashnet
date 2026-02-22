@@ -81,21 +81,20 @@ async def get_health_factor(wallet: str):
         # Read max LTV from CreditRegistry
         max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
         
-        # Calculate health factor (mock eth price is 2000 in the contract)
-        collateral_value_usd = collateral_eth * 2000
-        
+        # Calculate health factor using ETH values directly
         if debt_tokens == 0:
             health_factor = 999.0
             is_liquidatable = False
         else:
-            health_factor = (collateral_value_usd * (max_ltv / 100.0)) / debt_tokens
-            liquidation_threshold = (collateral_value_usd * ((max_ltv + 5) / 100.0))
+            # Health factor = (collateral * LTV) / debt
+            health_factor = (collateral_eth * (max_ltv / 100.0)) / debt_tokens
+            liquidation_threshold = (collateral_eth * ((max_ltv + 5) / 100.0))
             is_liquidatable = debt_tokens > liquidation_threshold
             
         return {
             "wallet": wallet,
-            "collateral_value": round(collateral_value_usd, 2),
-            "debt_value": round(debt_tokens, 2),
+            "collateral_value": round(collateral_eth, 6),
+            "debt_value": round(debt_tokens, 6),
             "health_factor": round(health_factor, 4),
             "liquidation_threshold": round(max_ltv / 100.0, 4),
             "at_risk": is_liquidatable

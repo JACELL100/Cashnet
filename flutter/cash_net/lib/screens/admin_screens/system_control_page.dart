@@ -17,6 +17,13 @@ class _SystemControlPageState extends State<SystemControlPage> {
   bool _isProcessing = false;
   Timer? _pollTimer;
 
+  // Role management state
+  final TextEditingController _walletController = TextEditingController();
+  String _selectedRole = 'BORROWER';
+  bool _isGrantingRole = false;
+  bool _isCheckingRole = false;
+  Map<String, dynamic>? _roleCheckResult;
+
   @override
   void initState() {
     super.initState();
@@ -27,6 +34,7 @@ class _SystemControlPageState extends State<SystemControlPage> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _walletController.dispose();
     super.dispose();
   }
 

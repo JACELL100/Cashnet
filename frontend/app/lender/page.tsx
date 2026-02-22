@@ -7,7 +7,7 @@ import { useReadContract } from 'wagmi';
 import { PALLADIUM_ADDRESS, BADASSIUM_ADDRESS, ERC20_ABI } from '@/lib/contracts';
 import { formatUnits } from 'viem';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 
 const healthColor = (h: number) => {
   if (h >= 1.5) return '#22c55e';

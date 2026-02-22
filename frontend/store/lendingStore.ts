@@ -35,11 +35,11 @@ interface LendingState {
 
 export const useLendingStore = create<LendingState>((set) => ({
   borrowers: [],
-  totalDeposits: 10000000,
-  totalBorrows: 7500000,
-  utilizationRate: 0.75,
-  borrowApr: 0.02,
-  totalSupplied: 2000000,
+  totalDeposits: 0,
+  totalBorrows: 0,
+  utilizationRate: 0,
+  borrowApr: 0,
+  totalSupplied: 0,
   collateralRatio: 1.5,
   liquidationThreshold: 0.8,
   cascadeEvents: [],

@@ -1,16 +1,25 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSystemControl } from '@/hooks/useSystemControl';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
 
 export default function SystemControlPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const addToast = useUIStore((s) => s.addToast);
   const { status, loading, error, pauseSystem, unpauseSystem, refreshStatus } = useSystemControl();
+
+  // Role management state
+  const [walletAddress, setWalletAddress] = useState('');
+  const [selectedRole, setSelectedRole] = useState('BORROWER');
+  const [grantingRole, setGrantingRole] = useState(false);
+  const [checkingRole, setCheckingRole] = useState(false);
+  const [roleCheckResult, setRoleCheckResult] = useState<any>(null);
 
   // Redirect if not admin
   React.useEffect(() => {
@@ -41,6 +50,75 @@ export default function SystemControlPage() {
       });
     } else {
       addToast({ message: error || 'Failed to unpause system', severity: 'error' });
+    }
+  };
+
+  const handleGrantRole = async () => {
+    if (!walletAddress.trim()) {
+      addToast({ message: 'Please enter a wallet address', severity: 'error' });
+      return;
+    }
+
+    setGrantingRole(true);
+    try {
+      const response = await fetch(`${API_URL}/system/grant-role`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${useAuthStore.getState().token}`
+        },
+        body: JSON.stringify({
+          wallet_address: walletAddress.trim(),
+          role: selectedRole
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        addToast({ 
+          message: `${selectedRole} role granted successfully to ${walletAddress}`, 
+          severity: 'success' 
+        });
+        setWalletAddress('');
+        setRoleCheckResult(null);
+      } else {
+        addToast({ 
+          message: data.message || data.detail || 'Failed to grant role', 
+          severity: 'error' 
+        });
+      }
+    } catch (err: any) {
+      addToast({ message: err.message || 'Failed to grant role', severity: 'error' });
+    } finally {
+      setGrantingRole(false);
+    }
+  };
+
+  const handleCheckRole = async () => {
+    if (!walletAddress.trim()) {
+      addToast({ message: 'Please enter a wallet address', severity: 'error' });
+      return;
+    }
+
+    setCheckingRole(true);
+    setRoleCheckResult(null);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/lending/check-borrower-role/${walletAddress.trim()}`
+      );
+      const data = await response.json();
+      setRoleCheckResult(data);
+
+      if (data.has_role) {
+        addToast({ message: 'Wallet has BORROWER role', severity: 'success' });
+      } else {
+        addToast({ message: 'Wallet does NOT have BORROWER role', severity: 'warning' });
+      }
+    } catch (err: any) {
+      addToast({ message: 'Failed to check role', severity: 'error' });
+    } finally {
+      setCheckingRole(false);
     }
   };
 
@@ -238,6 +316,102 @@ export default function SystemControlPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Role Management */}
+      <div className="bg-bg-secondary border border-border rounded p-6">
+        <div className="mb-6">
+          <h2 className="text-lg font-bold font-mono text-text-primary mb-2">
+            🔑 Role Management
+          </h2>
+          <p className="text-sm font-mono text-text-secondary">
+            Grant blockchain roles to wallet addresses. Required for borrowing and other protocol operations.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {/* Wallet Address Input */}
+          <div>
+            <label className="block text-sm font-mono text-text-secondary mb-2">
+              Wallet Address
+            </label>
+            <input
+              type="text"
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value)}
+              placeholder="0x..."
+              className="w-full px-4 py-2 bg-bg-primary border border-border rounded font-mono text-sm text-text-primary focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          {/* Role Selection */}
+          <div>
+            <label className="block text-sm font-mono text-text-secondary mb-2">
+              Role to Grant
+            </label>
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="w-full px-4 py-2 bg-bg-primary border border-border rounded font-mono text-sm text-text-primary focus:outline-none focus:border-accent"
+            >
+              <option value="BORROWER">BORROWER - Can borrow from lending pool</option>
+              <option value="LENDER">LENDER - Can lend to lending pool</option>
+              <option value="AUDITOR">AUDITOR - Can view system logs</option>
+              <option value="ORACLE">ORACLE - Can update price feeds</option>
+            </select>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={handleCheckRole}
+              disabled={checkingRole || !walletAddress.trim()}
+              className="flex-1 px-4 py-3 bg-bg-primary border border-border text-text-primary font-mono text-sm rounded hover:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {checkingRole ? '⏳ Checking...' : '🔍 Check BORROWER Role'}
+            </button>
+            <button
+              onClick={handleGrantRole}
+              disabled={grantingRole || !walletAddress.trim()}
+              className="flex-1 px-4 py-3 bg-accent text-white font-mono text-sm font-bold rounded hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {grantingRole ? '⏳ Granting...' : `✓ Grant ${selectedRole} Role`}
+            </button>
+          </div>
+
+          {/* Role Check Result */}
+          {roleCheckResult && (
+            <div className={`p-4 rounded border ${
+              roleCheckResult.has_role
+                ? 'bg-[rgba(34,197,94,0.08)] border-[#22c55e]'
+                : 'bg-[rgba(240,165,0,0.08)] border-[#f0a500]'
+            }`}>
+              <div className="flex items-center gap-2">
+                <div className="text-xl">{roleCheckResult.has_role ? '✅' : '⚠️'}</div>
+                <div>
+                  <div className="font-mono text-sm font-bold" style={{ 
+                    color: roleCheckResult.has_role ? '#22c55e' : '#f0a500' 
+                  }}>
+                    {roleCheckResult.message}
+                  </div>
+                  <div className="font-mono text-xs text-text-tertiary mt-1">
+                    Wallet: {roleCheckResult.wallet_address}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Role Info */}
+          <div className="p-4 bg-bg-primary border border-border rounded space-y-2">
+            <div className="text-xs font-mono text-text-tertiary">
+              <strong className="text-text-secondary">Important:</strong> Users need the BORROWER role to borrow tokens from the lending pool. Without this role, they will receive "Not verified borrower" errors.
+            </div>
+            <div className="text-xs font-mono text-text-tertiary">
+              <strong className="text-text-secondary">Note:</strong> Role grants require admin privileges on the AccessControl contract and will trigger a blockchain transaction.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Error Display */}

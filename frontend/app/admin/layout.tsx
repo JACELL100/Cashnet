@@ -28,7 +28,7 @@ const adminNav = [
   { href: '/admin/threats', label: 'Threats', icon: '⚠' },
   { href: '/admin/credit', label: 'Credit', icon: '✓' },
   { href: '/admin/audit', label: 'Audit Log', icon: '◆' },
-  { href: '/dashboard/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
+  { href: '/admin/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -45,7 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Poll threat unread count
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const API = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
     const poll = async () => {
       try {
         const res = await fetch(`${API}/api/threats/unread-count`);
