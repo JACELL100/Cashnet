@@ -35,6 +35,7 @@ from agents.borrower_agent import BorrowerAgent
 from agents.fraud_monitor import FraudMonitor
 from agents.market_data import MarketDataService, market_data_service, PriceData
 from agents.blockchain_integrator import get_blockchain_integrator, BlockchainIntegrator
+from agents.groq_advisor import get_agent_advice, get_market_narrative, analyze_threat
 
 
 class SimulationRunner:
@@ -301,23 +302,39 @@ class SimulationRunner:
                 btc_price = self._market_prices.get("BTC")
                 eth_price = self._market_prices.get("ETH")
                 
+                market_ctx = {
+                    "btc_price": btc_price.price if btc_price else 0,
+                    "eth_price": eth_price.price if eth_price else 0,
+                    "btc_change_24h": btc_price.change_pct_24h if btc_price else 0,
+                    "eth_change_24h": eth_price.change_pct_24h if eth_price else 0,
+                    "sentiment": market_condition.sentiment,
+                    "volatility": market_condition.volatility,
+                    "risk_level": market_condition.risk_level,
+                    "source": btc_price.source if btc_price else "coindesk",
+                }
                 self._on_agent_event({
                     "agent_id": "market_oracle",
                     "agent_type": "system",
                     "agent_name": "Market Oracle",
                     "event_type": "market_update",
-                    "data": {
-                        "btc_price": btc_price.price if btc_price else 0,
-                        "eth_price": eth_price.price if eth_price else 0,
-                        "btc_change_24h": btc_price.change_pct_24h if btc_price else 0,
-                        "eth_change_24h": eth_price.change_pct_24h if eth_price else 0,
-                        "sentiment": market_condition.sentiment,
-                        "volatility": market_condition.volatility,
-                        "risk_level": market_condition.risk_level,
-                        "source": btc_price.source if btc_price else "unknown",
-                    },
+                    "data": market_ctx,
                     "timestamp": time.time(),
                 })
+
+                # Groq market narrative (non-blocking fire-and-forget)
+                async def _emit_narrative(ctx: dict):
+                    narrative = await get_market_narrative(ctx)
+                    if narrative:
+                        self._on_agent_event({
+                            "agent_id": "groq_analyst",
+                            "agent_type": "ai",
+                            "agent_name": "Groq Market Analyst",
+                            "event_type": "ai_narrative",
+                            "data": {"narrative": narrative, "model": "llama-3.3-70b-versatile"},
+                            "timestamp": time.time(),
+                        })
+                asyncio.create_task(_emit_narrative(market_ctx))
+
             except Exception as e:
                 print(f"[SimulationRunner] Market data fetch error: {e}")
 
@@ -367,6 +384,42 @@ class SimulationRunner:
                 agent._market_aggression = self.market_data.get_agent_aggression_modifier(
                     agent.agent_type.value
                 )
+
+                # Groq AI advice — inject into agent every ~30 steps
+                if self.current_step % 30 == 0 and self._market_prices:
+                    btc = self._market_prices.get("BTC")
+                    eth = self._market_prices.get("ETH")
+                    mc = self.market_data.get_market_condition()
+                    advice = await get_agent_advice(
+                        agent_id=agent.id,
+                        agent_type=agent.agent_type.value,
+                        market_context={
+                            "btc_price": btc.price if btc else 0,
+                            "eth_price": eth.price if eth else 0,
+                            "btc_change_24h": btc.change_pct_24h if btc else 0,
+                            "eth_change_24h": eth.change_pct_24h if eth else 0,
+                            "sentiment": mc.sentiment,
+                            "volatility": mc.volatility,
+                            "risk_level": mc.risk_level,
+                        },
+                        pool_state=self.pool.to_dict(),
+                        agent_stats={
+                            "capital": agent.capital,
+                            "pnl": agent.stats.pnl,
+                            "trades_count": agent.stats.trades_count,
+                        },
+                    )
+                    if advice:
+                        agent._groq_advice = advice
+                        self._on_agent_event({
+                            "agent_id": agent.id,
+                            "agent_type": agent.agent_type.value,
+                            "agent_name": agent.name,
+                            "event_type": "ai_decision",
+                            "data": {"groq_advice": advice, "model": "llama-3.3-70b-versatile"},
+                            "timestamp": time.time(),
+                        })
+
                 actions = await agent.tick(self.current_step)
                 all_actions.extend(actions)
             except Exception as e:
@@ -387,7 +440,7 @@ class SimulationRunner:
         # 5. Record high-value swaps to blockchain (if enabled)
         if self.blockchain_integrator:
             for action in all_actions:
-                if action.action_type == "swap" and action.metadata.get("amount_in", 0) > 1000:
+                if action.action == "swap" and action.metadata.get("amount_in", 0) > 1000:
                     # Record significant swaps (>1000 tokens) to blockchain
                     try:
                         await self.blockchain_integrator.record_swap(
@@ -401,7 +454,7 @@ class SimulationRunner:
                     except Exception as e:
                         print(f"⚠️  Failed to record swap on blockchain: {e}")
                 
-                elif action.action_type == "liquidate":
+                elif action.action == "liquidate":
                     # Record liquidations to blockchain
                     try:
                         await self.blockchain_integrator.record_liquidation(

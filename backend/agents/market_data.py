@@ -517,7 +517,16 @@ class MarketDataService:
 
 
 # ---------------------------------------------------------------------------
-# Global instance
+# Global instance — explicitly wired to config settings
 # ---------------------------------------------------------------------------
 
-market_data_service = MarketDataService()
+def _create_market_data_service() -> "MarketDataService":
+    try:
+        from config import settings
+        api_key = settings.coindesk_api_key or os.getenv("COINDESK_API_KEY", "")
+    except Exception:
+        api_key = os.getenv("COINDESK_API_KEY", "")
+    return MarketDataService(api_key=api_key)
+
+
+market_data_service = _create_market_data_service()

@@ -158,11 +158,23 @@ async def startup_event():
         from agents.blockchain_integrator import get_blockchain_integrator
         integrator = await get_blockchain_integrator()
         if integrator.contracts_loaded:
-            print("✅ BlockchainIntegrator ready (on-chain recording enabled)")
+            print(f"✅ BlockchainIntegrator ready (real txs: {integrator.enable_real_txs})")
         else:
             print("⚠️  BlockchainIntegrator running in simulation mode")
     except Exception as e:
         print(f"⚠️  BlockchainIntegrator init failed: {e}")
+
+    # Verify Groq LLM connectivity
+    try:
+        from agents.groq_advisor import _get_groq_key, _get_groq_model
+        groq_key = _get_groq_key()
+        groq_model = _get_groq_model()
+        if groq_key:
+            print(f"✅ Groq LLM ready (model: {groq_model}, key: ...{groq_key[-8:]})")
+        else:
+            print("⚠️  Groq API key not configured — agent AI decisions disabled")
+    except Exception as e:
+        print(f"⚠️  Groq init check failed: {e}")
 
     print(f"🌐 API running at http://{settings.api_host}:{settings.api_port}")
     print(f"📚 Docs available at http://{settings.api_host}:{settings.api_port}/docs")

@@ -22,34 +22,33 @@ router = APIRouter(prefix="/api", tags=["API Adapter"])
 # ============================================================================
 
 @router.post("/simulation/start")
-async def start_simulation(db: Session = Depends(get_db)):
-    """Mock start to satisfy frontend, we run on L1 now"""
-    return {
-        "success": True,
-        "data": {
-            "id": 1,
-            "status": "running on L1",
-            "message": "Connected to Sepolia"
-        }
-    }
+async def start_simulation(body: Dict[str, Any] = None):
+    """Start the real multi-agent simulation with blockchain integration."""
+    if body is None:
+        body = {}
+    result = await simulation_runner.start(
+        max_steps=body.get("max_steps", 200),
+        tick_delay=body.get("tick_delay", 0.5),
+    )
+    return {"success": True, "data": result}
 
 
 @router.get("/simulation/status")
 async def get_simulation_status():
-    return {
-        "success": True, 
-        "data": {"status": "running", "tick": 0, "agents_count": 0, "transactions": 0, "alerts": 0}
-    }
+    """Get real-time simulation status from the running engine."""
+    return {"success": True, "data": simulation_runner.get_status()}
 
 
 @router.post("/simulation/pause")
 async def pause_simulation():
-    return {"success": True, "data": {"status": "paused"}}
+    result = await simulation_runner.pause()
+    return {"success": True, "data": result}
 
 
 @router.post("/simulation/resume")
 async def resume_simulation():
-    return {"success": True, "data": {"status": "running"}}
+    result = await simulation_runner.resume()
+    return {"success": True, "data": result}
 
 
 @router.post("/simulation/stop")
@@ -97,7 +96,7 @@ async def stop_simulation(db: Session = Depends(get_db)):
 
 @router.get("/simulation/summary")
 async def get_simulation_summary():
-    return {"success": True, "data": {}}
+    return {"success": True, "data": simulation_runner.get_summary()}
 
 
 # ============================================================================
@@ -106,7 +105,11 @@ async def get_simulation_summary():
 
 @router.get("/agents")
 async def list_agents():
-    # Fallback to DB participants
+    """Get all live simulation agents with their real-time stats."""
+    sim_agents = simulation_runner.get_agents()
+    if sim_agents:
+        return {"success": True, "data": sim_agents}
+    # Fallback to DB participants when simulation is idle
     from models import Participant
     from database import SessionLocal
     db = SessionLocal()
@@ -140,31 +143,10 @@ async def update_agent(agent_id: str, data: Dict[str, Any]):
 
 
 @router.get("/agents/activity-feed")
-async def get_activity_feed():
-    """Get recent agent activity"""
-    # Fallback to DB transactions
-    from models import Transaction
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        transactions = db.query(Transaction).order_by(
-            Transaction.timestamp.desc()
-        ).limit(50).all()
-        return {
-            "success": True,
-            "data": [
-                {
-                    "id": str(tx.id),
-                    "wallet": tx.wallet,
-                    "type": tx.type,
-                    "amount": tx.amount,
-                    "timestamp": tx.timestamp.isoformat()
-                }
-                for tx in transactions
-            ]
-        }
-    finally:
-        db.close()
+async def get_activity_feed(limit: int = 50):
+    """Get recent agent activity from live simulation."""
+    feed = simulation_runner.get_activity_feed(limit)
+    return {"success": True, "data": feed}
 
 
 # ============================================================================
@@ -349,21 +331,24 @@ async def trigger_liquidation(user_wallet: str):
 
 @router.get("/threats/scores")
 async def get_threat_scores():
-    """Get threat scores from Python fraud monitor"""
-    scores = _fraud_monitor.get_threat_scores()
-    if scores:
-        return {"success": True, "data": scores}
-    
-    return {
-        "success": True,
-        "data": []
-    }
+    """Get threat scores from the live simulation fraud monitor."""
+    # Prefer simulation_runner's fraud monitor when running
+    if simulation_runner.status == "running":
+        scores = simulation_runner.fraud_monitor.get_threat_scores()
+    else:
+        scores = _fraud_monitor.get_threat_scores()
+    return {"success": True, "data": scores or []}
 
 
 @router.get("/threats/alerts")
 async def get_alerts():
-    """Get threat alerts from fraud monitor + DB"""
-    fraud_alerts = _fraud_monitor.get_alerts(limit=50)
+    """Get threat alerts from the live simulation fraud monitor."""
+    # Prefer simulation_runner's fraud monitor when running
+    if simulation_runner.status == "running":
+        fraud_alerts = simulation_runner.fraud_monitor.get_alerts(limit=50)
+    else:
+        fraud_alerts = _fraud_monitor.get_alerts(limit=50)
+    
     if fraud_alerts:
         return {"success": True, "data": fraud_alerts}
     
@@ -700,24 +685,101 @@ async def get_wallet_balance(address: str):
 
 @router.get("/sim/trade-log")
 async def get_trade_log(limit: int = 100):
-    return {"success": True, "data": []}
+    return {"success": True, "data": simulation_runner.get_trade_log(limit)}
 
 
 @router.get("/sim/activity-feed")
 async def get_sim_activity_feed(limit: int = 50):
-    return {"success": True, "data": []}
+    return {"success": True, "data": simulation_runner.get_activity_feed(limit)}
 
 
 @router.get("/sim/fraud/stats")
 async def get_sim_fraud_stats():
-    return {"success": True, "data": {}}
+    return {"success": True, "data": simulation_runner.fraud_monitor.get_stats()}
 
 
 @router.get("/sim/pool")
 async def get_sim_pool():
-    return {"success": True, "data": {}}
+    return {"success": True, "data": simulation_runner.pool.to_dict()}
 
 
 @router.get("/sim/lending")
 async def get_sim_lending():
-    return {"success": True, "data": {}}
+    data = simulation_runner.lending.to_dict()
+    data["positions"] = [p.to_dict() for p in simulation_runner.lending.positions.values()]
+    return {"success": True, "data": data}
+
+
+@router.get("/sim/market")
+async def get_sim_market():
+    """Get current real market data used by agents (CoinDesk)."""
+    try:
+        await simulation_runner.market_data.fetch_all_prices()
+        return {"success": True, "data": simulation_runner.market_data.to_dict()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# GROQ AI ENDPOINTS
+# ============================================================================
+
+@router.get("/ai/market-narrative")
+async def get_ai_market_narrative():
+    """Get a Groq LLM market narrative based on live CoinDesk data."""
+    try:
+        prices = await simulation_runner.market_data.fetch_all_prices()
+        btc = prices.get("BTC")
+        eth = prices.get("ETH")
+        mc = simulation_runner.market_data.get_market_condition()
+
+        from agents.groq_advisor import get_market_narrative
+        narrative = await get_market_narrative({
+            "btc_price": btc.price if btc else 0,
+            "eth_price": eth.price if eth else 0,
+            "btc_change_24h": btc.change_pct_24h if btc else 0,
+            "eth_change_24h": eth.change_pct_24h if eth else 0,
+            "sentiment": mc.sentiment,
+            "volatility": mc.volatility,
+            "risk_level": mc.risk_level,
+        })
+        return {"success": True, "data": {"narrative": narrative, "model": "llama-3.3-70b-versatile"}}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/ai/analyze-threat")
+async def ai_analyze_threat():
+    """Use Groq to analyze recent simulation events for attacks."""
+    try:
+        recent_events = simulation_runner.get_activity_feed(20)
+        from agents.groq_advisor import analyze_threat
+        analysis = await analyze_threat(recent_events, simulation_runner.pool.to_dict())
+        return {"success": True, "data": analysis}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/ai/status")
+async def get_ai_status():
+    """Get Groq LLM and CoinDesk API connectivity status."""
+    from agents.groq_advisor import _get_groq_key, _get_groq_model
+    groq_key = _get_groq_key()
+    coindesk_key = simulation_runner.market_data.api_key
+    return {
+        "success": True,
+        "data": {
+            "groq": {
+                "configured": bool(groq_key),
+                "model": _get_groq_model(),
+                "key_suffix": f"...{groq_key[-8:]}" if groq_key else None,
+            },
+            "coindesk": {
+                "configured": bool(coindesk_key),
+                "key_suffix": f"...{coindesk_key[-8:]}" if coindesk_key else None,
+            },
+            "blockchain_txs_enabled": simulation_runner.blockchain_integrator.enable_real_txs
+                if simulation_runner.blockchain_integrator else False,
+        }
+    }
+
