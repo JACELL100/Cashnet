@@ -118,6 +118,7 @@ async def verify_signature_and_login(request: AuthVerifyRequest, db: Session = D
         email=borrower.email,
         token=token,
         created_at=borrower.created_at,
+        credit_score=borrower.credit_score,
     )
 
 
@@ -132,6 +133,7 @@ async def list_all_borrowers(db: Session = Depends(get_db)):
             "name": b.name,
             "email": b.email,
             "is_active": b.is_active,
+            "credit_score": b.credit_score,
             "created_at": b.created_at.isoformat() if b.created_at else None,
             "last_login": b.last_login.isoformat() if b.last_login else None,
         }
@@ -139,6 +141,32 @@ async def list_all_borrowers(db: Session = Depends(get_db)):
     ]
 
 
+@router.put("/borrowers/{wallet}/score", tags=["Admin"])
+async def update_borrower_score(wallet: str, payload: dict, db: Session = Depends(get_db)):
+    """Admin endpoint: Update credit score for a borrower (300-850)"""
+    try:
+        checksum_wallet = w3.to_checksum_address(wallet)
+    except:
+        checksum_wallet = wallet # Fallback if not a valid ETH address
+        
+    borrower = db.query(Borrower).filter(Borrower.wallet_address == checksum_wallet).first()
+    if not borrower:
+        # Try lowercase fallback
+        borrower = db.query(Borrower).filter(Borrower.wallet_address.ilike(wallet)).first()
+ 
+    if not borrower:
+        raise HTTPException(status_code=404, detail="Borrower not found")
+ 
+    score = payload.get("score")
+    if score is None or not isinstance(score, int) or not (300 <= score <= 850):
+        raise HTTPException(status_code=422, detail="Score must be an integer between 300 and 850")
+ 
+    borrower.credit_score = score
+    db.commit()
+    db.refresh(borrower)
+    return {"wallet": wallet, "score": borrower.credit_score}
+ 
+ 
 @router.get("/me", response_model=BorrowerResponse)
 async def get_current_user(token: str, db: Session = Depends(get_db)):
     payload = verify_jwt_token(token)

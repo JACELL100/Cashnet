@@ -142,6 +142,7 @@ class Borrower(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_login = Column(DateTime(timezone=True))
     is_active = Column(Integer, default=1)  # 1 = active, 0 = inactive
+    credit_score = Column(Integer, default=500)  # Credit score 300-850
 
 
 class SystemLog(Base):

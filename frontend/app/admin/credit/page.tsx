@@ -26,9 +26,9 @@ type GradeFilter = 'ALL' | 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR';
 
 function grade(score: number): { label: string; color: string; bg: string; band: GradeFilter } {
   if (score >= 750) return { label: 'Excellent', color: '#38ff8c', bg: 'rgba(56,255,140,0.12)', band: 'EXCELLENT' };
-  if (score >= 650) return { label: 'Good',      color: '#38b4ff', bg: 'rgba(56,180,255,0.12)', band: 'GOOD' };
-  if (score >= 550) return { label: 'Fair',       color: '#ffc838', bg: 'rgba(255,200,56,0.12)',  band: 'FAIR' };
-  return              { label: 'Poor',       color: '#ff3860', bg: 'rgba(255,56,96,0.12)',   band: 'POOR' };
+  if (score >= 650) return { label: 'Good', color: '#38b4ff', bg: 'rgba(56,180,255,0.12)', band: 'GOOD' };
+  if (score >= 550) return { label: 'Fair', color: '#ffc838', bg: 'rgba(255,200,56,0.12)', band: 'FAIR' };
+  return { label: 'Poor', color: '#ff3860', bg: 'rgba(255,56,96,0.12)', band: 'POOR' };
 }
 
 function scoreBar(score: number) {
@@ -43,9 +43,9 @@ function shortWallet(w: string) {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  ADMIN:    'bg-[rgba(255,56,96,0.15)] text-[#ff3860]',
-  AUDITOR:  'bg-[rgba(255,200,56,0.15)] text-[#ffc838]',
-  LENDER:   'bg-[rgba(56,180,255,0.15)] text-[#38b4ff]',
+  ADMIN: 'bg-[rgba(255,56,96,0.15)] text-[#ff3860]',
+  AUDITOR: 'bg-[rgba(255,200,56,0.15)] text-[#ffc838]',
+  LENDER: 'bg-[rgba(56,180,255,0.15)] text-[#38b4ff]',
   BORROWER: 'bg-[rgba(56,255,140,0.15)] text-[#38ff8c]',
 };
 
@@ -65,24 +65,22 @@ export default function CreditPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const [pRes, bRes] = await Promise.all([
-      participantApi.getAll(),
-      participantApi.getBorrowers(),
-    ]);
-    if (!pRes.success) {
-      setError('Failed to load participants. Is the backend running?');
+    const bRes = await participantApi.getBorrowers();
+    if (!bRes.success) {
+      setError('Failed to load borrowers. Is the backend running?');
       setLoading(false);
       return;
     }
-    const participants: Participant[] = pRes.data ?? [];
-    const borrowers: BorrowerRecord[] = bRes.success ? (bRes.data ?? []) : [];
-    const bMap = new Map(borrowers.map(b => [b.wallet_address.toLowerCase(), b]));
-    const built: Row[] = participants
-      .filter(p => p.score > 0)
-      .map(p => {
-        const b = bMap.get(p.wallet.toLowerCase());
-        return { ...p, name: b?.name, email: b?.email };
-      });
+    const borrowers: any[] = bRes.data ?? [];
+    const built: Row[] = borrowers.map((b: any) => ({
+      id: b.id,
+      wallet: b.wallet_address,
+      role: 'BORROWER',
+      score: b.credit_score || 500,
+      created_at: b.created_at,
+      name: b.name,
+      email: b.email
+    }));
     setRows(built);
     setLoading(false);
   }, []);
@@ -106,7 +104,7 @@ export default function CreditPage() {
     if (isNaN(val) || val < 300 || val > 850) { setSaveError('Score must be between 300 and 850'); return; }
     setSaving(true);
     setSaveError(null);
-    const res = await participantApi.updateScore(editRow.wallet, val);
+    const res = await participantApi.updateBorrowerScore(editRow.wallet, val);
     if (res.success) {
       setRows(rs => rs.map(r => r.wallet === editRow.wallet ? { ...r, score: val } : r));
       setEditRow(null);
@@ -118,9 +116,9 @@ export default function CreditPage() {
 
   const counts = {
     EXCELLENT: rows.filter(r => r.score >= 750).length,
-    GOOD:      rows.filter(r => r.score >= 650 && r.score < 750).length,
-    FAIR:      rows.filter(r => r.score >= 550 && r.score < 650).length,
-    POOR:      rows.filter(r => r.score < 550).length,
+    GOOD: rows.filter(r => r.score >= 650 && r.score < 750).length,
+    FAIR: rows.filter(r => r.score >= 550 && r.score < 650).length,
+    POOR: rows.filter(r => r.score < 550).length,
   };
   const avg = rows.length ? Math.round(rows.reduce((s, r) => s + r.score, 0) / rows.length) : 0;
 
@@ -155,11 +153,11 @@ export default function CreditPage() {
   const maxBucket = Math.max(...buckets.map(b => b.count), 1);
 
   const grades: { key: GradeFilter; label: string; color: string; range: string }[] = [
-    { key: 'ALL',       label: `All (${rows.length})`,        color: 'text-text-primary',  range: '' },
+    { key: 'ALL', label: `All (${rows.length})`, color: 'text-text-primary', range: '' },
     { key: 'EXCELLENT', label: `Excellent (${counts.EXCELLENT})`, color: 'text-[#38ff8c]', range: '750–850' },
-    { key: 'GOOD',      label: `Good (${counts.GOOD})`,       color: 'text-[#38b4ff]',     range: '650–749' },
-    { key: 'FAIR',      label: `Fair (${counts.FAIR})`,       color: 'text-[#ffc838]',     range: '550–649' },
-    { key: 'POOR',      label: `Poor (${counts.POOR})`,       color: 'text-[#ff3860]',     range: '300–549' },
+    { key: 'GOOD', label: `Good (${counts.GOOD})`, color: 'text-[#38b4ff]', range: '650–749' },
+    { key: 'FAIR', label: `Fair (${counts.FAIR})`, color: 'text-[#ffc838]', range: '550–649' },
+    { key: 'POOR', label: `Poor (${counts.POOR})`, color: 'text-[#ff3860]', range: '300–549' },
   ];
 
   return (
@@ -178,11 +176,11 @@ export default function CreditPage() {
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: 'Average',   value: avg || '—', color: avg ? grade(avg).color : 'text-text-tertiary' },
+          { label: 'Average', value: avg || '—', color: avg ? grade(avg).color : 'text-text-tertiary' },
           { label: 'Excellent', value: counts.EXCELLENT, color: 'text-[#38ff8c]' },
-          { label: 'Good',      value: counts.GOOD,      color: 'text-[#38b4ff]' },
-          { label: 'Fair',      value: counts.FAIR,      color: 'text-[#ffc838]' },
-          { label: 'Poor',      value: counts.POOR,      color: 'text-[#ff3860]' },
+          { label: 'Good', value: counts.GOOD, color: 'text-[#38b4ff]' },
+          { label: 'Fair', value: counts.FAIR, color: 'text-[#ffc838]' },
+          { label: 'Poor', value: counts.POOR, color: 'text-[#ff3860]' },
         ].map(k => (
           <div key={k.label} className="bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded-lg p-4">
             <div className="text-xs font-mono text-text-tertiary uppercase tracking-wider">{k.label}</div>

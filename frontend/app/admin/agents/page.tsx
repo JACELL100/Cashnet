@@ -152,20 +152,26 @@ export default function AgentsPage() {
   const [liveTransactions, setLiveTransactions] = useState<LiveTransaction[]>([]);
   const [showTxTracker, setShowTxTracker] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string>('');
+  const [attackRunning, setAttackRunning] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Polling ─────────────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
-    const [statusData, agentData, feedData, alertData] = await Promise.all([
+    const [statusData, agentData, feedData, alertData, attackStatusData] = await Promise.all([
       api<SimStatus>('/api/simulation/status'),
       api<SimAgent[]>('/api/agents'),
       api<FeedEvent[]>('/api/sim/activity-feed?limit=50'),
       api<FraudAlert[]>('/api/threats/alerts'),
+      api<{attack_running: boolean}>('/api/scenarios/attack-status'),
     ]);
     if (statusData) setSimStatus(statusData);
     if (Array.isArray(agentData)) setAgents(agentData);
     if (Array.isArray(feedData)) setFeed(feedData);
     if (Array.isArray(alertData)) setAlerts(alertData);
+    // Only update attack status if we received valid data
+    if (attackStatusData && typeof attackStatusData.attack_running === 'boolean') {
+      setAttackRunning(attackStatusData.attack_running);
+    }
   }, []);
 
   useEffect(() => {
@@ -201,8 +207,11 @@ export default function AgentsPage() {
         if (walletMatch) setWalletAddress(walletMatch[0]);
       }
       
+      // Update attack status immediately
+      setAttackRunning(true);
+      
       // Show success message
-      alert(`✅ Continuous Attack Started!\n\n${response.message || 'Attack initiated'}\n\nWatch the Activity Feed below for live blockchain confirmations.\n\n🔗 Etherscan: ${response.etherscan_wallet || 'N/A'}\n\n⚠️ Click STOP button to end the attack.`);
+      alert(`✅ Continuous Attack Started!\n\n${response.message || 'Attack initiated'}\n\nWatch the Activity Feed below for live blockchain confirmations.\n\n🔗 Etherscan: ${response.etherscan_wallet || 'N/A'}\n\n⚠️ Click STOP ATTACK button to end the attack.`);
       
       await fetchAll();
     } catch (error: any) {
@@ -218,6 +227,34 @@ export default function AgentsPage() {
       alert(`❌ Demo attack failed: ${error?.message || 'Unknown error'}\n\nMake sure backend is running.`);
     }
     setIsLoading(false);
+  };
+  
+  const stopAttack = async () => {
+    setIsLoading(true);
+    try {
+      const result = await api('/api/scenarios/stop-attack', { method: 'POST' }) as any;
+      
+      // Immediately set attack to false
+      setAttackRunning(false);
+      
+      // Wait a moment for backend to fully stop
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Refresh all data
+      await fetchAll();
+      
+      if (result?.success) {
+        console.log('✅ Attack stopped:', result.message);
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to stop attack:', error);
+      alert(`❌ Failed to stop attack: ${error?.message || 'Unknown error'}`);
+      // Still try to update state
+      setAttackRunning(false);
+      await fetchAll();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const pauseSim = async () => {
@@ -429,7 +466,7 @@ export default function AgentsPage() {
       <div className="card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            {!isRunning && !isPaused && (
+            {!isRunning && !isPaused && !attackRunning && (
               <>
                 <button
                   className="btn accent text-xs py-2 px-5"
@@ -448,18 +485,20 @@ export default function AgentsPage() {
                 </button>
               </>
             )}
-            {isRunning && (
+            {attackRunning && (
+              <button
+                className="btn text-xs py-2 px-5 bg-linear-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0 animate-pulse"
+                onClick={stopAttack}
+                disabled={isLoading}
+                title="Stop the ongoing attack"
+              >
+                {isLoading ? 'STOPPING...' : '🛑 STOP ATTACK'}
+              </button>
+            )}
+            {isRunning && !attackRunning && (
               <>
                 <button className="btn ghost text-xs py-2 px-4" onClick={pauseSim}>
                   ⏸ PAUSE
-                </button>
-                <button
-                  className="btn text-xs py-2 px-5 bg-linear-to-r from-[rgba(220,38,38,0.9)] to-[rgba(239,68,68,0.9)] hover:from-[rgba(220,38,38,1)] hover:to-[rgba(239,68,68,1)] text-white font-bold border-0"
-                  onClick={runDemoAttack}
-                  disabled={isLoading}
-                  title="Execute 100+ transaction attack demo with Palladium & Badassium tokens"
-                >
-                  {isLoading ? 'ATTACKING...' : '💥 DEMO ATTACK'}
                 </button>
               </>
             )}
@@ -468,7 +507,7 @@ export default function AgentsPage() {
                 ▶ RESUME
               </button>
             )}
-            {(isRunning || isPaused) && (
+            {(isRunning || isPaused) && !attackRunning && (
               <button className="btn ghost text-xs py-2 px-4" onClick={stopSim}>
                 ⏹ STOP
               </button>
@@ -476,6 +515,14 @@ export default function AgentsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-4 font-mono text-xs">
+            {attackRunning && (
+              <span className="text-text-secondary">
+                🔥 Attack:{' '}
+                <span className="text-[#ff0033] font-bold animate-pulse">
+                  RUNNING
+                </span>
+              </span>
+            )}
             <span className="text-text-secondary">
               Status:{' '}
               <span
