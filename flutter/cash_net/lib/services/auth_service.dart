@@ -5,6 +5,61 @@ import '../models/user.dart';
 class AuthService {
   static const String apiBaseUrl = 'https://cash-net.onrender.com';
 
+  // Username/Password Authentication for Admin
+  Future<AuthResponse> loginWithUsernamePassword({
+    required String username,
+    required String password,
+  }) async {
+    try {
+      // Try real API first
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/api/auth/admin-login'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'username': username,
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final user = User(
+          id: data['user']['id'] ?? username,
+          walletAddress: null,
+          name: data['user']['name'] ?? 'Admin',
+          email: data['user']['email'] ?? '$username@cashnet.admin',
+          role: 'ADMIN',
+          plan: 'admin',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        );
+        return AuthResponse.success(user, data['access_token']);
+      } else {
+        return AuthResponse.error('Invalid username or password');
+      }
+    } catch (e) {
+      // Fallback to dev credentials if API is unavailable
+      print('API unavailable, using dev credentials: $e');
+
+      if (username == 'admin' && password == 'admin123') {
+        final user = User(
+          id: 'dev_admin',
+          walletAddress: null,
+          name: 'Dev Admin',
+          email: 'admin@cashnet.dev',
+          role: 'ADMIN',
+          plan: 'admin',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+        );
+        return AuthResponse.success(user, 'dev_admin_token');
+      }
+
+      return AuthResponse.error(
+          'Network error. Dev credentials: admin/admin123');
+    }
+  }
+
   // Wallet Authentication
   Future<AuthResponse> loginWithWallet({
     required String walletAddress,

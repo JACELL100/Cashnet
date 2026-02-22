@@ -87,6 +87,9 @@ class AuthResponse {
     required this.success,
   });
 
+  // Getter for success status
+  bool get isSuccess => success;
+
   factory AuthResponse.success(User user, String? token) {
     return AuthResponse(
       user: user,

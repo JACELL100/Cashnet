@@ -48,10 +48,10 @@ interface Row {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  ADMIN:        'bg-[rgba(255,56,96,0.15)] text-[#ff3860] border border-[rgba(255,56,96,0.3)]',
-  AUDITOR:      'bg-[rgba(255,200,56,0.15)] text-[#ffc838] border border-[rgba(255,200,56,0.3)]',
-  LENDER:       'bg-[rgba(56,180,255,0.15)] text-[#38b4ff] border border-[rgba(56,180,255,0.3)]',
-  BORROWER:     'bg-[rgba(56,255,140,0.15)] text-[#38ff8c] border border-[rgba(56,255,140,0.3)]',
+  ADMIN: 'bg-[rgba(255,56,96,0.15)] text-[#ff3860] border border-[rgba(255,56,96,0.3)]',
+  AUDITOR: 'bg-[rgba(255,200,56,0.15)] text-[#ffc838] border border-[rgba(255,200,56,0.3)]',
+  LENDER: 'bg-[rgba(56,180,255,0.15)] text-[#38b4ff] border border-[rgba(56,180,255,0.3)]',
+  BORROWER: 'bg-[rgba(56,255,140,0.15)] text-[#38ff8c] border border-[rgba(56,255,140,0.3)]',
   UNREGISTERED: 'bg-[rgba(180,180,180,0.15)] text-text-tertiary border border-[rgba(180,180,180,0.3)]',
 };
 
@@ -66,8 +66,8 @@ function scoreBar(score: number) {
   return { pct, color };
 }
 function shortWallet(w: string) {
-  if (w.startsWith('0x') && w.length >= 10) return `${w.slice(0, 6)}â€¦${w.slice(-4)}`;
-  return w.length > 16 ? `${w.slice(0, 8)}â€¦` : w;
+  if (w.startsWith('0x') && w.length >= 10) return `${w.slice(0, 6)}…${w.slice(-4)}`;
+  return w.length > 16 ? `${w.slice(0, 8)}…` : w;
 }
 function timeAgo(iso: string | null | undefined) {
   if (!iso) return 'Never';
@@ -115,7 +115,7 @@ export default function ParticipantsPage() {
 
     const built: Row[] = [];
 
-    // 1. Registered participants â€” enrich with borrower data if wallet matches
+    // 1. Registered participants — enrich with borrower data if wallet matches
     for (const p of participants) {
       const b = borrowerMap.get(p.wallet.toLowerCase());
       built.push({
@@ -226,8 +226,8 @@ export default function ParticipantsPage() {
 
   const SortIcon = ({ col }: { col: typeof sortBy }) =>
     sortBy === col
-      ? <span className="ml-1 text-[#ff3860]">{sortDir === 'asc' ? 'â†‘' : 'â†“'}</span>
-      : <span className="ml-1 opacity-20">â†•</span>;
+      ? <span className="ml-1 text-[#ff3860]">{sortDir === 'asc' ? '↑' : '↓'}</span>
+      : <span className="ml-1 opacity-20">↕</span>;
 
   const tabs: FilterTab[] = ['ALL', 'BORROWER', 'LENDER', 'ADMIN', 'AUDITOR', 'UNREGISTERED'];
 
@@ -245,19 +245,19 @@ export default function ParticipantsPage() {
           onClick={load}
           className="px-4 py-2 text-xs font-mono border border-[color:var(--color-border)] rounded hover:border-[#ff3860] hover:text-[#ff3860] transition-colors"
         >
-          â†» Refresh
+          ↻ Refresh
         </button>
       </div>
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[
-          { label: 'Total',        value: counts.total,        color: 'text-text-primary' },
-          { label: 'Borrowers',    value: counts.BORROWER,     color: 'text-[#38ff8c]' },
-          { label: 'Lenders',      value: counts.LENDER,       color: 'text-[#38b4ff]' },
-          { label: 'Admins',       value: counts.ADMIN,        color: 'text-[#ff3860]' },
+          { label: 'Total', value: counts.total, color: 'text-text-primary' },
+          { label: 'Borrowers', value: counts.BORROWER, color: 'text-[#38ff8c]' },
+          { label: 'Lenders', value: counts.LENDER, color: 'text-[#38b4ff]' },
+          { label: 'Admins', value: counts.ADMIN, color: 'text-[#ff3860]' },
           { label: 'Unregistered', value: counts.UNREGISTERED, color: 'text-text-tertiary' },
-          { label: 'Avg Credit',   value: avgScore || 'â€”',     color: avgScore ? scoreColor(avgScore) : 'text-text-tertiary' },
+          { label: 'Avg Credit', value: avgScore || '—', color: avgScore ? scoreColor(avgScore) : 'text-text-tertiary' },
         ].map(k => (
           <div key={k.label} className="bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded-lg p-4">
             <div className="text-xs font-mono text-text-tertiary uppercase tracking-wider">{k.label}</div>
@@ -281,7 +281,7 @@ export default function ParticipantsPage() {
         </div>
         <input
           type="text"
-          placeholder="Search wallet, email, nameâ€¦"
+          placeholder="Search wallet, email, name…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="w-full md:w-64 px-3 py-2 text-xs font-mono bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded outline-none focus:border-[#ff3860] text-text-primary placeholder:text-text-tertiary"
@@ -299,7 +299,7 @@ export default function ParticipantsPage() {
       <div className="flex gap-4">
         <div className="flex-1 bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded-lg overflow-hidden min-w-0">
           {loading ? (
-            <div className="p-12 text-center text-text-tertiary font-mono text-sm">Loadingâ€¦</div>
+            <div className="p-12 text-center text-text-tertiary font-mono text-sm">Loading…</div>
           ) : filtered.length === 0 ? (
             <div className="p-12 text-center text-text-tertiary font-mono text-sm">No participants found</div>
           ) : (
@@ -325,14 +325,14 @@ export default function ParticipantsPage() {
                         onClick={() => setSelected(r)}
                         className={`border-b border-[color:var(--color-border)] cursor-pointer transition-colors hover:bg-[rgba(255,56,96,0.04)] ${selected?.key === r.key ? 'bg-[rgba(255,56,96,0.07)]' : ''}`}
                       >
-                        <td className="px-4 py-3 text-text-tertiary">{r.id > 0 ? r.id : 'â€”'}</td>
+                        <td className="px-4 py-3 text-text-tertiary">{r.id > 0 ? r.id : '—'}</td>
                         <td className="px-4 py-3">
                           <div className="text-text-primary text-xs" title={r.wallet}>
                             {r.isAdminAccount ? (r.name || r.email) : shortWallet(r.wallet)}
                           </div>
                           {!r.isAdminAccount && (r.name || r.email) && (
                             <div className="text-text-tertiary text-xs mt-0.5">
-                              {r.name}{r.name && r.email && ' Â· '}{r.email}
+                              {r.name}{r.name && r.email && ' · '}{r.email}
                             </div>
                           )}
                           {r.isAdminAccount && r.email && (
@@ -353,18 +353,18 @@ export default function ParticipantsPage() {
                                 <div className="h-full rounded" style={{ width: `${bar.pct}%`, background: bar.color }} />
                               </div>
                             </div>
-                          ) : <span className="text-text-tertiary">â€”</span>}
+                          ) : <span className="text-text-tertiary">—</span>}
                         </td>
                         <td className="px-4 py-3 text-text-tertiary text-xs whitespace-nowrap">{timeAgo(r.last_login)}</td>
                         <td className="px-4 py-3 text-text-tertiary text-xs whitespace-nowrap">
-                          {r.created_at ? new Date(r.created_at).toLocaleDateString() : 'â€”'}
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {r.source === 'participant' && (
                             <button
                               onClick={e => { e.stopPropagation(); setDeleteConfirm(r.wallet); }}
                               className="text-xs text-text-tertiary hover:text-[#ff3860] transition-colors px-2 py-1 rounded hover:bg-[rgba(255,56,96,0.1)]"
-                            >âœ•</button>
+                            >✕</button>
                           )}
                         </td>
                       </tr>
@@ -381,7 +381,7 @@ export default function ParticipantsPage() {
           <div className="w-72 bg-[color:var(--color-bg-secondary)] border border-[color:var(--color-border)] rounded-lg p-5 space-y-4 shrink-0 self-start sticky top-20">
             <div className="flex items-start justify-between">
               <div className="text-xs font-mono text-text-tertiary uppercase tracking-wider">Detail</div>
-              <button onClick={() => setSelected(null)} className="text-text-tertiary hover:text-text-primary text-lg leading-none">Ã—</button>
+              <button onClick={() => setSelected(null)} className="text-text-tertiary hover:text-text-primary text-xl leading-none">×</button>
             </div>
 
             <div>
@@ -441,7 +441,7 @@ export default function ParticipantsPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-text-tertiary">Registered</span>
-                <span className="text-text-primary">{selected.created_at ? new Date(selected.created_at).toLocaleDateString() : 'â€”'}</span>
+                <span className="text-text-primary">{selected.created_at ? new Date(selected.created_at).toLocaleDateString() : '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-text-tertiary">Source</span>
@@ -457,7 +457,7 @@ export default function ParticipantsPage() {
                   rel="noopener noreferrer"
                   className="block w-full text-center py-2 text-xs font-mono border border-[color:var(--color-border)] rounded hover:border-[#38b4ff] hover:text-[#38b4ff] transition-colors"
                 >
-                  View on Etherscan â†—
+                  View on Etherscan ↗
                 </a>
                 {selected.source === 'participant' && (
                   <button
@@ -475,7 +475,7 @@ export default function ParticipantsPage() {
 
       <div className="text-xs font-mono text-text-tertiary">
         Showing {filtered.length} of {rows.length} total accounts
-        {counts.UNREGISTERED > 0 && ` Â· ${counts.UNREGISTERED} wallet-auth only (not in participants table)`}
+        {counts.UNREGISTERED > 0 && ` · ${counts.UNREGISTERED} wallet-auth only (not in participants table)`}
       </div>
 
       {/* Delete Confirm */}
@@ -495,7 +495,7 @@ export default function ParticipantsPage() {
                 disabled={deleting}
                 className="flex-1 py-2 text-xs font-mono bg-[#ff3860] text-white rounded hover:bg-[#cc2d4d] disabled:opacity-50 transition-colors"
               >
-                {deleting ? 'Removingâ€¦' : 'Remove'}
+                {deleting ? 'Removing…' : 'Remove'}
               </button>
             </div>
           </div>

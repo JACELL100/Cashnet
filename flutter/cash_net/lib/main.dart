@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
 import 'screens/login_page.dart';
+import 'screens/admin_login_page.dart';
+import 'screens/admin_dashboard_page.dart';
 import 'screens/dashboard_page.dart';
 
 void main() {
@@ -19,15 +21,17 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: MaterialApp(
-        title: 'CashNet',
+        title: 'CashNet Admin',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
-        initialRoute: '/login',
+        initialRoute: '/admin-login',
         routes: {
           '/login': (context) => const LoginPage(),
+          '/admin-login': (context) => const AdminLoginPage(),
+          '/admin-dashboard': (context) => const AdminDashboardPage(),
           '/dashboard': (context) => const DashboardPage(),
         },
-        home: const AuthWrapper(),
+        home: const AdminLoginPage(),
       ),
     );
   }
