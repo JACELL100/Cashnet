@@ -109,6 +109,15 @@ export const marketApi = {
   getAll: () => apiRequest('/agents-sim/market/all'),
 };
 
+/* === MARKET INTELLIGENCE API === */
+export const marketIntelApi = {
+  getOverview: () => apiRequest('/api/market-intel/overview'),
+  getCandles: (symbol: string, days?: number, interval?: string) =>
+    apiRequest(`/api/market-intel/candles/${symbol}?days=${days ?? 90}&interval=${interval ?? '1d'}`),
+  getVulnerabilities: () => apiRequest('/api/market-intel/vulnerabilities'),
+  getAiAnalysis: () => apiRequest('/api/market-intel/ai-analysis', { method: 'POST' }),
+};
+
 /* === AGENT API === */
 export const agentApi = {
   listAgents: () => apiRequest('/api/agents'),
