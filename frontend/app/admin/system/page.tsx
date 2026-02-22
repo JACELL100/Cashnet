@@ -129,7 +129,7 @@ export default function SystemControlPage() {
             Emergency Controls
           </h2>
           <p className="text-sm font-mono text-text-secondary">
-            Use these controls to pause or resume all contract operations system-wide.
+            Use these controls to pause or resume all smart contract operations system-wide.
           </p>
         </div>
 
@@ -143,14 +143,19 @@ export default function SystemControlPage() {
                     SYSTEM PAUSED
                   </div>
                   <div className="text-sm font-mono text-text-secondary">
-                    All contract operations are currently frozen:
+                    All blockchain contract operations are currently frozen:
                   </div>
                   <ul className="text-xs font-mono text-text-tertiary space-y-1 ml-4">
+                    <li>• Liquidity pool swaps and liquidity management</li>
                     <li>• Lending pool deposits & withdrawals</li>
-                    <li>• Liquidity pool swaps</li>
                     <li>• Collateral deposits & withdrawals</li>
                     <li>• Borrowing & repayments</li>
                   </ul>
+                  <div className="mt-3 p-3 bg-bg-primary rounded border border-border">
+                    <div className="text-xs font-mono text-text-tertiary">
+                      <strong className="text-[#f0a500]">Note:</strong> Users attempting transactions will receive a "Service Unavailable" error. All API endpoints for blockchain operations are disabled.
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -188,7 +193,7 @@ export default function SystemControlPage() {
             </button>
 
             <div className="p-3 bg-[rgba(240,165,0,0.08)] border border-[#f0a500] rounded text-xs font-mono text-text-tertiary">
-              <strong className="text-[#f0a500]">Warning:</strong> This will freeze all lending, borrowing, and collateral operations across the entire protocol. Only use in emergency situations.
+              <strong className="text-[#f0a500]">Warning:</strong> This will immediately freeze all lending, borrowing, liquidity, and collateral operations across the entire protocol. Users will receive error responses for all transaction attempts. Only use in emergency situations.
             </div>
           </div>
         )}
@@ -197,32 +202,42 @@ export default function SystemControlPage() {
       {/* Affected Contracts */}
       <div className="bg-bg-secondary border border-border rounded p-6">
         <h2 className="text-lg font-bold font-mono text-text-primary mb-4">
-          Affected Contracts
+          Affected Contracts & Endpoints
         </h2>
         <div className="space-y-2">
           {[
-            { name: 'LendingPool', desc: 'Loan creation and repayment' },
-            { name: 'LiquidityPool', desc: 'Token swaps and liquidity provision' },
-            { name: 'CollateralVault', desc: 'Collateral deposits and withdrawals' },
+            { name: 'LendingPool', desc: 'Loan creation, repayment, and liquidations', endpoints: '/lending/*' },
+            { name: 'LiquidityPool', desc: 'Token swaps and liquidity provision/removal', endpoints: '/pool/swap, /pool/add-liquidity, /pool/remove-liquidity' },
+            { name: 'CollateralVault', desc: 'Collateral deposits and withdrawals', endpoints: '/lending/deposit-collateral' },
           ].map((contract) => (
             <div
               key={contract.name}
-              className="flex items-center justify-between p-3 bg-bg-primary border border-border rounded"
+              className="p-3 bg-bg-primary border border-border rounded"
             >
-              <div>
+              <div className="flex items-center justify-between mb-2">
                 <div className="font-mono text-sm text-text-primary">{contract.name}</div>
-                <div className="font-mono text-xs text-text-tertiary">{contract.desc}</div>
+                <div className={`px-3 py-1 rounded text-xs font-mono font-bold ${
+                  status.paused 
+                    ? 'bg-[rgba(255,56,96,0.1)] text-[#ff3860] border border-[#ff3860]' 
+                    : 'bg-[rgba(34,197,94,0.1)] text-[#22c55e] border border-[#22c55e]'
+                }`}>
+                  {status.paused ? 'FROZEN' : 'ACTIVE'}
+                </div>
               </div>
-              <div className={`px-3 py-1 rounded text-xs font-mono font-bold ${
-                status.paused 
-                  ? 'bg-[rgba(255,56,96,0.1)] text-[#ff3860] border border-[#ff3860]' 
-                  : 'bg-[rgba(34,197,94,0.1)] text-[#22c55e] border border-[#22c55e]'
-              }`}>
-                {status.paused ? 'FROZEN' : 'ACTIVE'}
+              <div className="font-mono text-xs text-text-tertiary mb-1">{contract.desc}</div>
+              <div className="font-mono text-xs text-text-tertiary opacity-70">
+                API: {contract.endpoints}
               </div>
             </div>
           ))}
         </div>
+        {status.paused && (
+          <div className="mt-4 p-3 bg-[rgba(255,56,96,0.05)] border border-[rgba(255,56,96,0.3)] rounded">
+            <div className="text-xs font-mono text-text-tertiary">
+              <strong className="text-[#ff3860]">System Behavior:</strong> All API endpoints listed above will return <code className="px-1 py-0.5 bg-bg-secondary rounded">503 Service Unavailable</code> with the message: "System is currently paused. All blockchain transactions are frozen."
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error Display */}

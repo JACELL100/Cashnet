@@ -15,6 +15,7 @@ const lenderNav = [
   { href: '/lender/credit', label: 'Credit Scores', icon: '✓' },
   { href: '/lender/yield', label: 'Yield Analytics', icon: '◆' },
   { href: '/lender/profile', label: 'Profile', icon: '⊕' },
+  { href: '/dashboard/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
   { href: '/lender/settings', label: 'Settings', icon: '⚙' },
 ];
 
