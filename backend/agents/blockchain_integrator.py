@@ -257,7 +257,7 @@ class BlockchainIntegrator:
                 'from': wallet_address,
                 'gas': 100000,
                 'gasPrice': self.blockchain.w3.eth.gas_price,
-                'nonce': self.blockchain.w3.eth.get_transaction_count(wallet_address),
+                'nonce': self.blockchain.w3.eth.get_transaction_count(wallet_address, "pending"),
             })
             
             # Sign and send approval
@@ -276,7 +276,9 @@ class BlockchainIntegrator:
                         "amount": amount_in,
                         "tx_hash": approve_tx_hash,
                         "etherscan": f"https://sepolia.etherscan.io/tx/{approve_tx_hash}",
-                        "status": "confirmed"
+                        "status": "confirmed",
+                        "token_contract": token_in_addr,
+                        "pool_contract": liquidity_pool_addr
                     },
                     "timestamp": time.time()
                 })
@@ -313,7 +315,7 @@ class BlockchainIntegrator:
                 'from': wallet_address,
                 'gas': 300000,
                 'gasPrice': self.blockchain.w3.eth.gas_price,
-                'nonce': self.blockchain.w3.eth.get_transaction_count(wallet_address),
+                'nonce': self.blockchain.w3.eth.get_transaction_count(wallet_address, "pending"),
             })
             
             # Sign and send swap
@@ -333,7 +335,10 @@ class BlockchainIntegrator:
                         "amount": amount_in,
                         "tx_hash": swap_tx_hash,
                         "etherscan": f"https://sepolia.etherscan.io/tx/{swap_tx_hash}",
-                        "status": "confirmed"
+                        "status": "confirmed",
+                        "token_in_contract": token_in_addr,
+                        "token_out_contract": token_out_addr,
+                        "pool_contract": liquidity_pool_addr
                     },
                     "timestamp": time.time()
                 })

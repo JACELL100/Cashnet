@@ -358,7 +358,11 @@ export default function SimulationPage() {
     borrow: '#b367ff', repay: '#22c55e', sandwich: '#f0a500',
     market_update: '#64748b', ai_narrative: '#b367ff', ai_decision: '#00d4ff',
     scenario: '#f0a500', price_crash: '#ff0033', liquidity_drain: '#ff3860',
-    blockchain_tx: '#22c55e', approval_confirmed: '#22c55e', swap_confirmed: '#22c55e',
+    blockchain_tx: '#22c55e', 
+    approval_confirmed: '#22c55e', 
+    swap_confirmed: '#22c55e',
+    approval_pending: '#f0a500',
+    swap_pending: '#f0a500',
   };
 
   return (
@@ -791,15 +795,28 @@ export default function SimulationPage() {
                   const evColor = eventTypeColor[ev.event_type] ?? '#64748b';
                   const cfg = AGENT_CONFIG[ev.agent_type];
                   const icon = cfg?.icon ?? (ev.agent_type === 'ai' ? '🤖' : ev.agent_type === 'scenario' ? '🎭' : ev.agent_type === 'blockchain_tx' ? '⛓' : '●');
+                  
+                  // Check if this is a blockchain event
+                  const isBlockchainEvent = ev.event_type === 'blockchain_tx' || 
+                    ev.event_type === 'approval_confirmed' || 
+                    ev.event_type === 'swap_confirmed' ||
+                    ev.event_type === 'approval_pending' ||
+                    ev.event_type === 'swap_pending' ||
+                    ev.data?.tx_hash;
+                  
                   return (
-                    <div key={i} className="flex items-start gap-2 py-1.5 border-b border-(--color-border) last:border-0">
-                      <span className="text-sm flex-shrink-0" style={{ color: cfg?.color ?? evColor }}>{icon}</span>
+                    <div key={i} className={`flex items-start gap-2 py-2 px-3 rounded border border-(--color-border) last:border-0 ${
+                      isBlockchainEvent ? 'bg-[#22c55e0a] border-[#22c55e33]' : 'border-(--color-border)'
+                    }`}>
+                      <span className="text-sm flex-shrink-0" style={{ color: cfg?.color ?? evColor }}>
+                        {isBlockchainEvent ? '⛓' : icon}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-mono font-bold text-text-primary">{ev.agent_name}</span>
                           <span className="text-xs font-mono px-1.5 py-0.5 rounded"
                             style={{ color: evColor, border: `1px solid ${evColor}22`, background: `${evColor}11` }}>
-                            {ev.event_type}
+                            {isBlockchainEvent && '⚡ '}{ev.event_type}
                           </span>
                           {ev.data?.severity && severityBadge(ev.data.severity)}
                         </div>
@@ -813,10 +830,43 @@ export default function SimulationPage() {
                           <span className="text-xs font-mono text-text-tertiary">{fmt(ev.data.amount)}</span>
                         )}
                         {ev.data?.tx_hash && (
-                          <a href={`https://sepolia.etherscan.io/tx/${ev.data.tx_hash}`} target="_blank" rel="noopener noreferrer"
-                            className="text-xs font-mono text-[#22c55e] hover:underline ml-2">
-                            ⛓ {ev.data.tx_hash.slice(0, 14)}… ↗
-                          </a>
+                          <div className="mt-1 flex flex-wrap gap-2">
+                            <a href={`https://sepolia.etherscan.io/tx/${ev.data.tx_hash}`} target="_blank" rel="noopener noreferrer"
+                              className="text-xs font-mono text-[#22c55e] hover:text-[#16a34a] hover:underline inline-flex items-center gap-1 px-2 py-1 rounded bg-[#22c55e11] border border-[#22c55e33]">
+                              <span className="font-bold">TX:</span> {ev.data.tx_hash.slice(0, 10)}...{ev.data.tx_hash.slice(-8)} ↗
+                            </a>
+                            {ev.data?.pool_contract && (
+                              <a href={`https://sepolia.etherscan.io/address/${ev.data.pool_contract}`} target="_blank" rel="noopener noreferrer"
+                                className="text-xs font-mono text-[#00d4ff] hover:text-[#00b8e6] hover:underline inline-flex items-center gap-1 px-2 py-1 rounded bg-[#00d4ff11] border border-[#00d4ff33]">
+                                <span className="font-bold">Pool:</span> {ev.data.pool_contract.slice(0, 6)}...{ev.data.pool_contract.slice(-4)} ↗
+                              </a>
+                            )}
+                            {ev.data?.token_contract && (
+                              <a href={`https://sepolia.etherscan.io/address/${ev.data.token_contract}`} target="_blank" rel="noopener noreferrer"
+                                className="text-xs font-mono text-[#b367ff] hover:text-[#9d4edd] hover:underline inline-flex items-center gap-1 px-2 py-1 rounded bg-[#b367ff11] border border-[#b367ff33]">
+                                <span className="font-bold">Token:</span> {ev.data.token_contract.slice(0, 6)}...{ev.data.token_contract.slice(-4)} ↗
+                              </a>
+                            )}
+                            {ev.data?.token_in_contract && (
+                              <a href={`https://sepolia.etherscan.io/address/${ev.data.token_in_contract}`} target="_blank" rel="noopener noreferrer"
+                                className="text-xs font-mono text-[#b367ff] hover:text-[#9d4edd] hover:underline inline-flex items-center gap-1 px-2 py-1 rounded bg-[#b367ff11] border border-[#b367ff33]">
+                                <span className="font-bold">Token In:</span> {ev.data.token_in_contract.slice(0, 6)}...{ev.data.token_in_contract.slice(-4)} ↗
+                              </a>
+                            )}
+                            {ev.data?.token_out_contract && (
+                              <a href={`https://sepolia.etherscan.io/address/${ev.data.token_out_contract}`} target="_blank" rel="noopener noreferrer"
+                                className="text-xs font-mono text-[#f0a500] hover:text-[#d99500] hover:underline inline-flex items-center gap-1 px-2 py-1 rounded bg-[#f0a50011] border border-[#f0a50033]">
+                                <span className="font-bold">Token Out:</span> {ev.data.token_out_contract.slice(0, 6)}...{ev.data.token_out_contract.slice(-4)} ↗
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {isBlockchainEvent && !ev.data?.tx_hash && ev.event_type.includes('pending') && (
+                          <div className="mt-1">
+                            <span className="text-xs font-mono text-[#f0a500] inline-flex items-center gap-1 px-2 py-1 rounded bg-[#f0a50011] border border-[#f0a50033]">
+                              ⏳ Waiting for blockchain confirmation...
+                            </span>
+                          </div>
                         )}
                       </div>
                       <span className="text-[10px] font-mono text-text-tertiary flex-shrink-0">{timeAgo(ev.timestamp)}</span>

@@ -4,6 +4,10 @@ import '../providers/auth_provider.dart';
 import 'admin_screens/agents_page.dart';
 import 'admin_screens/participants_page.dart';
 import 'admin_screens/additional_pages.dart';
+import 'admin_screens/simulation_page.dart';
+import 'admin_screens/stress_test_page.dart';
+import 'admin_screens/system_control_page.dart';
+import 'admin_screens/testing_page.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../services/auth_service.dart';
@@ -30,22 +34,32 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     setState(() => _isLoading = true);
 
     try {
+      final url = '${AuthService.apiBaseUrl}/api/admin/dashboard';
+      print('📡 API CALL: GET $url');
+      
       final response = await http
           .get(
-            Uri.parse('${AuthService.apiBaseUrl}/api/admin/dashboard'),
+            Uri.parse(url),
           )
           .timeout(const Duration(seconds: 5));
 
+      print('📥 RESPONSE: Status ${response.statusCode}');
+      
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('✅ DATA LOADED: ${data.keys.join(', ')}');
+        print('📊 Content: $data');
+        
         setState(() {
-          _dashboardData = jsonDecode(response.body);
+          _dashboardData = data;
           _isLoading = false;
         });
       } else {
+        print('⚠️ API returned ${response.statusCode}, using mock data');
         _loadMockData();
       }
     } catch (e) {
-      print('Dashboard data load failed: $e');
+      print('❌ Dashboard data load failed: $e');
       _loadMockData();
     }
   }
@@ -65,12 +79,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
 
   final List<_NavItem> _navItems = const [
     _NavItem(icon: Icons.dashboard_outlined, label: 'Overview'),
+    _NavItem(icon: Icons.play_circle_outline, label: 'Simulation'),
     _NavItem(icon: Icons.smart_toy_outlined, label: 'Agents'),
     _NavItem(icon: Icons.people_outline, label: 'Participants'),
     _NavItem(icon: Icons.water_drop_outlined, label: 'Liquidity'),
     _NavItem(icon: Icons.account_balance_wallet_outlined, label: 'Credit'),
     _NavItem(icon: Icons.hub_outlined, label: 'Blockchain'),
     _NavItem(icon: Icons.security_outlined, label: 'Threats'),
+    _NavItem(icon: Icons.warning_amber_outlined, label: 'Stress Test'),
+    _NavItem(icon: Icons.settings_outlined, label: 'System'),
+    _NavItem(icon: Icons.science_outlined, label: 'Testing'),
   ];
 
   Widget _buildBody() {
@@ -78,17 +96,25 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       case 0:
         return _buildOverview();
       case 1:
-        return const AgentsPage();
+        return const SimulationPage();
       case 2:
-        return const ParticipantsPage();
+        return const AgentsPage();
       case 3:
-        return const LiquidityPage();
+        return const ParticipantsPage();
       case 4:
-        return const CreditPage();
+        return const LiquidityPage();
       case 5:
-        return const BlockchainPage();
+        return const CreditPage();
       case 6:
+        return const BlockchainPage();
+      case 7:
         return const ThreatsPage();
+      case 8:
+        return const StressTestPage();
+      case 9:
+        return const SystemControlPage();
+      case 10:
+        return const TestingPage();
       default:
         return _buildOverview();
     }
@@ -120,28 +146,30 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'System Overview',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontFamily: 'monospace',
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'System Overview',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontFamily: 'monospace',
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'CashNet Simulation Lab · Admin Console',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                        fontFamily: 'monospace',
+                      const SizedBox(height: 4),
+                      Text(
+                        'CashNet Simulation Lab · Admin Console',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontFamily: 'monospace',
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh, color: Color(0xFFFF3860)),
@@ -479,7 +507,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         elevation: 0,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+            tooltip: 'Open menu',
+          ),
+        ),
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 32,
@@ -572,44 +608,102 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
             ),
         ],
       ),
-      body: Row(
-        children: [
-          // Navigation Rail
-          NavigationRail(
-            backgroundColor: const Color(0xFF1E293B),
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (index) {
-              setState(() => _selectedIndex = index);
-            },
-            labelType: NavigationRailLabelType.all,
-            selectedIconTheme: const IconThemeData(
-              color: Color(0xFFFF3860),
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF1E293B),
+        child: Column(
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                color: Color(0xFF0A0E1A),
+                border: Border(
+                  bottom: BorderSide(color: Color(0xFF334155)),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF3860),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'CN',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'CashNet Admin',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  Text(
+                    user?.name ?? 'Administrator',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[400],
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
             ),
-            selectedLabelTextStyle: const TextStyle(
-              color: Color(0xFFFF3860),
-              fontFamily: 'monospace',
-              fontSize: 11,
+            Expanded(
+              child: ListView.builder(
+                itemCount: _navItems.length,
+                itemBuilder: (context, index) {
+                  final item = _navItems[index];
+                  final isSelected = _selectedIndex == index;
+                  
+                  return ListTile(
+                    leading: Icon(
+                      item.icon,
+                      color: isSelected 
+                          ? const Color(0xFFFF3860)
+                          : const Color(0xFF64748B),
+                    ),
+                    title: Text(
+                      item.label,
+                      style: TextStyle(
+                        color: isSelected 
+                            ? const Color(0xFFFF3860)
+                            : Colors.white,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        fontWeight: isSelected 
+                            ? FontWeight.bold 
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    selected: isSelected,
+                    selectedTileColor: const Color(0xFF0A0E1A),
+                    onTap: () {
+                      setState(() => _selectedIndex = index);
+                      Navigator.pop(context); // Close drawer
+                    },
+                  );
+                },
+              ),
             ),
-            unselectedIconTheme: const IconThemeData(
-              color: Color(0xFF64748B),
-            ),
-            unselectedLabelTextStyle: const TextStyle(
-              color: Color(0xFF64748B),
-              fontFamily: 'monospace',
-              fontSize: 11,
-            ),
-            destinations: _navItems
-                .map((item) => NavigationRailDestination(
-                      icon: Icon(item.icon),
-                      label: Text(item.label),
-                    ))
-                .toList(),
-          ),
-          const VerticalDivider(thickness: 1, width: 1),
-          // Main Content
-          Expanded(child: _buildBody()),
-        ],
+          ],
+        ),
       ),
+      body: _buildBody(),
     );
   }
 }

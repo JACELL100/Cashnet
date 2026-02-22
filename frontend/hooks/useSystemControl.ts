@@ -48,12 +48,14 @@ export function useSystemControl() {
         },
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Failed to pause system');
+        // Handle structured error response
+        const errorMsg = data.detail?.message || data.detail || 'Failed to pause system';
+        throw new Error(errorMsg);
       }
 
-      const data = await res.json();
       await fetchStatus(); // Refresh status
       return true;
     } catch (err: any) {
@@ -82,12 +84,14 @@ export function useSystemControl() {
         },
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.detail || 'Failed to unpause system');
+        // Handle structured error response
+        const errorMsg = data.detail?.message || data.detail || 'Failed to unpause system';
+        throw new Error(errorMsg);
       }
 
-      const data = await res.json();
       await fetchStatus(); // Refresh status
       return true;
     } catch (err: any) {

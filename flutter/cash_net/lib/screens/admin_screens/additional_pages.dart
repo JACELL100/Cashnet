@@ -32,9 +32,12 @@ class LiquidityPage extends StatelessWidget {
           border: Border.all(color: const Color(0xFF334155)),
           borderRadius: BorderRadius.circular(12)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontFamily: 'monospace')),
+        Flexible(
+          child: Text(label,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 14, fontFamily: 'monospace')),
+        ),
+        const SizedBox(width: 8),
         Text(value,
             style: TextStyle(
                 color: color,
@@ -78,9 +81,12 @@ class CreditPage extends StatelessWidget {
           border: Border.all(color: const Color(0xFF334155)),
           borderRadius: BorderRadius.circular(12)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontFamily: 'monospace')),
+        Flexible(
+          child: Text(label,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 14, fontFamily: 'monospace')),
+        ),
+        const SizedBox(width: 8),
         Text(value,
             style: TextStyle(
                 color: color,
@@ -124,9 +130,12 @@ class BlockchainPage extends StatelessWidget {
           border: Border.all(color: const Color(0xFF334155)),
           borderRadius: BorderRadius.circular(12)),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 14, fontFamily: 'monospace')),
+        Flexible(
+          child: Text(label,
+              style: const TextStyle(
+                  color: Colors.white, fontSize: 14, fontFamily: 'monospace')),
+        ),
+        const SizedBox(width: 8),
         Text(value,
             style: TextStyle(
                 color: color,
