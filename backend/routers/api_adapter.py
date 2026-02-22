@@ -1175,3 +1175,83 @@ async def toggle_real_blockchain_txs(body: Dict[str, Any]):
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# THREAT PREDICTION API (ML + Groq enhanced)
+# ============================================================================
+
+@router.get("/threats/predictions")
+async def get_threat_predictions():
+    """
+    ML-powered future threat predictions based on current alert state.
+    Returns per-threat-type probabilities, severity forecasts, and mitigation suggestions.
+    """
+    try:
+        from agents.threat_predictor import get_threat_predictor
+
+        predictor = get_threat_predictor()
+
+        # Get current alerts from the active fraud monitor
+        monitor = simulation_runner.fraud_monitor if simulation_runner.status == "running" else _fraud_monitor
+        current_alerts = [a.to_dict() for a in monitor.alerts[-50:]] if monitor.alerts else []
+        threat_scores = monitor.get_threat_scores()
+
+        # ML prediction
+        forecast = predictor.predict_threats(current_alerts, threat_scores)
+
+        # Get mitigation suggestions for existing threats
+        existing_mitigations = predictor.get_mitigation_for_existing(current_alerts)
+
+        return {
+            "success": True,
+            "data": {
+                "forecast": forecast.to_dict(),
+                "existing_mitigations": existing_mitigations,
+            },
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/threats/predict-enhanced")
+async def get_enhanced_predictions():
+    """
+    Groq-enhanced threat prediction — combines ML predictions with LLM analysis
+    for richer narratives, attack chain analysis, and priority action roadmap.
+    """
+    try:
+        from agents.threat_predictor import get_threat_predictor, groq_threat_predictions
+
+        predictor = get_threat_predictor()
+
+        monitor = simulation_runner.fraud_monitor if simulation_runner.status == "running" else _fraud_monitor
+        current_alerts = [a.to_dict() for a in monitor.alerts[-50:]] if monitor.alerts else []
+        threat_scores = monitor.get_threat_scores()
+
+        # ML prediction
+        forecast = predictor.predict_threats(current_alerts, threat_scores)
+        ml_data = forecast.to_dict()
+
+        # Get mitigation suggestions
+        existing_mitigations = predictor.get_mitigation_for_existing(current_alerts)
+
+        # Groq enhancement
+        groq_enhanced = await groq_threat_predictions(
+            ml_data, current_alerts, existing_mitigations
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "forecast": ml_data,
+                "existing_mitigations": existing_mitigations,
+                "groq_analysis": groq_enhanced,
+            },
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}

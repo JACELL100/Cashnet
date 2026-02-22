@@ -20,6 +20,33 @@ interface GroqReport {
 interface EmailConfig { configured: boolean; enabled: boolean; smtp_host?: string; from_email?: string; total_sent: number; }
 interface Notification { type: string; alert_type: string; severity: string; recipients: string[]; subject: string; timestamp: number; groq_analysis: boolean; }
 
+// ─── Prediction Types ───────────────────────────────────────────────────────
+
+interface ThreatPrediction {
+  threat_type: string; probability: number; predicted_severity: string;
+  confidence: number; time_window: string; risk_trend: string;
+  description: string; mitigation_suggestions: string[];
+}
+interface ThreatForecast {
+  predictions: ThreatPrediction[]; overall_risk_score: number;
+  overall_trend: string; highest_risk_threat: string;
+  total_predicted_incidents: number; forecast_window: string;
+  generated_at: number; model_confidence: number;
+}
+interface ExistingMitigation {
+  threat_type: string; alert_count: number; worst_severity: string;
+  is_active: boolean; suggestions: string[];
+}
+interface GroqEnhanced {
+  threat_narrative?: string;
+  attack_chains?: Array<{ sequence: string[]; probability: string; description: string }>;
+  priority_actions?: string[];
+  risk_trajectory?: string;
+  risk_trajectory_reason?: string;
+  emerging_patterns?: string[];
+  error?: string;
+}
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const SEV_COLOR: Record<string, string> = {
@@ -75,9 +102,16 @@ export default function ThreatsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [testEmailLoading, setTestEmailLoading] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'alerts' | 'groq' | 'notifications' | 'patterns'>('alerts');
+  const [activeTab, setActiveTab] = useState<'alerts' | 'groq' | 'notifications' | 'patterns' | 'predictions'>('alerts');
   const [alertFilter, setAlertFilter] = useState<string>('all');
   const [newAlertFlash, setNewAlertFlash] = useState(false);
+
+  // Prediction state
+  const [forecast, setForecast] = useState<ThreatForecast | null>(null);
+  const [existingMitigations, setExistingMitigations] = useState<ExistingMitigation[]>([]);
+  const [groqEnhanced, setGroqEnhanced] = useState<GroqEnhanced | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [enhancedLoading, setEnhancedLoading] = useState(false);
 
   const fetchThreatData = useCallback(async () => {
     try {
@@ -139,6 +173,35 @@ export default function ThreatsPage() {
   async function resolveAlert(id: string) {
     await fetch(`${API_URL}/api/threats/alerts/${id}/resolve`, { method: 'POST' });
     fetchThreatData();
+  }
+
+  // ─── Prediction Functions ──────────────────────────────────────────────
+
+  async function fetchPredictions() {
+    setPredictionLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/threats/predictions`);
+      const j = await res.json();
+      if (j.success) {
+        setForecast(j.data.forecast ?? null);
+        setExistingMitigations(j.data.existing_mitigations ?? []);
+      }
+    } catch { /* ignore */ }
+    finally { setPredictionLoading(false); }
+  }
+
+  async function fetchEnhancedPredictions() {
+    setEnhancedLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/threats/predict-enhanced`, { method: 'POST' });
+      const j = await res.json();
+      if (j.success) {
+        setForecast(j.data.forecast ?? null);
+        setExistingMitigations(j.data.existing_mitigations ?? []);
+        setGroqEnhanced(j.data.groq_analysis ?? null);
+      }
+    } catch { /* ignore */ }
+    finally { setEnhancedLoading(false); }
   }
 
   async function sendTestEmail() {
@@ -291,11 +354,12 @@ export default function ThreatsPage() {
         <div className="flex border-b border-[var(--color-border)]">
           {[
             { id: 'alerts', label: `🚨 Alerts (${alerts.length})` },
+            { id: 'predictions', label: '🔮 Predictions' },
             { id: 'groq', label: '🤖 Groq AI Report' },
             { id: 'notifications', label: `📧 Email Alerts (${notifications.length})` },
             { id: 'patterns', label: '📚 Attack Patterns' },
           ].map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id as 'alerts' | 'groq' | 'notifications' | 'patterns')}
+            <button key={t.id} onClick={() => setActiveTab(t.id as 'alerts' | 'predictions' | 'groq' | 'notifications' | 'patterns')}
               className={`px-4 py-3 text-xs font-mono font-bold transition-colors border-b-2 ${activeTab === t.id ? 'border-[#ff3860] text-[#ff3860]' : 'border-transparent text-text-tertiary hover:text-text-secondary'}`}>
               {t.label}
             </button>
@@ -369,6 +433,243 @@ export default function ThreatsPage() {
                 })
               )}
             </div>
+          </div>
+        )}
+
+        {/* ── PREDICTIONS TAB ─────────────────────────────────────────── */}
+        {activeTab === 'predictions' && (
+          <div className="p-5 space-y-5">
+            {/* Controls */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-mono font-bold text-text-primary">🔮 Future Threat Predictions</h3>
+                <p className="text-[10px] font-mono text-text-tertiary mt-0.5">ML model + Groq AI predict threats likely to occur in the next 24h</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={fetchPredictions} disabled={predictionLoading}
+                  className="text-xs font-mono py-1 px-3 rounded border border-[#00d4ff] text-[#00d4ff] bg-[#00d4ff0d] hover:bg-[#00d4ff1a] transition-colors disabled:opacity-50">
+                  {predictionLoading ? '⏳ Predicting...' : '⚡ ML Predict'}
+                </button>
+                <button onClick={fetchEnhancedPredictions} disabled={enhancedLoading}
+                  className="text-xs font-mono py-1 px-3 rounded border border-[#b367ff] text-[#b367ff] bg-[#b367ff0d] hover:bg-[#b367ff1a] transition-colors disabled:opacity-50">
+                  {enhancedLoading ? '⏳ AI Analyzing...' : '🤖 Groq Enhanced'}
+                </button>
+              </div>
+            </div>
+
+            {!forecast ? (
+              <div className="text-center py-12">
+                <div className="text-4xl mb-3">🔮</div>
+                <p className="text-sm font-mono text-text-tertiary mb-3">Run ML prediction to forecast future threats and get mitigation suggestions</p>
+                <button onClick={fetchPredictions} disabled={predictionLoading}
+                  className="py-2 px-5 font-mono text-sm font-bold rounded border border-[#00d4ff] text-[#00d4ff] bg-[#00d4ff0d] hover:bg-[#00d4ff1a] transition-colors disabled:opacity-50">
+                  {predictionLoading ? '⏳ Running ML Model...' : '🔮 Generate Predictions'}
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Overall Forecast Header */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-lg border p-3 text-center" style={{
+                    borderColor: `${forecast.overall_risk_score >= 70 ? '#ff0033' : forecast.overall_risk_score >= 40 ? '#f0a500' : '#22c55e'}44`,
+                    background: `${forecast.overall_risk_score >= 70 ? '#ff0033' : forecast.overall_risk_score >= 40 ? '#f0a500' : '#22c55e'}08`
+                  }}>
+                    <div className="text-[10px] font-mono text-text-tertiary">Risk Score</div>
+                    <div className="text-2xl font-bold font-mono" style={{
+                      color: forecast.overall_risk_score >= 70 ? '#ff0033' : forecast.overall_risk_score >= 40 ? '#f0a500' : '#22c55e'
+                    }}>{forecast.overall_risk_score.toFixed(0)}/100</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-3 text-center">
+                    <div className="text-[10px] font-mono text-text-tertiary">Trend</div>
+                    <div className={`text-lg font-bold font-mono ${
+                      forecast.overall_trend === 'INCREASING' ? 'text-[#ff3860]' : forecast.overall_trend === 'DECREASING' ? 'text-[#22c55e]' : 'text-[#f0a500]'
+                    }`}>
+                      {forecast.overall_trend === 'INCREASING' ? '📈' : forecast.overall_trend === 'DECREASING' ? '📉' : '➡️'} {forecast.overall_trend}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-3 text-center">
+                    <div className="text-[10px] font-mono text-text-tertiary">Predicted Incidents</div>
+                    <div className="text-2xl font-bold font-mono text-[#ff3860]">{forecast.total_predicted_incidents}</div>
+                  </div>
+                  <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-primary)] p-3 text-center">
+                    <div className="text-[10px] font-mono text-text-tertiary">Model Confidence</div>
+                    <div className="text-2xl font-bold font-mono text-[#00d4ff]">{forecast.model_confidence.toFixed(0)}%</div>
+                  </div>
+                </div>
+
+                {/* Groq Enhanced Section */}
+                {groqEnhanced && !groqEnhanced.error && (
+                  <div className="rounded-lg border border-[#b367ff33] bg-[#b367ff08] p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🤖</span>
+                      <span className="text-sm font-mono font-bold text-[#b367ff]">Groq AI Threat Intelligence</span>
+                      {groqEnhanced.risk_trajectory && (
+                        <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                          groqEnhanced.risk_trajectory === 'CRITICAL' ? 'text-[#ff0033] border-[#ff0033] bg-[#ff00331a]' :
+                          groqEnhanced.risk_trajectory === 'DETERIORATING' ? 'text-[#ff3860] border-[#ff3860] bg-[#ff38601a]' :
+                          groqEnhanced.risk_trajectory === 'IMPROVING' ? 'text-[#22c55e] border-[#22c55e] bg-[#22c55e1a]' :
+                          'text-[#f0a500] border-[#f0a500] bg-[#f0a5001a]'
+                        }`} style={{ border: '1px solid' }}>
+                          {groqEnhanced.risk_trajectory}
+                        </span>
+                      )}
+                    </div>
+                    {groqEnhanced.threat_narrative && (
+                      <p className="text-xs font-mono text-text-primary leading-relaxed">{groqEnhanced.threat_narrative}</p>
+                    )}
+                    {groqEnhanced.risk_trajectory_reason && (
+                      <p className="text-[11px] font-mono text-text-secondary italic">📊 {groqEnhanced.risk_trajectory_reason}</p>
+                    )}
+
+                    {/* Attack Chains */}
+                    {groqEnhanced.attack_chains && groqEnhanced.attack_chains.length > 0 && (
+                      <div>
+                        <div className="text-xs font-mono font-bold text-[#ff3860] mb-2">⛓️ Predicted Attack Chains</div>
+                        <div className="space-y-2">
+                          {groqEnhanced.attack_chains.map((chain, i) => (
+                            <div key={i} className="rounded border border-[#ff386033] bg-[#ff386008] p-3">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-mono text-text-primary font-bold">
+                                  {Array.isArray(chain.sequence) ? chain.sequence.join(' → ') : chain.sequence}
+                                </span>
+                                <span className={`text-[10px] font-mono px-1 py-0.5 rounded ${
+                                  chain.probability === 'high' ? 'text-[#ff0033] bg-[#ff00331a]' :
+                                  chain.probability === 'medium' ? 'text-[#f0a500] bg-[#f0a5001a]' :
+                                  'text-[#22c55e] bg-[#22c55e1a]'
+                                }`}>{chain.probability}</span>
+                              </div>
+                              <p className="text-[11px] font-mono text-text-tertiary">{chain.description}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Priority Actions */}
+                    {groqEnhanced.priority_actions && groqEnhanced.priority_actions.length > 0 && (
+                      <div>
+                        <div className="text-xs font-mono font-bold text-[#22c55e] mb-2">🎯 Priority Actions</div>
+                        <ol className="space-y-1">
+                          {groqEnhanced.priority_actions.map((action, i) => (
+                            <li key={i} className="text-[11px] font-mono text-text-secondary flex items-start gap-2">
+                              <span className="text-[#22c55e] font-bold flex-shrink-0">{i + 1}.</span>{action}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+
+                    {/* Emerging Patterns */}
+                    {groqEnhanced.emerging_patterns && groqEnhanced.emerging_patterns.length > 0 && (
+                      <div>
+                        <div className="text-xs font-mono font-bold text-[#f0a500] mb-2">👁️ Emerging Patterns to Watch</div>
+                        {groqEnhanced.emerging_patterns.map((p, i) => (
+                          <div key={i} className="text-[11px] font-mono text-text-secondary flex items-start gap-2 mb-1">
+                            <span className="text-[#f0a500]">›</span>{p}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Per-Threat Predictions */}
+                <div>
+                  <h3 className="text-xs font-mono font-bold text-text-primary mb-3">📊 Per-Threat Probability Forecast ({forecast.forecast_window})</h3>
+                  <div className="space-y-2">
+                    {forecast.predictions.map((p) => {
+                      const c = SEV_COLOR[p.predicted_severity] ?? '#64748b';
+                      const icon = TYPE_ICON[p.threat_type] ?? '⚠';
+                      return (
+                        <div key={p.threat_type} className="rounded-lg border p-4" style={{ borderColor: `${c}33`, background: `${c}06` }}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-lg">{icon}</span>
+                                <span className="text-xs font-mono font-bold text-text-primary">
+                                  {p.threat_type.replace(/_/g, ' ').toUpperCase()}
+                                </span>
+                                <SevBadge sev={p.predicted_severity} />
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                                  p.risk_trend === 'INCREASING' ? 'text-[#ff3860] bg-[#ff38601a]' :
+                                  p.risk_trend === 'DECREASING' ? 'text-[#22c55e] bg-[#22c55e1a]' :
+                                  'text-[#f0a500] bg-[#f0a5001a]'
+                                }`}>
+                                  {p.risk_trend === 'INCREASING' ? '↑' : p.risk_trend === 'DECREASING' ? '↓' : '→'} {p.risk_trend}
+                                </span>
+                                <span className="text-[10px] font-mono text-text-tertiary">⏱ {p.time_window}</span>
+                              </div>
+
+                              {/* Probability Bar */}
+                              <div className="flex items-center gap-3 mb-2">
+                                <div className="flex-1 h-2.5 bg-[var(--color-bg-primary)] rounded-full overflow-hidden">
+                                  <div className="h-full rounded-full transition-all duration-1000" style={{
+                                    width: `${p.probability}%`,
+                                    background: `linear-gradient(90deg, ${c}88, ${c})`,
+                                  }} />
+                                </div>
+                                <span className="text-sm font-bold font-mono" style={{ color: c }}>{p.probability.toFixed(1)}%</span>
+                              </div>
+
+                              <p className="text-[11px] font-mono text-text-tertiary mb-1">{p.description}</p>
+                              <div className="text-[10px] font-mono text-text-tertiary">Confidence: {p.confidence.toFixed(0)}%</div>
+                            </div>
+                          </div>
+
+                          {/* Mitigation Suggestions */}
+                          {p.mitigation_suggestions.length > 0 && p.probability > 20 && (
+                            <div className="mt-3 pl-3 border-l-2 border-[#22c55e44]">
+                              <div className="text-[10px] font-mono text-[#22c55e] font-bold mb-1">💡 Mitigation Suggestions</div>
+                              {p.mitigation_suggestions.map((s, si) => (
+                                <div key={si} className="text-[11px] font-mono text-text-secondary flex items-start gap-1.5 mb-0.5">
+                                  <span className="text-[#22c55e] flex-shrink-0">•</span>{s}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Existing Threat Mitigations */}
+                {existingMitigations.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-mono font-bold text-text-primary mb-3">🛡️ Active Threat Mitigations</h3>
+                    <p className="text-[10px] font-mono text-text-tertiary mb-3">Targeted suggestions for threats already detected in current alerts</p>
+                    <div className="space-y-2">
+                      {existingMitigations.map((m) => {
+                        const c = SEV_COLOR[m.worst_severity] ?? '#64748b';
+                        const icon = TYPE_ICON[m.threat_type] ?? '⚠';
+                        return (
+                          <div key={m.threat_type} className="rounded-lg border p-4" style={{ borderColor: `${c}33`, background: `${c}06` }}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-lg">{icon}</span>
+                              <span className="text-xs font-mono font-bold text-text-primary">
+                                {m.threat_type.replace(/_/g, ' ').toUpperCase()}
+                              </span>
+                              <SevBadge sev={m.worst_severity} />
+                              <span className="text-[10px] font-mono text-text-tertiary">{m.alert_count} alert{m.alert_count !== 1 ? 's' : ''}</span>
+                              {m.is_active && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded text-[#ff0033] bg-[#ff00331a] animate-pulse">● ACTIVE</span>
+                              )}
+                            </div>
+                            <div className="pl-3 border-l-2 border-[#22c55e44] space-y-1">
+                              {m.suggestions.map((s, si) => (
+                                <div key={si} className="text-[11px] font-mono text-text-secondary flex items-start gap-1.5">
+                                  <span className="text-[#22c55e] font-bold flex-shrink-0">{si + 1}.</span>{s}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 

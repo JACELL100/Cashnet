@@ -151,6 +151,9 @@ export const threatApi = {
       method: 'POST',
       body: JSON.stringify({ type, params }),
     }),
+  getPredictions: () => apiRequest('/api/threats/predictions'),
+  getEnhancedPredictions: () =>
+    apiRequest('/api/threats/predict-enhanced', { method: 'POST' }),
 };
 
 /* === CREDIT API === */
