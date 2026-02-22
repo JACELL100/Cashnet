@@ -15,7 +15,7 @@ const roleDefaultPaths: Record<UserRole, string> = {
   ADMIN: '/dashboard',
   AUDITOR: '/dashboard/audit',
   LENDER: '/dashboard/lending',
-  BORROWER: '/dashboard/credit',
+  BORROWER: '/borrower',
 };
 
 export default function DashboardLayout({

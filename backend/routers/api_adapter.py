@@ -3,6 +3,7 @@ API adapter routes to match frontend expectations
 Maps frontend API calls to backend endpoints
 """
 import asyncio
+import time
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
@@ -448,6 +449,168 @@ async def simulate_attack(body: Dict[str, Any], db: Session = Depends(get_db)):
     return {
         "success": True,
         "data": result,
+    }
+
+
+# ============================================================================
+# GROQ-ENHANCED THREAT ANALYSIS ENDPOINTS
+# ============================================================================
+
+@router.post("/threats/groq-analyze")
+async def groq_analyze_threats():
+    """
+    Run Groq LLM analysis on the current threat landscape.
+    Analyzes recent alerts + events and returns AI risk assessment.
+    """
+    try:
+        from agents.groq_advisor import analyze_threat
+
+        # Get active fraud monitor
+        monitor = simulation_runner.fraud_monitor if simulation_runner.status == "running" else _fraud_monitor
+        recent_events = monitor.events[-20:] if monitor.events else []
+        recent_alerts = [a.to_dict() for a in monitor.alerts[-10:]] if monitor.alerts else []
+
+        pool_state = simulation_runner.pool.to_dict() if simulation_runner.pool else {}
+
+        # Combine alerts and events for Groq
+        combined = recent_alerts + recent_events
+        analysis = await analyze_threat(combined, pool_state)
+
+        return {"success": True, "data": analysis}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/threats/groq-deep-analysis")
+async def groq_deep_analysis():
+    """
+    Comprehensive Groq AI threat assessment — produces a detailed
+    threat report with risk breakdown, attack vector assessment, and
+    actionable recommendations for each active threat category.
+    """
+    try:
+        from agents.groq_advisor import _get_groq_key, _get_groq_model, GROQ_API_URL
+        import aiohttp
+        import json
+
+        groq_key = _get_groq_key()
+        if not groq_key:
+            return {"success": False, "error": "Groq API key not configured"}
+
+        monitor = simulation_runner.fraud_monitor if simulation_runner.status == "running" else _fraud_monitor
+        stats = monitor.get_stats()
+        scores = monitor.get_threat_scores()
+        recent_alerts = [a.to_dict() for a in monitor.alerts[-15:]]
+
+        user_msg = (
+            f"Analyze this DeFi security dashboard state and provide a comprehensive threat report.\n\n"
+            f"Alert Statistics:\n{json.dumps(stats, indent=2)}\n\n"
+            f"Threat Scores:\n{json.dumps(scores, indent=2)}\n\n"
+            f"Recent Alerts (last 15):\n{json.dumps(recent_alerts, indent=2)}\n\n"
+            f"Reply with valid JSON containing:\n"
+            f'{{"overall_risk": "low/medium/high/critical",\n'
+            f'"risk_score": 0-100,\n'
+            f'"executive_summary": "2-3 sentence overview",\n'
+            f'"active_threats": [{{"category": str, "risk": str, "description": str, "recommendation": str}}],\n'
+            f'"attack_vectors": ["list of potential attack vectors based on current pattern"],\n'
+            f'"recommended_actions": ["prioritized list of actions"]}}'
+        )
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": _get_groq_model(),
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a senior DeFi security analyst specialized in on-chain threat detection, "
+                                "MEV analysis, and smart contract vulnerability assessment. Provide thorough, "
+                                "actionable security reports in JSON format."
+                            ),
+                        },
+                        {"role": "user", "content": user_msg},
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 800,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as resp:
+                if resp.status != 200:
+                    return {"success": False, "error": f"Groq API returned {resp.status}"}
+                data = await resp.json()
+                content = data["choices"][0]["message"]["content"]
+                report = json.loads(content)
+                return {"success": True, "data": report}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/threats/notifications")
+async def get_threat_notifications():
+    """Get log of sent email notifications for threat alerts."""
+    try:
+        from email_service import get_sent_notifications
+        return {"success": True, "data": get_sent_notifications(50)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/threats/email-config")
+async def get_email_config():
+    """Get email notification configuration status."""
+    try:
+        from email_service import get_email_config_status
+        return {"success": True, "data": get_email_config_status()}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/threats/test-email")
+async def test_email_alert():
+    """Send a test threat alert email to all admins."""
+    try:
+        from email_service import send_threat_alert_email
+        test_alert = {
+            "type": "test_alert",
+            "severity": "HIGH",
+            "agent_id": "system_test",
+            "agent_type": "system",
+            "description": "This is a test alert from CashNet Threat Monitor. If you received this email, threat alert notifications are working correctly.",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
+        }
+        import time
+        success = await send_threat_alert_email(test_alert, None, force=True)
+        if success:
+            return {"success": True, "data": {"message": "Test email sent to all admins"}}
+        else:
+            return {"success": False, "error": "Email not sent. Check SMTP configuration in .env.local (SMTP_USER, SMTP_PASSWORD)"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/threats/unread-count")
+async def get_unread_threat_count():
+    """Get count of unresolved HIGH/CRITICAL alerts for notification badge."""
+    monitor = simulation_runner.fraud_monitor if simulation_runner.status == "running" else _fraud_monitor
+    unresolved_severe = [
+        a for a in monitor.alerts
+        if not a.resolved and a.severity in ("HIGH", "CRITICAL")
+    ]
+    return {
+        "success": True,
+        "data": {
+            "count": len(unresolved_severe),
+            "critical": sum(1 for a in unresolved_severe if a.severity == "CRITICAL"),
+            "high": sum(1 for a in unresolved_severe if a.severity == "HIGH"),
+        }
     }
 
 

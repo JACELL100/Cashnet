@@ -14,7 +14,7 @@ const auditorNav = [
   { href: '/auditor/credit', label: 'Credit Scores', icon: '✓' },
   { href: '/auditor/wallets', label: 'Wallet Profiles', icon: '⊙' },
   { href: '/auditor/reports', label: 'Reports', icon: '≈' },
-  { href: '/dashboard/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
+  { href: '/auditor/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
   { href: '/auditor/settings', label: 'Settings', icon: '⚙' },
 ];
 

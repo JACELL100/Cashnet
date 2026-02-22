@@ -368,7 +368,7 @@ export default function LandingPage() {
               { num: '01', title: 'Configure', icon: '⚙', desc: 'Set market parameters, agent strategies, and risk thresholds', color: '#00d4ff' },
               { num: '02', title: 'Simulate', icon: '≈', desc: 'Run real-time DeFi scenarios with live price feeds and agent behavior', color: '#b367ff' },
               { num: '03', title: 'Monitor', icon: '◎', desc: 'Track metrics across 7 specialized modules in real time', color: '#f0a500' },
-              { num: '04', title: 'Analyze', icon: '◆', desc: 'Review cryptographic audit trails and export risk reports', color: '#22c55e' },
+              { num: '04', title: 'Contract Analyze', icon: '◆', desc: 'Review cryptographic audit trails and export risk reports', color: '#22c55e' },
             ].map((step, idx) => (
               <div key={idx} className="relative flex flex-col items-center text-center group px-4">
                 {/* Connector line */}
