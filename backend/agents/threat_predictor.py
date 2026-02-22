@@ -414,22 +414,22 @@ class ThreatPredictionModel:
     # Training
     # ════════════════════════════════════════════════════════════════════════
 
-    def fit(self, n_samples: int = 5000) -> "ThreatPredictionModel":
+    def fit(self, n_samples: int = 2000) -> "ThreatPredictionModel":
         print("🔮 Training ThreatPredictionModel (12 sub-estimators)…")
         X = self._gen_training_data(n_samples)
 
-        # Train one binary classifier per threat type
+        # Train one RandomForest classifier per threat type (fast)
         for idx, threat_type in enumerate(THREAT_TYPES):
             print(f"  [{idx + 1}/12] {threat_type} classifier…")
             y = self._gen_threat_labels(X, idx)
             clf = Pipeline([
                 ("sc", StandardScaler()),
-                ("m", GradientBoostingClassifier(
-                    n_estimators=120,
-                    max_depth=5,
-                    learning_rate=0.08,
-                    subsample=0.8,
+                ("m", RandomForestClassifier(
+                    n_estimators=60,
+                    max_depth=6,
+                    class_weight="balanced",
                     random_state=42 + idx,
+                    n_jobs=-1,
                 )),
             ])
             clf.fit(X, y)
@@ -441,9 +441,9 @@ class ThreatPredictionModel:
         self._severity_regressor = Pipeline([
             ("sc", StandardScaler()),
             ("m", GradientBoostingRegressor(
-                n_estimators=150,
-                max_depth=5,
-                learning_rate=0.06,
+                n_estimators=60,
+                max_depth=4,
+                learning_rate=0.1,
                 subsample=0.8,
                 random_state=42,
             )),
@@ -456,9 +456,9 @@ class ThreatPredictionModel:
         self._trend_classifier = Pipeline([
             ("sc", StandardScaler()),
             ("m", MLPClassifier(
-                hidden_layer_sizes=(64, 32),
+                hidden_layer_sizes=(32, 16),
                 activation="relu",
-                max_iter=500,
+                max_iter=300,
                 early_stopping=True,
                 random_state=42,
             )),
@@ -635,7 +635,7 @@ class ThreatPredictionModel:
 
     @classmethod
     def load_or_train(
-        cls, path: str = MODEL_PATH, n_samples: int = 5000
+        cls, path: str = MODEL_PATH, n_samples: int = 2000
     ) -> "ThreatPredictionModel":
         if os.path.exists(path):
             try:
