@@ -35,7 +35,7 @@ export function useLendingActions() {
             abi: LENDING_POOL_ABI,
             functionName: 'depositCollateral',
             value: parseEther(ethAmount),
-            gas: 200000n, // Explicit gas limit
+            gas: BigInt(200000), // Explicit gas limit
         });
     };
 
@@ -48,7 +48,7 @@ export function useLendingActions() {
             abi: LENDING_POOL_ABI,
             functionName: 'borrow',
             args: [parseUnits(tokenAmount, 18)],
-            gas: 300000n, // Explicit gas limit to prevent "gas limit too high" error
+            gas: BigInt(300000), // Explicit gas limit to prevent "gas limit too high" error
         });
     };
 
@@ -61,7 +61,7 @@ export function useLendingActions() {
             abi: ERC20_ABI,
             functionName: 'approve',
             args: [LENDING_POOL_ADDRESS, parseUnits(tokenAmount, 18)],
-            gas: 100000n, // Explicit gas limit
+            gas: BigInt(100000), // Explicit gas limit
         });
     };
 
@@ -73,7 +73,7 @@ export function useLendingActions() {
             abi: LENDING_POOL_ABI,
             functionName: 'repay',
             args: [parseUnits(tokenAmount, 18)],
-            gas: 300000n, // Explicit gas limit
+            gas: BigInt(300000), // Explicit gas limit
         });
     };
 

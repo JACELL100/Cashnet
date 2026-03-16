@@ -36,9 +36,9 @@ def _get_groq_key() -> str:
 def _get_groq_model() -> str:
     try:
         from config import settings
-        return settings.groq_model or "llama-3.3-70b-versatile"
+        return settings.groq_model or "openrouter/auto"
     except Exception:
-        return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        return os.getenv("GROQ_MODEL", "openrouter/auto")
 
 
 def _get_coindesk_key() -> str:
@@ -49,7 +49,7 @@ def _get_coindesk_key() -> str:
         return os.getenv("COINDESK_API_KEY", "")
 
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Major crypto + stock index proxies
 CRYPTO_ASSETS = {

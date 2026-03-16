@@ -162,7 +162,7 @@ export default function AdminPage() {
   const activeAgents = agents.filter((a) => a.active);
   const totalPnl = agents.reduce((s, a) => s + (a.pnl ?? 0), 0);
   const unresolvedAlerts = activeAlerts.filter((a) => !a.resolved);
-  const criticalAlerts = unresolvedAlerts.filter((a) => a.severity === 'critical' || a.severity === 'high' || a.severity === 'CRITICAL' || a.severity === 'HIGH');
+  const criticalAlerts = unresolvedAlerts.filter((a) => a.severity === 'critical' || a.severity === 'high' || (a.severity as any) === 'CRITICAL' || (a.severity as any) === 'HIGH');
   const displayScores = threatScores;
 
   const tvl = lendingMetrics
@@ -338,7 +338,7 @@ export default function AdminPage() {
             <div className="mt-4 pt-3 border-t border-(--color-border)">
               {(() => {
                 const a = unresolvedAlerts[0];
-                const sc = a.severity === 'critical' || a.severity === 'CRITICAL' ? '#ff0033' : a.severity === 'high' || a.severity === 'HIGH' ? '#ff3860' : a.severity === 'medium' || a.severity === 'MEDIUM' ? '#f0a500' : '#22c55e';
+                const sc = a.severity === 'critical' || (a.severity as any) === 'CRITICAL' ? '#ff0033' : a.severity === 'high' || (a.severity as any) === 'HIGH' ? '#ff3860' : a.severity === 'medium' || (a.severity as any) === 'MEDIUM' ? '#f0a500' : '#22c55e';
                 return (
                   <div className="rounded border p-2.5 space-y-1" style={{ borderColor: sc, background: `${sc}0d` }}>
                     <div className="flex items-center gap-2">

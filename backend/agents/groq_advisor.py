@@ -1,7 +1,7 @@
 """
 Groq LLM Agent Advisor
 =======================
-Uses Groq's llama-3.3-70b-versatile model to provide AI-powered decision making
+Uses Groq/OpenRouter's openrouter/auto model to provide AI-powered decision making
 for simulation agents. Agents query this advisor to determine trade actions,
 attack strategies, and risk assessments based on real market data.
 
@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional
 import aiohttp
 
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 def _get_groq_keys() -> list[str]:
@@ -29,8 +29,7 @@ def _get_groq_keys() -> list[str]:
         ]
     except Exception:
         keys = [
-            os.getenv("GROQ_API_KEY", ""),
-            os.getenv("GROQ_API_KEY_2", ""),
+            os.getenv("OPENROUTER_API_KEY", "")
         ]
     return [k for k in keys if k]
 
@@ -44,9 +43,9 @@ def _get_groq_key() -> str:
 def _get_groq_model() -> str:
     try:
         from config import settings
-        return settings.groq_model or "llama-3.3-70b-versatile"
+        return settings.groq_model or "openrouter/auto"
     except Exception:
-        return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        return os.getenv("GROQ_MODEL", "openrouter/auto")
 
 # Minimum seconds between Groq calls per agent (rate-limit control)
 _ADVISOR_COOLDOWN = 30.0

@@ -71,7 +71,7 @@ def _build_html(alert_data: Dict[str, Any], groq_analysis: Optional[Dict[str, An
     if groq_analysis and groq_analysis.get("is_attack"):
         groq_section = f"""
         <div style="margin-top: 16px; padding: 12px; background: #1a1a2e; border-left: 3px solid #b367ff; border-radius: 4px;">
-            <div style="font-size: 11px; color: #b367ff; font-weight: bold; margin-bottom: 6px;">🤖 GROQ AI ANALYSIS (llama-3.3-70b-versatile)</div>
+            <div style="font-size: 11px; color: #b367ff; font-weight: bold; margin-bottom: 6px;">🤖 GROQ AI ANALYSIS (openrouter/auto)</div>
             <div style="font-size: 13px; color: #e0e0e0;">
                 <strong>Threat Type:</strong> {groq_analysis.get('threat_type', 'N/A')}<br/>
                 <strong>AI Severity:</strong> {groq_analysis.get('severity', 'N/A').upper()}<br/>

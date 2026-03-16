@@ -23,9 +23,8 @@ class Settings(BaseSettings):
     enable_blockchain_txs: bool = os.getenv("ENABLE_BLOCKCHAIN_TXS", "false").lower() == "true"
 
     # AI / LLM
-    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
-    groq_api_key_2: str = os.getenv("GROQ_API_KEY_2", "")
-    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    groq_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+    groq_model: str = os.getenv("GROQ_MODEL", "openrouter/auto")
 
     # Market Data
     coindesk_api_key: str = os.getenv("COINDESK_API_KEY", "")

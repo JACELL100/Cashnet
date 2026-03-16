@@ -330,7 +330,7 @@ class SimulationRunner:
                             "agent_type": "ai",
                             "agent_name": "Groq Market Analyst",
                             "event_type": "ai_narrative",
-                            "data": {"narrative": narrative, "model": "llama-3.3-70b-versatile"},
+                            "data": {"narrative": narrative, "model": "openrouter/auto"},
                             "timestamp": time.time(),
                         })
                 asyncio.create_task(_emit_narrative(market_ctx))
@@ -416,7 +416,7 @@ class SimulationRunner:
                             "agent_type": agent.agent_type.value,
                             "agent_name": agent.name,
                             "event_type": "ai_decision",
-                            "data": {"groq_advice": advice, "model": "llama-3.3-70b-versatile"},
+                            "data": {"groq_advice": advice, "model": "openrouter/auto"},
                             "timestamp": time.time(),
                         })
 
