@@ -37,11 +37,9 @@ const nextConfig = {
   // On Vercel this causes a doubled path bug (/vercel/path0/path0/...)
   ...(process.env.VERCEL ? {} : { outputFileTracingRoot: path.join(__dirname, '..') }),
   
-  // Optimize page loading
-  experimental: {
-    optimizeCss: true,
-  },
-  
+  // Keep dev compilation responsive; optimizeCss can stall page compilation
+  // on this project and trigger repeated request timeouts.
+
   // Turbopack configuration (Next.js 16+)
   turbopack: {
     // Empty config to silence Turbopack warning

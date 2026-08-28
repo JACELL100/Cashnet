@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
-    # Firebase service-account credentials may be provided as base64 text.
-    firebase_sa_b64: str = os.getenv("FIREBASE_SA_B64", "")
+    # Supabase Auth
+    supabase_url: str = os.getenv("SUPABASE_URL", "")
+    supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
+    supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
     # Market Data
     coindesk_api_key: str = os.getenv("COINDESK_API_KEY", "")

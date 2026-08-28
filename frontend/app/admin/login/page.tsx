@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 
@@ -19,16 +18,16 @@ export default function AdminLoginPage() {
     setLoading(true);
     setAccessDenied(false);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const idToken = await result.user.getIdToken();
-      const { role } = await loginWithGoogleCredential(idToken);
-      addToast({ message: `Welcome, ${role}`, severity: 'success' });
-      window.location.href = '/admin';
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/auth/callback?next=/admin` },
+      });
+      if (error) throw error;
     } catch (err: any) {
       setLoading(false);
       if (err?.code === 'access_denied') {
         setAccessDenied(true);
-      } else if (err?.code !== 'auth/popup-closed-by-user') {
+      } else {
         addToast({ message: err?.message ?? 'Authentication failed', severity: 'error' });
       }
     }

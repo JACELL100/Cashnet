@@ -16,4 +16,3 @@ eth-account
 aiohttp
 scikit-learn
 numpy
-firebase-admin

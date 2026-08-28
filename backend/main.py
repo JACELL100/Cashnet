@@ -117,21 +117,7 @@ async def startup_event():
         metadata={"port": settings.api_port, "env": "production"}
     )
     
-    # Pre-warm Firebase public-key certificate cache so first login is fast
-    try:
-        import urllib.request as _ureq
-        _ureq.urlopen(
-            "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
-            timeout=4,
-        )
-        print("✅ Firebase cert cache pre-warmed")
-        log_info(
-            LogCategoryEnum.AUTH,
-            "Firebase",
-            "Firebase certificate cache pre-warmed"
-        )
-    except Exception as _e:
-        print(f"⚠️  Firebase cert pre-warm skipped: {_e}")
+    print("✅ Supabase Auth configured")
 
     # Pre-load / train the combined ML risk model
     try:

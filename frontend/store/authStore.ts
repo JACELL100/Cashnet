@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { supabase } from '@/lib/supabase';
 
 export type UserRole = 'BORROWER' | 'LENDER' | 'ADMIN' | 'AUDITOR';
 
@@ -30,7 +31,7 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (role: UserRole) => Promise<void>;
   loginWithGoogleCredential: (credential: string) => Promise<{ role: UserRole }>;
-  refreshSession: (getFirebaseIdToken: () => Promise<string>) => Promise<boolean>;
+  refreshSession: () => Promise<boolean>;
   signup: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
   logout: () => void;
   setUser: (user: User | null) => void;
@@ -166,22 +167,51 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      refreshSession: async (getFirebaseIdToken: () => Promise<string>) => {
+      loginWithSupabaseSession: async (accessToken: string) => {
+        set({ loading: true, error: null });
         try {
-          const idToken = await getFirebaseIdToken();
-          const res = await fetch(`${API_BASE_URL}/auth/google`, {
+          const res = await fetch(`${API_BASE_URL}/auth/session`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ credential: idToken }),
+            body: JSON.stringify({ access_token: accessToken }),
           });
-          if (!res.ok) throw new Error('Refresh failed');
+          if (res.status === 403) {
+            const body = await res.json();
+            const err = new Error(body?.detail?.message ?? 'Access denied');
+            (err as any).code = 'access_denied';
+            throw err;
+          }
+          if (!res.ok) throw new Error('Authentication failed');
           const data = await res.json();
           const role = data.role as UserRole;
-          set((state) => ({
-            user: state.user ? { ...state.user, token: data.token } : null,
+          set({
+            user: {
+              id: data.uid,
+              email: data.email,
+              name: data.name,
+              role,
+              plan: role === 'ADMIN' ? 'enterprise' : 'starter',
+              createdAt: Date.now(),
+              avatar: data.picture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.email}`,
+              token: data.token,
+            },
             token: data.token,
-          }));
-          return true;
+            isAuthenticated: true,
+            loading: false,
+          });
+          return { role };
+        } catch (error) {
+          set({ loading: false });
+          throw error;
+        }
+      },
+
+      refreshSession: async () => {
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (!data.session) return false;
+          const refreshed = await useAuthStore.getState().loginWithSupabaseSession(data.session.access_token);
+          return Boolean(refreshed);
         } catch {
           return false;
         }
@@ -231,6 +261,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        void supabase.auth.signOut();
         set({ user: null, token: null, isAuthenticated: false, error: null });
       },
 

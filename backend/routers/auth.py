@@ -1,12 +1,10 @@
 ﻿from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-import firebase_admin
-from firebase_admin import auth as firebase_auth, credentials as fb_creds
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-import base64, json
+import httpx
 
 from database import get_db
 from models import AdminAuditor, AdminAuditorRoleEnum
@@ -18,34 +16,11 @@ import os
 # HTTP Bearer token scheme for protected endpoints
 security = HTTPBearer()
 
-if not firebase_admin._apps:
-    try:
-        sa_b64 = os.getenv("FIREBASE_SA_B64")
-        if sa_b64:
-            # Decode base64 service-account JSON from env var
-            sa_json = json.loads(base64.b64decode(sa_b64))
-            cred = fb_creds.Certificate(sa_json)
-            firebase_admin.initialize_app(cred)
-            print("✅ Firebase Admin SDK initialized from FIREBASE_SA_B64")
-        else:
-            cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            if cred_path and os.path.exists(cred_path):
-                cred = fb_creds.Certificate(cred_path)
-                firebase_admin.initialize_app(cred)             
-                print("✅ Firebase Admin SDK initialized from GOOGLE_APPLICATION_CREDENTIALS")
-            else:
-                cred = fb_creds.ApplicationDefault()
-                firebase_admin.initialize_app(cred)
-                print("✅ Firebase Admin SDK initialized from Application Default Credentials")
-    except Exception as e:
-        print(f"Warning: Firebase Admin SDK initialization failed: {e}")
-        print("Firebase token verification will not work until this is resolved.")
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-class GoogleTokenRequest(BaseModel):
-    credential: str          # Google ID token from frontend
+class SupabaseTokenRequest(BaseModel):
+    access_token: str
 
 class ProvisionRequest(BaseModel):
     secret: str              # Must match PROVISION_SECRET in env
@@ -75,25 +50,38 @@ def create_jwt(payload: dict, days: int = 7) -> str:
 
 # â”€â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-@router.post("/google", response_model=UserOut)
-def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
+@router.post("/session", response_model=UserOut)
+def supabase_login(body: SupabaseTokenRequest, db: Session = Depends(get_db)):
     """
-    Verify Google ID token. Lookup UID in adminandauditor table.
+    Validate a Supabase access token and look up the user in adminandauditor.
     - If found   â†’ return user + JWT
     - If missing â†’ 403 "Admin or Auditor access only"    
     Note: Users can have multiple roles (e.g., both ADMIN and AUDITOR).
     We return the highest privilege role (ADMIN > AUDITOR).    """
-    # 1. Verify Firebase ID token
+    # 1. Ask Supabase Auth to validate the access token.
     try:
-        decoded = firebase_auth.verify_id_token(body.credential)
+        if not settings.supabase_url or not settings.supabase_anon_key:
+            raise RuntimeError("SUPABASE_URL or SUPABASE_ANON_KEY is not configured")
+        response = httpx.get(
+            f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
+            headers={
+                "Authorization": f"Bearer {body.access_token}",
+                "apikey": settings.supabase_anon_key,
+            },
+            timeout=10,
+        )
+        if response.status_code != 200:
+            raise ValueError("Supabase access token was rejected")
+        decoded = response.json()
     except Exception as e:
-        log_error(LogCategoryEnum.AUTH, "Authentication", f"Invalid Firebase token: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid Firebase token: {e}")
+        log_error(LogCategoryEnum.AUTH, "Authentication", f"Invalid Supabase token: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Supabase access token")
 
-    uid: str = decoded["uid"]
+    uid: str = decoded["id"]
+    metadata = decoded.get("user_metadata") or {}
     email: str = decoded.get("email", "")
-    name: str = decoded.get("name", email)
-    picture: str = decoded.get("picture", "")
+    name: str = metadata.get("full_name") or metadata.get("name") or email
+    picture: str = metadata.get("avatar_url") or metadata.get("picture") or ""
 
     # 2. Check provisioned table — email is the canonical key; uid is back-filled on first login
     # Note: User may have multiple roles (ADMIN, AUDITOR), so get ALL records
@@ -128,7 +116,7 @@ def google_login(body: GoogleTokenRequest, db: Session = Depends(get_db)):
         "Authentication",
         f"User login successful - {email} ({primary_role})",
         user_id=email,
-        metadata={"uid": uid, "role": primary_role, "method": "Google SSO"}
+        metadata={"uid": uid, "role": primary_role, "method": "Supabase Google OAuth"}
     )
 
     # 4. Issue JWT

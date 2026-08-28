@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { ToastContainer } from '@/components/Toast';
 import LoadingHex from '@/components/LoadingHex';
@@ -73,14 +72,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       const thirtyMin = 30 * 60 * 1000;
       // Refresh if expired or expiring within 30 min
       if (!expiry || expiry - now < thirtyMin || forceIfExpired) {
-        const firebaseUser = auth.currentUser;
-        if (firebaseUser) {
-          const ok = await refreshSession(() => firebaseUser.getIdToken(true));
-          if (!ok) { logout(); router.push('/admin/login'); }
-        } else {
-          // Firebase session gone — wait briefly for onAuthStateChanged before kicking out
-          return;
-        }
+        const ok = await refreshSession();
+        if (!ok) { logout(); router.push('/admin/login'); }
       }
     };
 
