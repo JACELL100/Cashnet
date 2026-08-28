@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: cashnet-backend
+    runtime: docker
+    region: oregon
+    plan: free
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DEBUG
+        value: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SEPOLIA_RPC_URL
+        sync: false
+      - key: PRIVATE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PROVISION_SECRET
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

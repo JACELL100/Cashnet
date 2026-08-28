@@ -66,9 +66,10 @@ class Settings(BaseSettings):
     provision_secret: str = os.getenv("PROVISION_SECRET", "provision-secret-change-me")
 
     # API Settings
-    api_host: str = "0.0.0.0"
-    api_port: int = 8000
-    debug: bool = True
+    api_host: str = os.getenv("HOST", "0.0.0.0")
+    api_port: int = int(os.getenv("PORT", "8000"))
+    debug: bool = os.getenv("DEBUG", "true").lower() == "true"
+    cors_allowed_origins: str = os.getenv("CORS_ALLOWED_ORIGINS", "*")
     
     class Config:
         env_file = ".env.local"
