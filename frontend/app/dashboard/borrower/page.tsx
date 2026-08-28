@@ -150,7 +150,7 @@ export default function DashboardBorrowerPage() {
 
   useEffect(() => {
     fetchData();
-    pollRef.current = setInterval(fetchData, 5000); // Poll every 5 seconds
+    pollRef.current = setInterval(fetchData, 30000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [fetchData]);
 

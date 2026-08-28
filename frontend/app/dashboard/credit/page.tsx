@@ -64,7 +64,7 @@ export default function CreditPage() {
       }
 
       // Fetch credit history
-      const historyRes = await fetch(`${API_URL}/api/credit/history?wallet=${user.id}`);
+      const historyRes = await fetch(`${API_URL}/api/credit/scores/${user.id}/history`);
       if (historyRes.ok) {
         const data = await historyRes.json();
         setCreditHistory(data.data || data || []);
@@ -75,10 +75,12 @@ export default function CreditPage() {
   }, [user?.id]);
 
   useEffect(() => {
+    if (!user?.id) return;
+
     fetchCreditData();
-    const interval = setInterval(fetchCreditData, 10000);
+    const interval = setInterval(fetchCreditData, 30000);
     return () => clearInterval(interval);
-  }, [fetchCreditData]);
+  }, [fetchCreditData, user?.id]);
 
   const getCreditRating = (score: number) => {
     if (score >= 750) return { label: 'Excellent', color: 'success' as const };

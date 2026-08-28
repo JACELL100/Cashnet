@@ -60,7 +60,7 @@ export default function CreditPage() {
 
   useEffect(() => {
     fetchGlobalData();
-    const interval = setInterval(fetchGlobalData, 10000);
+    const interval = setInterval(fetchGlobalData, 30000);
     return () => clearInterval(interval);
   }, [fetchGlobalData]);
 

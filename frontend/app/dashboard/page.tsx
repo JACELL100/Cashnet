@@ -165,7 +165,7 @@ export default function DashboardPage() {
     const interval = setInterval(() => {
       fetchDashboardData();
       if (isRunning) fetchActivity();
-    }, 3000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [fetchDashboardData, fetchActivity, isRunning]);
 

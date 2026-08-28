@@ -13,9 +13,10 @@ from config import settings  # ensures .env.local is loaded via load_dotenv
 
 router = APIRouter(prefix="/api/contract", tags=["Contract Analyzer"])
 
-GROQ_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-GROQ_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-GROQ_MODEL = "openrouter/auto"
+GROQ_API_KEY = settings.groq_api_key
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = settings.groq_model
+MAX_COMPLETION_TOKENS = 4096
 
 
 class ContractAnalysisRequest(BaseModel):
@@ -113,10 +114,18 @@ async def call_groq(prompt: str) -> dict:
                     {"role": "user", "content": f"Analyze this smart contract:\n\n```solidity\n{prompt}\n```"},
                 ],
                 "temperature": 0.2,
-                "max_tokens": 8192,
+                "max_tokens": MAX_COMPLETION_TOKENS,
                 "response_format": {"type": "json_object"},
             },
         )
+        if response.status_code == 413:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Contract is too large for the configured AI analysis context. "
+                    "Please analyze a smaller contract or split it into focused sections."
+                ),
+            )
         if response.status_code != 200:
             raise HTTPException(
                 status_code=502,

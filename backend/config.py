@@ -6,9 +6,13 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
-# Load environment variables from .env.local in parent directory
-env_path = Path(__file__).parent.parent / ".env.local"
-load_dotenv(dotenv_path=env_path)
+# Load environment variables from the project root.
+# This project stores settings in .env, while older docs may reference .env.local.
+root_dir = Path(__file__).parent.parent
+for env_name in (".env", ".env.local"):
+    env_path = root_dir / env_name
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=False)
 
 
 class Settings(BaseSettings):
@@ -23,8 +27,11 @@ class Settings(BaseSettings):
     enable_blockchain_txs: bool = os.getenv("ENABLE_BLOCKCHAIN_TXS", "false").lower() == "true"
 
     # AI / LLM
-    groq_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
-    groq_model: str = os.getenv("GROQ_MODEL", "openrouter/auto")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+    # Firebase service-account credentials may be provided as base64 text.
+    firebase_sa_b64: str = os.getenv("FIREBASE_SA_B64", "")
 
     # Market Data
     coindesk_api_key: str = os.getenv("COINDESK_API_KEY", "")
