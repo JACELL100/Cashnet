@@ -33,7 +33,7 @@ export default function IdentityPage() {
 
   const fetchParticipants = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/participants`);
+      const res = await fetch(`${API_URL}/participants/`);
       if (res.ok) {
         const json = await res.json();
         // Assuming the backend returns { data: [...] } or an array directly
@@ -69,13 +69,13 @@ export default function IdentityPage() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/participants`, {
+      const res = await fetch(`${API_URL}/participants/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           wallet: formData.wallet,
           label: formData.label,
-          role: 'Trader',
+          role: 'BORROWER',
         }),
       });
 

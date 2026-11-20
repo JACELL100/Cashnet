@@ -336,7 +336,7 @@ export default function SimulationPage() {
   async function injectStresEvent(eventType: string) {
     setLoading(eventType);
     try {
-      await fetch(`${API_URL}/api/sim/stress`, {
+      await fetch(`${API_URL}/agents-sim/simulation/stress`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event_type: eventType, magnitude: 1.5 }),

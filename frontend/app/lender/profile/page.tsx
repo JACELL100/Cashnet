@@ -56,7 +56,7 @@ export default function ProfilePage() {
 
       // health factor
       try {
-        const hfRes = await fetch(`${API_URL}/api/lending/health-factor/${address}`);
+        const hfRes = await fetch(`${API_URL}/lending/health-factor/${address}`);
         if (hfRes.ok) {
           const hf = await hfRes.json();
           s.healthFactor = hf.health_factor ?? 999;
