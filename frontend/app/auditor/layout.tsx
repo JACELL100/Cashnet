@@ -12,6 +12,7 @@ const auditorNav = [
   { href: '/auditor/events', label: 'Event Log', icon: '◆' },
   { href: '/auditor/alerts', label: 'Fraud Alerts', icon: '⚠' },
   { href: '/auditor/credit', label: 'Credit Scores', icon: '✓' },
+  { href: '/auditor/market-intelligence', label: 'Markets', icon: '◈' },
   { href: '/auditor/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
 ];
 

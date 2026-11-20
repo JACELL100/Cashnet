@@ -26,8 +26,12 @@ const adminNav = [
   { href: '/admin/agents', label: 'Agents', icon: '◈' },
   { href: '/admin/threats', label: 'Threats', icon: '⚠' },
   { href: '/admin/credit', label: 'Credit', icon: '✓' },
+  { href: '/admin/liquidity', label: 'Liquidity', icon: '≋' },
+  { href: '/admin/stress', label: 'Stress Tests', icon: '⚡' },
+  { href: '/admin/testing', label: 'Pool Tests', icon: '⧉' },
+  { href: '/admin/blockchain', label: 'Blockchain', icon: '⛓' },
   { href: '/admin/audit', label: 'Audit Log', icon: '◆' },
-  { href: '/dashboard/market-intelligence', label: 'Markets', icon: '◈' },
+  { href: '/admin/market-intelligence', label: 'Markets', icon: '◈' },
   { href: '/admin/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙' },
 ];

@@ -10,11 +10,14 @@ import LoadingHex from '@/components/LoadingHex';
 const lenderNav = [
   { href: '/lender', label: 'Overview', icon: '⊡' },
   { href: '/lender/pool', label: 'Liquidity Pool', icon: '≈' },
+  { href: '/lender/lending', label: 'Lending', icon: '⇄' },
   { href: '/lender/loans', label: 'Loan Portfolio', icon: '⎇' },
   { href: '/lender/borrowers', label: 'Borrowers', icon: '⊙' },
   { href: '/lender/credit', label: 'Credit Scores', icon: '✓' },
   { href: '/lender/yield', label: 'Yield Analytics', icon: '◆' },
-  { href: '/lender/profile', label: 'Profile', icon: '⊕' },  { href: '/dashboard/market-intelligence', label: 'Markets', icon: '◈' },  { href: '/lender/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
+  { href: '/lender/market-intelligence', label: 'Markets', icon: '◈' },
+  { href: '/lender/contract-analyzer', label: 'SC Analyzer', icon: '⬡' },
+  { href: '/lender/profile', label: 'Profile', icon: '⊕' },
   { href: '/lender/settings', label: 'Settings', icon: '⚙' },
 ];
 

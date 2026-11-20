@@ -19,18 +19,14 @@ interface BorrowerPosition {
 // Define nav items with role access
 const allNavItems = [
   { href: '/dashboard', label: 'Overview', icon: '⊡', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
-  { href: '/dashboard/identity', label: 'Identity', icon: '⊙', roles: ['ADMIN', 'AUDITOR'] },
-  { href: '/dashboard/liquidity', label: 'Liquidity', icon: '≈', roles: ['ADMIN', 'LENDER'] },
-  { href: '/dashboard/lending', label: 'Lending', icon: '⎇', roles: ['ADMIN', 'LENDER'] },
-  { href: '/dashboard/borrower', label: 'Borrower', icon: '⟁', roles: ['ADMIN', 'BORROWER'] },
-  { href: '/dashboard/agents', label: 'Agents', icon: '◈', roles: ['ADMIN', 'AUDITOR'] },
-  { href: '/dashboard/threats', label: 'Threats', icon: '⚠', roles: ['ADMIN', 'AUDITOR'] },
-  { href: '/dashboard/credit', label: 'Credit', icon: '✓', roles: ['ADMIN', 'BORROWER', 'LENDER'] },
-  { href: '/dashboard/audit', label: 'Audit', icon: '◆', roles: ['ADMIN', 'AUDITOR'] },
+  { href: '/dashboard/borrower', label: 'Borrow', icon: '⟁', roles: ['ADMIN', 'BORROWER'] },
+  { href: '/dashboard/credit', label: 'Credit', icon: '✓', roles: ['ADMIN', 'BORROWER'] },
+  { href: '/dashboard/identity', label: 'Identity', icon: '⊙', roles: ['ADMIN'] },
   { href: '/dashboard/market-intelligence', label: 'Markets', icon: '◈', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
   { href: '/dashboard/contract-analyzer', label: 'SC Analyzer', icon: '⬡', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
   { href: '/dashboard/settings', label: 'Settings', icon: '⚙', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
   { href: '/dashboard/profile', label: 'Profile', icon: '⛯', roles: ['ADMIN', 'AUDITOR', 'LENDER', 'BORROWER'] },
+  { href: '/admin', label: '← Admin Portal', icon: '⏎', roles: ['ADMIN'] },
 ];
 
 const Sidebar: React.FC = () => {

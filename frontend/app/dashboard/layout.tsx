@@ -10,12 +10,11 @@ import LoadingHex from '@/components/LoadingHex';
 import { useAuthStore, UserRole } from '@/store/authStore';
 import { useSimulationStore } from '@/store/simulationStore';
 
-// Role-based default dashboard paths
-const roleDefaultPaths: Record<UserRole, string> = {
-  ADMIN: '/dashboard',
-  AUDITOR: '/dashboard/audit',
-  LENDER: '/dashboard/lending',
-  BORROWER: '/borrower',
+// /dashboard is the borrower portal (admins may view it too).
+// Lenders and auditors have their own portals.
+const rolePortalPaths: Partial<Record<UserRole, string>> = {
+  AUDITOR: '/auditor',
+  LENDER: '/lender',
 };
 
 export default function DashboardLayout({
@@ -45,7 +44,11 @@ export default function DashboardLayout({
     // Set the current user ID in simulation store for user-specific data
     setUserId(user.id);
 
-    // Auto-redirect removed to allow all users to access the main dashboard.
+    // Send lenders/auditors to their own portal
+    const portal = rolePortalPaths[user.role];
+    if (portal) {
+      router.replace(portal);
+    }
   }, [isAuthenticated, user, hasHydrated, router, setUserId, pathname]);
 
   if (!hasHydrated) {
@@ -56,8 +59,8 @@ export default function DashboardLayout({
     );
   }
 
-  // If hydrated but not authenticated, Next.js will handle the transition
-  if (!isAuthenticated || !user) {
+  // If hydrated but not authenticated (or being sent to another portal), show loader
+  if (!isAuthenticated || !user || rolePortalPaths[user.role]) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[color:var(--color-bg-primary)]">
         <LoadingHex />
