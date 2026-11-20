@@ -44,6 +44,16 @@ export default function LenderSupplyPanel() {
   const sharesVal = shares.data as bigint | undefined;
   const underlyingVal = underlying.data as bigint | undefined;
   const pldmVal = pldm.data as bigint | undefined;
+  const liqVal = liquidity.data as bigint | undefined;
+  // Withdrawals are paid from idle pool cash, so MAX is capped at the shares that cash can cover
+  const maxShares =
+    sharesVal !== undefined && underlyingVal !== undefined && liqVal !== undefined && underlyingVal > liqVal && underlyingVal > BigInt(0)
+      ? (sharesVal * liqVal) / underlyingVal
+      : sharesVal;
+  let overLiquidity = false;
+  try {
+    overLiquidity = !!withdrawShares && maxShares !== undefined && parseUnits(withdrawShares, 18) > maxShares;
+  } catch { /* invalid input */ }
 
   useEffect(() => {
     if (!isConfirmed) return;
@@ -124,7 +134,7 @@ export default function LenderSupplyPanel() {
               className="form-input flex-1 min-w-0 text-xs font-mono"
             />
             <button
-              onClick={() => sharesVal !== undefined && setWithdrawShares(formatUnits(sharesVal, 18))}
+              onClick={() => maxShares !== undefined && setWithdrawShares(formatUnits(maxShares, 18))}
               disabled={!sharesVal}
               className="btn ghost text-xs px-3"
             >MAX</button>
@@ -132,14 +142,17 @@ export default function LenderSupplyPanel() {
           <button
             onClick={() => {
               // Use the exact on-chain balance for MAX so no dust shares remain
-              const exact = sharesVal !== undefined && withdrawShares === formatUnits(sharesVal, 18);
-              withdraw(exact ? sharesVal! : withdrawShares);
+              const exact = maxShares !== undefined && withdrawShares === formatUnits(maxShares, 18);
+              withdraw(exact ? maxShares! : withdrawShares);
             }}
-            disabled={busy || !withdrawShares || parseFloat(withdrawShares) <= 0}
+            disabled={busy || !withdrawShares || parseFloat(withdrawShares) <= 0 || overLiquidity}
             className="btn outline w-full text-xs py-2"
           >
             {isSigning ? 'Signing…' : isConfirming ? 'Confirming…' : 'Withdraw'}
           </button>
+          {overLiquidity && (
+            <div className="text-xs font-mono text-warn">⚠ Not enough idle PLDM in the pool right now (borrowers hold the rest). Max withdrawable: {fmt(maxShares)} shares.</div>
+          )}
         </div>
       </div>
 

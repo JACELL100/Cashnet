@@ -52,7 +52,7 @@ export default function SignupPage() {
       const data = await loginWithWallet(address, signature, name.trim() || undefined, email.trim() || undefined, selectedRole as UserRole);
 
       useAuthStore.setState({
-        user: { id: data.uid, email: data.email ?? email ?? '', name: data.name ?? name ?? address, role: data.role as UserRole, plan: 'starter', createdAt: Date.now(), avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${address}`, token: data.token },
+        user: { id: data.uid, walletAddress: data.wallet_address, email: data.email ?? email ?? '', name: data.name ?? name ?? address, role: data.role as UserRole, plan: 'starter', createdAt: Date.now(), avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${address}`, token: data.token },
         token: data.token, isAuthenticated: true, loading: false,
       });
       addToast({ message: `Welcome to CashNet, ${data.name ?? name ?? 'anon'}!`, severity: 'success' });

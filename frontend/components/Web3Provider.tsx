@@ -6,6 +6,7 @@ import { WagmiProvider, createConfig, http } from 'wagmi';
 import { sepolia } from 'wagmi/chains';
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query';
 import { ReactNode, useState, useEffect } from 'react';
+import { NetworkGuard } from '@/components/NetworkGuard';
 import {
   injectedWallet,
   metaMaskWallet,
@@ -39,13 +40,19 @@ const connectors = connectorsForWallets(walletGroups, {
 // Configure wagmi (wagmi 2.x compatible)
 // ssr: true defers hydration state-updates to useEffect, preventing
 // "Cannot update a component while rendering a different component"
-// Configure wagmi — Sepolia only (all gas fees in Sepolia ETH)
+// Configure wagmi — Sepolia only (all gas fees in SepoliaETH)
+// Same chain id as wagmi's sepolia, but the native coin is labelled SepoliaETH (viem labels it "ETH").
+const sepoliaChain = {
+  ...sepolia,
+  nativeCurrency: { name: 'Sepolia Ether', symbol: 'SepoliaETH', decimals: 18 },
+} as const;
+
 const config = createConfig({
   ssr: true,
   connectors,
-  chains: [sepolia],
+  chains: [sepoliaChain],
   transports: {
-    [sepolia.id]: http(),
+    [sepoliaChain.id]: http(),
   },
 });
 
@@ -78,14 +85,17 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
-          initialChain={sepolia}
+          initialChain={sepoliaChain}
           theme={darkTheme({
             accentColor: '#10b981',
             accentColorForeground: 'white',
             borderRadius: 'medium',
           })}
         >
-          {mounted ? children : null}
+          {mounted ? (<>
+            <NetworkGuard />
+            {children}
+          </>) : null}
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

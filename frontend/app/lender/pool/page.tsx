@@ -2,6 +2,7 @@
 
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useAccount } from 'wagmi';
 import { usePoolActions } from '@/hooks/usePoolActions';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
@@ -91,7 +92,9 @@ const impactColor = (pct: number) =>
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function LiquidityPoolPage() {
-  const wallet = useAuthStore((s) => s.user?.walletAddress ?? '');
+  const storedWallet = useAuthStore((s) => s.user?.walletAddress ?? s.user?.id ?? '');
+  const { address: connectedWallet } = useAccount();
+  const wallet = connectedWallet ?? (storedWallet.startsWith('0x') ? storedWallet : '');
 
   const [pool, setPool] = useState<PoolState | null>(null);
   const [balances, setBalances] = useState<Balances | null>(null);
@@ -128,9 +131,9 @@ export default function LiquidityPoolPage() {
 
   // MetaMask pool actions
   const {
-    approveTokenA, approveTokenB, addLiquidity: addLiquidityOnChain,
-    removeLiquidity: removeLiquidityOnChain, approveSwapToken, swap: swapOnChain,
-    reset: resetTx, isConnected, isSigning, isConfirming, isConfirmed,
+    addLiquidity: addLiquidityOnChain,
+    removeLiquidity: removeLiquidityOnChain, swap: swapOnChain,
+    reset: resetTx, isConnected, isSigning, isApproving, isConfirming, isConfirmed,
     txHash: poolTxHash, error: poolTxError,
   } = usePoolActions();
 
@@ -215,16 +218,6 @@ export default function LiquidityPoolPage() {
     setAddResult(null);
   };
 
-  const handleApproveA = () => {
-    if (!addAmtA || parseFloat(addAmtA) <= 0) return;
-    approveTokenA(addAmtA);
-  };
-
-  const handleApproveB = () => {
-    if (!addAmtB || parseFloat(addAmtB) <= 0) return;
-    approveTokenB(addAmtB);
-  };
-
   // ── Remove Liquidity via MetaMask ───────────────────────────────────────
   const handleRemoveLiquidity = async () => {
     const shares = parseFloat(removeShares);
@@ -235,13 +228,6 @@ export default function LiquidityPoolPage() {
   };
 
   // ── Swap via MetaMask ─────────────────────────────────────────────────
-  const handleApproveSwap = () => {
-    const amt = parseFloat(swapAmount);
-    if (!amt || amt <= 0) return;
-    const tokenIn = swapDir === 'PAL_to_BAD' ? 'PAL' : 'BAD';
-    approveSwapToken(tokenIn as 'PAL' | 'BAD', swapAmount);
-  };
-
   const handleSwap = async () => {
     const amt = parseFloat(swapAmount);
     if (!amt || amt <= 0) return;
@@ -401,29 +387,13 @@ export default function LiquidityPoolPage() {
               {!isConnected && (
                 <p className="text-xs font-mono text-[#f0a500]">⚠ Connect wallet to transact</p>
               )}
-              <p className="text-xs font-mono text-text-tertiary">Step 1: Approve tokens → Step 2: Add Liquidity</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleApproveA}
-                  disabled={isSigning || !addAmtA}
-                  className="flex-1 py-2 font-mono text-xs rounded border border-[#00d4ff] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Approve PAL
-                </button>
-                <button
-                  onClick={handleApproveB}
-                  disabled={isSigning || !addAmtB}
-                  className="flex-1 py-2 font-mono text-xs rounded border border-[#22c55e] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Approve BAD
-                </button>
-              </div>
+              <p className="text-xs font-mono text-text-tertiary">Approvals are requested automatically, then liquidity is added (up to 3 wallet prompts)</p>
               <button
                 onClick={handleAddLiquidity}
                 disabled={isSigning || !addAmtA || !addAmtB}
                 className="w-full py-2.5 font-mono text-sm rounded border border-[#22c55e] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                {isSigning ? '⏳ MetaMask...' : '⊕ Add Liquidity'}
+                {isApproving ? '⏳ Approving…' : isSigning ? '⏳ MetaMask...' : '⊕ Add Liquidity'}
               </button>
               {addResult && (
                 <div className={`text-xs font-mono px-3 py-2 rounded border ${addResult.startsWith('✓')
@@ -515,21 +485,14 @@ export default function LiquidityPoolPage() {
               {!isConnected && (
                 <p className="text-xs font-mono text-[#f0a500]">⚠ Connect wallet to transact</p>
               )}
-              <p className="text-xs font-mono text-text-tertiary">Step 1: Approve token → Step 2: Swap (0.5% max slippage vs on-chain quote)</p>
+              <p className="text-xs font-mono text-text-tertiary">Approval is requested automatically if needed (0.5% max slippage vs on-chain quote)</p>
               <div className="flex gap-2">
-                <button
-                  onClick={handleApproveSwap}
-                  disabled={isSigning || !swapAmount}
-                  className="flex-1 py-2 font-mono text-xs rounded border border-[#f0a500] text-[#f0a500] hover:bg-[rgba(240,165,0,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Approve {inLabel}
-                </button>
                 <button
                   onClick={handleSwap}
                   disabled={isSigning || !swapAmount}
                   className="flex-1 py-2.5 font-mono text-sm rounded border border-[#00d4ff] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isSigning ? '⏳ MetaMask...' : `⇄ Swap ${inLabel} → ${outLabel}`}
+                  {isApproving ? '⏳ Approving…' : isSigning ? '⏳ MetaMask...' : `⇄ Swap ${inLabel} → ${outLabel}`}
                 </button>
               </div>
               {swapResult && (

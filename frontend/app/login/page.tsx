@@ -50,7 +50,7 @@ export default function LoginPage() {
       const data = await loginWithWallet(address, signature, undefined, undefined, selectedRole as UserRole);
 
       useAuthStore.setState({
-        user: { id: data.uid, email: data.email ?? '', name: data.name ?? address, role: data.role as UserRole, plan: 'starter', createdAt: Date.now(), avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${address}`, token: data.token },
+        user: { id: data.uid, walletAddress: data.wallet_address, email: data.email ?? '', name: data.name ?? address, role: data.role as UserRole, plan: 'starter', createdAt: Date.now(), avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${address}`, token: data.token },
         token: data.token, isAuthenticated: true, loading: false,
       });
       addToast({ message: `Signed in as ${roleConfig[selectedRole].label}`, severity: 'success' });

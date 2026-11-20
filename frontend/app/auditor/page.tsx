@@ -20,7 +20,7 @@ const alerts = [
 
 const events = [
   { step: 1201, time: '14:22:01', type: 'Loan Issued', actor: '0xabc1...ef23', desc: 'Borrowed $24,000 at 8.2% APR' },
-  { step: 1200, time: '14:21:44', type: 'Collateral Posted', actor: '0xdef4...gh56', desc: '1.8 ETH collateral deposited' },
+  { step: 1200, time: '14:21:44', type: 'Collateral Posted', actor: '0xdef4...gh56', desc: '1.8 SepoliaETH collateral deposited' },
   { step: 1199, time: '14:19:33', type: 'Repayment', actor: '0x789a...bc01', desc: 'Partial repayment $5,000 of $35,000' },
   { step: 1198, time: '14:15:02', type: 'Identity Verified', actor: '0x456d...ef78', desc: 'KYC passed via IdentityRegistry' },
   { step: 1197, time: '14:10:55', type: 'Liquidation', actor: '0x123g...hi90', desc: 'Position liquidated at HF 0.92' },

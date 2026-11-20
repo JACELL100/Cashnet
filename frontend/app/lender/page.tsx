@@ -4,7 +4,7 @@ import React, { useEffect, useCallback, useState } from 'react';
 import { useLendingStore } from '@/store/lendingStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 import { useReadContract } from 'wagmi';
-import { PALLADIUM_ADDRESS, BADASSIUM_ADDRESS, ERC20_ABI } from '@/lib/contracts';
+import { PALLADIUM_ADDRESS, BADASSIUM_ADDRESS, ERC20_ABI, LENDING_POOL_ADDRESS, LENDING_POOL_ABI } from '@/lib/contracts';
 import { formatUnits } from 'viem';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
@@ -31,7 +31,7 @@ export default function LenderPage() {
 
   // MetaMask contract actions
   const {
-    depositCollateral, borrow, approveRepay, repay, liquidate, reset,
+    liquidate, reset,
     isConnected, isSigning, isConfirming, isConfirmed, txHash, error,
   } = useLendingActions();
 
@@ -39,6 +39,7 @@ export default function LenderPage() {
   const [depositAmt, setDepositAmt] = useState('0.01');
   const [borrowAmt, setBorrowAmt] = useState('100');
   const [repayAmt, setRepayAmt] = useState('50');
+  const [supplyApr, setSupplyApr] = useState(0); // fraction, from /api/lending/metrics
 
   // Read user's on-chain token balances
   const { address } = useLendingActions();
@@ -100,6 +101,7 @@ export default function LenderPage() {
           borrowApr: m.borrow_apr ?? 0,
           totalSupplied: m.total_supplied ?? 0,
         });
+        setSupplyApr(m.supply_apr ?? 0);
       }
     } catch { /* retry on next tick */ }
   }, [setBorrowers, setMetrics]);
@@ -119,11 +121,16 @@ export default function LenderPage() {
     }
   }, [isConfirmed, fetchLendingData]);
 
-  // Derived KPIs
-  // In a real app, this would be scoped to the logged-in user.
-  // For now, we simulate "My Liquidity" as 15% of the total pool.
-  const myLiquidity = totalDeposits * 0.15;
-  const interestEarned = myLiquidity * borrowApr;
+  // Derived KPIs — the connected lender's real position in the LendingPool (cnPLDM shares → PLDM)
+  const { data: mySuppliedRaw } = useReadContract({
+    address: LENDING_POOL_ADDRESS,
+    abi: LENDING_POOL_ABI,
+    functionName: 'balanceOfUnderlying',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address, refetchInterval: 8000 },
+  });
+  const mySupplied = mySuppliedRaw ? Number(formatUnits(mySuppliedRaw as bigint, 18)) : 0;
+  const monthlyInterest = (mySupplied * supplyApr) / 12;
 
   const atRiskCount = borrowers.filter((b) => b.status === 'danger' || b.status === 'warning').length;
 
@@ -134,7 +141,8 @@ export default function LenderPage() {
     { label: 'My BADM Balance', value: `${badmBalance >= 1000 ? (badmBalance / 1000).toFixed(1) + 'K' : badmBalance.toFixed(1)}`, sub: isConnected ? 'Badassium tokens' : 'Connect wallet', color: '#f0a500' },
   ];
 
-  const availableLiquidity = totalDeposits - totalBorrows;
+  // total_collateral from /api/lending/metrics is already idle pool cash (supplied − borrowed)
+  const availableLiquidity = totalDeposits;
   const avgLoanSize = borrowers.length > 0 ? totalBorrows / borrowers.length : 0;
 
   const poolStats = [
@@ -220,41 +228,30 @@ export default function LenderPage() {
           </div>
         </div>
 
-        {/* Yield Chart placeholder */}
+        {/* My supply position (on-chain) */}
         <div className="lg:col-span-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg-secondary)] p-5">
-          <h2 className="text-sm font-mono font-bold text-text-primary mb-4">Interest Earned (30d Trend)</h2>
-          <div className="h-48 flex items-end gap-1.5">
-            {/* Generate some pseudo-random chart data that trends up and ends at the actual interestEarned */}
-            {Array.from({ length: 30 }).map((_, i) => {
-              const baseValue = Math.max(100, interestEarned * 0.4);
-              const progress = i / 29;
-              const trend = baseValue + (interestEarned - baseValue) * progress;
-              const noise = trend * 0.1 * (Math.sin(i * 1.5) + Math.cos(i * 2.3));
-              const value = Math.max(50, trend + noise);
-              // Ensure the last bar is exactly the current value
-              const finalVal = i === 29 ? interestEarned : value;
-              const maxChartVal = Math.max(interestEarned * 1.2, 500);
-
-              const pctHeight = Math.min(100, (finalVal / maxChartVal) * 100);
-
-              return (
-                <div
-                  key={i}
-                  className="flex-1 rounded-t transition-all duration-500 hover:opacity-80"
-                  style={{
-                    height: `${pctHeight}%`,
-                    background: i === 29 ? '#b367ff' : 'rgba(179,103,255,0.25)',
-                    minHeight: '4px'
-                  }}
-                />
-              )
-            })}
-          </div>
-          <div className="flex justify-between text-xs font-mono text-text-tertiary mt-2">
-            <span>30d ago</span>
-            <span className="text-[#22c55e] font-bold">+${interestEarned.toLocaleString(undefined, { maximumFractionDigits: 0 })} this month</span>
-            <span>today</span>
-          </div>
+          <h2 className="text-sm font-mono font-bold text-text-primary mb-4">My Supply Position</h2>
+          {!isConnected ? (
+            <p className="text-xs font-mono text-text-tertiary">Connect your wallet to see the PLDM you have supplied.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+              <div>
+                <div className="text-xs text-text-tertiary">Supplied (incl. interest)</div>
+                <div className="text-xl font-bold text-[#b367ff]">{mySupplied.toLocaleString(undefined, { maximumFractionDigits: 2 })} PLDM</div>
+              </div>
+              <div>
+                <div className="text-xs text-text-tertiary">Supply APR</div>
+                <div className="text-xl font-bold text-[#00d4ff]">{(supplyApr * 100).toFixed(2)}%</div>
+              </div>
+              <div>
+                <div className="text-xs text-text-tertiary">Est. interest / month</div>
+                <div className="text-xl font-bold text-[#22c55e]">+{monthlyInterest.toLocaleString(undefined, { maximumFractionDigits: 4 })} PLDM</div>
+              </div>
+            </div>
+          )}
+          <p className="text-[10px] font-mono text-text-tertiary mt-4">
+            Read live from LendingPool.balanceOfUnderlying. Supply APR rises as more of the pool is borrowed; it is 0% while nothing is borrowed.
+          </p>
         </div>
       </div>
 
@@ -309,7 +306,7 @@ export default function LenderPage() {
                     </span>
                   </td>
                   <td className="py-3">
-                    {(l.status === 'danger' || l.status === 'warning') && (
+                    {l.status === 'danger' && (
                       <button
                         onClick={() => liquidate(l.wallet)}
                         disabled={!isConnected || isSigning}

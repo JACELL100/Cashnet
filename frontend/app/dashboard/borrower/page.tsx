@@ -5,11 +5,14 @@ import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 import { useBalance } from 'wagmi';
+import { sepolia } from 'wagmi/chains';
 import { formatEther } from 'viem';
 import { BORROW_TOKEN_ADDRESS } from '@/lib/contracts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 const SEPOLIA = 'https://sepolia.etherscan.io';
+// Round down to 2 decimals so MAX never exceeds the on-chain limit or wallet balance
+const floor2 = (v: number) => (Math.floor(v * 100) / 100).toFixed(2);
 
 const hfColor = (h: number) =>
   h >= 1.5 ? '#22c55e' : h >= 1.2 ? '#f0a500' : '#ff3860';
@@ -20,11 +23,11 @@ const fmtUSD = (v: number) =>
     : `$${v.toFixed(2)}`;
 
 const fmtETH = (v: number) =>
-  v >= 1_000 ? `${(v / 1e3).toFixed(2)}K ETH`
-    : v >= 1 ? `${v.toFixed(4)} ETH`
-    : v >= 0.0001 ? `${v.toFixed(6)} ETH`
-    : v > 0 ? `${v.toExponential(2)} ETH`
-    : '0 ETH';
+  v >= 1_000 ? `${(v / 1e3).toFixed(2)}K SepoliaETH`
+    : v >= 1 ? `${v.toFixed(4)} SepoliaETH`
+    : v >= 0.0001 ? `${v.toFixed(6)} SepoliaETH`
+    : v > 0 ? `${v.toExponential(2)} SepoliaETH`
+    : '0 SepoliaETH';
 
 const fmtPLDM = (v: number) =>
   v >= 1_000_000 ? `${(v / 1e6).toFixed(2)}M PLDM`
@@ -70,13 +73,13 @@ export default function DashboardBorrowerPage() {
   const user = useAuthStore((s) => s.user);
 
   const {
-    depositCollateral, withdrawCollateral, borrow, approveRepay, repay, repayAll, address,
+    depositCollateral, withdrawCollateral, borrow, approveAndRepay, repayAll, address,
     isConnected, isSigning, isConfirming, isConfirmed, txHash, error, reset,
   } = useLendingActions();
 
   // Fetch wallet balances dynamically
-  const { data: ethBalance } = useBalance({ address });
-  const { data: pldmBalance } = useBalance({ address, token: BORROW_TOKEN_ADDRESS });
+  const { data: ethBalance } = useBalance({ address, chainId: sepolia.id });
+  const { data: pldmBalance } = useBalance({ address, token: BORROW_TOKEN_ADDRESS, chainId: sepolia.id });
 
   const [position, setPosition] = useState<Position | null>(null);
   const [creditScore, setCreditScore] = useState(0);
@@ -287,10 +290,10 @@ export default function DashboardBorrowerPage() {
           <div className="flex-1 space-y-1">
             <div className="text-sm font-bold text-text-primary">How Borrowing Works</div>
             <div className="text-xs text-text-tertiary leading-relaxed">
-              <span className="text-[#00d4ff] font-bold">1. Deposit ETH</span> as collateral → 
+              <span className="text-[#00d4ff] font-bold">1. Deposit SepoliaETH</span> as collateral → 
               <span className="text-[#b367ff] font-bold"> 2. Borrow PALLADIUM (PLDM)</span> tokens (up to your credit-based max LTV: 40-80% of collateral value) → 
               <span className="text-[#22c55e] font-bold"> 3. Repay PALLADIUM (PLDM)</span> to unlock collateral.
-              <span className="block mt-1 text-[#f0a500]">⚠️ Recommended: Start with small amounts like 0.1 ETH for testing.</span>
+              <span className="block mt-1 text-[#f0a500]">⚠️ Recommended: Start with small amounts like 0.1 SepoliaETH for testing.</span>
             </div>
           </div>
         </div>
@@ -432,13 +435,13 @@ export default function DashboardBorrowerPage() {
           <div className="flex-1">
             <div className="font-bold mb-1">Transaction Failed</div>
             <div className="text-xs opacity-90">
-              {error.message.includes('Credit score too low') && 'Your credit score is too low to borrow. Minimum 600 required.'}
+              {error.message.includes('Credit score too low') && 'Your credit score is too low to borrow. Minimum 400 required.'}
               {error.message.includes('Not verified borrower') && 'You need BORROWER role. Contact admin to get verified.'}
               {error.message.includes('Exceeds LTV limit') && 'This would put your debt above your collateral limit (max LTV).'}
               {error.message.includes('Stale price') && 'ETH price feed is stale. Try again shortly.'}
               {error.message.includes('Not enough liquidity') && 'Pool has insufficient liquidity for this borrow amount.'}
               {error.message.includes('System Paused') && 'System is currently paused. Try again later.'}
-              {error.message.includes('gas limit') && 'Transaction may revert. Check: 1) Credit score ≥ 600, 2) Sufficient collateral deposited, 3) BORROWER role assigned'}
+              {error.message.includes('gas limit') && 'Transaction may revert. Check: 1) Credit score ≥ 400, 2) Sufficient collateral deposited, 3) Pool has enough PLDM liquidity'}
               {!error.message.includes('Credit score') && 
                !error.message.includes('Not verified') && 
                !error.message.includes('Exceeds LTV') &&
@@ -509,13 +512,13 @@ export default function DashboardBorrowerPage() {
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-[#00d4ff] uppercase tracking-wider">Deposit Collateral</div>
                 <div className="text-xs text-text-tertiary">
-                  {availableETH > 0 ? `${availableETH.toFixed(4)} ETH` : 'Loading...'}
+                  {availableETH > 0 ? `${availableETH.toFixed(4)} SepoliaETH` : 'Loading...'}
                 </div>
               </div>
               <div className="flex gap-2">
                 <input
                   type="number"
-                  placeholder="ETH amount"
+                  placeholder="SepoliaETH amount"
                   value={depositAmt}
                   onChange={(e) => setDepositAmt(e.target.value)}
                   className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#00d4ff] transition-colors"
@@ -532,14 +535,14 @@ export default function DashboardBorrowerPage() {
                 <div className="text-xs text-[#ff3860]">⚠ Insufficient balance</div>
               )}
               {parseFloat(depositAmt) > availableETH - 0.01 && parseFloat(depositAmt) <= availableETH && (
-                <div className="text-xs text-[#f0a500]">⚠ Leave ETH for gas fees</div>
+                <div className="text-xs text-[#f0a500]">⚠ Leave some SepoliaETH for gas fees</div>
               )}
               <button
                 onClick={() => {
                   const amt = parseFloat(depositAmt);
                   if (!depositAmt || amt <= 0) return alert('Enter a valid amount');
-                  if (amt > availableETH) return alert(`Insufficient ETH. Available: ${availableETH.toFixed(4)} ETH`);
-                  if (amt > availableETH - 0.01) return alert('Leave some ETH for gas fees (min 0.01 ETH)');
+                  if (amt > availableETH) return alert(`Insufficient SepoliaETH. Available: ${availableETH.toFixed(4)} SepoliaETH`);
+                  if (amt > availableETH - 0.01) return alert('Leave some SepoliaETH for gas fees (min 0.01)');
                   depositCollateral(depositAmt);
                 }}
                 disabled={!isConnected || isSigning || isConfirming || !depositAmt || parseFloat(depositAmt) <= 0 || parseFloat(depositAmt) > availableETH}
@@ -552,12 +555,12 @@ export default function DashboardBorrowerPage() {
               <div className="pt-3 border-t border-[color:var(--color-border)] space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-bold text-[#00d4ff] uppercase tracking-wider">Withdraw Collateral</div>
-                  <div className="text-xs text-text-tertiary">Max: {maxWithdrawable.toFixed(4)} ETH</div>
+                  <div className="text-xs text-text-tertiary">Max: {maxWithdrawable.toFixed(4)} SepoliaETH</div>
                 </div>
                 <div className="flex gap-2">
                   <input
                     type="number"
-                    placeholder="ETH amount"
+                    placeholder="SepoliaETH amount"
                     value={withdrawAmt}
                     onChange={(e) => setWithdrawAmt(e.target.value)}
                     className="flex-1 min-w-0 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#00d4ff] transition-colors"
@@ -573,7 +576,7 @@ export default function DashboardBorrowerPage() {
                     onClick={() => {
                       const amt = parseFloat(withdrawAmt);
                       if (!withdrawAmt || amt <= 0) return alert('Enter a valid amount');
-                      if (amt > collateralEth) return alert(`Only ${collateralEth.toFixed(4)} ETH deposited`);
+                      if (amt > collateralEth) return alert(`Only ${collateralEth.toFixed(4)} SepoliaETH deposited`);
                       withdrawCollateral(withdrawAmt);
                     }}
                     disabled={!isConnected || isSigning || isConfirming || !withdrawAmt || parseFloat(withdrawAmt) <= 0 || parseFloat(withdrawAmt) > collateralEth}
@@ -605,7 +608,7 @@ export default function DashboardBorrowerPage() {
                   className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#b367ff] transition-colors"
                 />
                 <button
-                  onClick={() => setBorrowAmt(maxBorrowable.toFixed(2))}
+                  onClick={() => setBorrowAmt(floor2(maxBorrowable))}
                   disabled={maxBorrowable <= 0}
                   className="px-3 py-2 rounded text-xs font-bold border border-[#b367ff55] text-[#b367ff] hover:bg-[rgba(179,103,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -661,7 +664,7 @@ export default function DashboardBorrowerPage() {
                   className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#22c55e] transition-colors"
                 />
                 <button
-                  onClick={() => setRepayAmt(Math.min(availablePLDM, position?.debt_value || 0).toFixed(2))}
+                  onClick={() => setRepayAmt(floor2(Math.min(availablePLDM, position?.debt_value || 0)))}
                   disabled={(position?.debt_value || 0) <= 0}
                   className="px-3 py-2 rounded text-xs font-bold border border-[#22c55e55] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -676,7 +679,7 @@ export default function DashboardBorrowerPage() {
               )}
               {(position?.debt_value || 0) > 0 && (
                 <div className="text-xs text-[#00d4ff] bg-[rgba(0,212,255,0.05)] border border-[#00d4ff33] rounded p-2">
-                  ℹ️ <span className="font-bold">Two steps:</span> (1) Click "Approve" to allow LendingPool to spend PLDM → (2) Click "Repay". Use "Repay all" to clear the full debt incl. accrued interest.
+                  ℹ️ Repay asks your wallet to approve PLDM first (if needed), then sends the repayment. Use "Repay all" to clear the full debt incl. accrued interest.
                 </div>
               )}
               <div className="flex gap-2">
@@ -685,20 +688,8 @@ export default function DashboardBorrowerPage() {
                     const amt = parseFloat(repayAmt);
                     if (!repayAmt || amt <= 0) return alert('Enter a valid amount');
                     if (amt > availablePLDM) return alert(`Insufficient PLDM. Available: ${availablePLDM.toFixed(2)} PLDM`);
-                    approveRepay(repayAmt);
-                  }}
-                  disabled={!isConnected || isSigning || isConfirming || !repayAmt || parseFloat(repayAmt) <= 0 || parseFloat(repayAmt) > availablePLDM}
-                  className="flex-1 py-2 rounded text-xs font-bold border border-[#22c55e] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isSigning ? 'Signing…' : 'Approve'}
-                </button>
-                <button
-                  onClick={() => {
-                    const amt = parseFloat(repayAmt);
-                    if (!repayAmt || amt <= 0) return alert('Enter a valid amount');
-                    if (amt > availablePLDM) return alert(`Insufficient PLDM. Available: ${availablePLDM.toFixed(2)} PLDM`);
                     if (amt > (position?.debt_value || 0)) return alert(`Cannot repay more than debt: ${position?.debt_value.toFixed(2)} PLDM`);
-                    repay(repayAmt);
+                    approveAndRepay(repayAmt);
                   }}
                   disabled={!isConnected || isSigning || isConfirming || !repayAmt || parseFloat(repayAmt) <= 0 || parseFloat(repayAmt) > availablePLDM}
                   className="flex-1 py-2 rounded text-xs font-bold bg-[#22c55e] text-[color:var(--color-bg-primary)] hover:bg-[#16a34a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

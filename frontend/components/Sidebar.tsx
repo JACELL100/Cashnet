@@ -74,10 +74,10 @@ const Sidebar: React.FC = () => {
   }, [fetchPosition]);
 
   const fmtETH = (v: number) =>
-    v >= 1 ? `${v.toFixed(4)} ETH`
-      : v >= 0.0001 ? `${v.toFixed(6)} ETH`
-      : v > 0 ? `${v.toExponential(2)} ETH`
-      : '0 ETH';
+    v >= 1 ? `${v.toFixed(4)} SepoliaETH`
+      : v >= 0.0001 ? `${v.toFixed(6)} SepoliaETH`
+      : v > 0 ? `${v.toExponential(2)} SepoliaETH`
+      : '0 SepoliaETH';
 
   const hfColor = (h: number) =>
     h >= 1.5 ? '#22c55e' : h >= 1.2 ? '#f0a500' : '#ff3860';

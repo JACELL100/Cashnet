@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useAccount } from 'wagmi';
 import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 
@@ -68,7 +69,9 @@ interface RateTier {
 // PAGE
 // ═══════════════════════════════════════════════════════════════════════════
 export default function LoanPortfolioPage() {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress ?? '');
+  const storedWallet = useAuthStore((s) => s.user?.walletAddress ?? s.user?.id ?? '');
+  const { address: connectedWallet } = useAccount();
+  const walletAddress: string = connectedWallet ?? (storedWallet.startsWith('0x') ? storedWallet : '');
 
   // Zustand store
   const borrowers      = useLendingStore((s) => s.borrowers);
@@ -120,11 +123,12 @@ export default function LoanPortfolioPage() {
             liquidationPrice: (b.liquidation_price as number) ?? 0,
             creditScore:      (b.credit_score as number) ?? 0,
             status:
-              ((b.health_factor as number) ?? 0) >= 1.5
-                ? 'healthy'
-                : ((b.health_factor as number) ?? 0) >= 1.2
-                  ? 'warning'
-                  : 'danger',
+              // "danger" only when the contract says the position is liquidatable (health factor < 1)
+              b.at_risk
+                ? 'danger'
+                : ((b.health_factor as number) ?? 0) >= 1.5
+                  ? 'healthy'
+                  : 'warning',
           }),
         );
         setBorrowers(rows);
@@ -176,7 +180,8 @@ export default function LoanPortfolioPage() {
   }, [isConfirmed, fetchAll]);
 
   // ── Derived ─────────────────────────────────────────────────────────────
-  const availableLiquidity = totalDeposits - totalBorrows;
+  // total_collateral from /api/lending/metrics is already idle pool cash (supplied − borrowed)
+  const availableLiquidity = totalDeposits;
   const avgHF = borrowers.length
     ? borrowers.reduce((s, b) => s + b.healthFactor, 0) / borrowers.length
     : 0;

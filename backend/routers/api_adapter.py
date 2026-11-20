@@ -220,20 +220,32 @@ async def get_borrowers(db: Session = Depends(get_db)):
     from blockchain_service import blockchain_service
     
     try:
-        # Get all active borrowers from database
+        from models import ChainEvent
+
+        # Registered borrowers plus any wallet that deposited/borrowed on-chain without logging in
         borrowers = db.query(Borrower).filter(Borrower.is_active == 1).all()
-        
-        if not borrowers:
-            return {
-                "success": True,
-                "data": []
-            }
-        
+        by_wallet = {b.wallet_address.lower(): b for b in borrowers if b.wallet_address}
+        wallets = [b.wallet_address for b in borrowers if b.wallet_address]
+        try:
+            chain_wallets = (
+                db.query(ChainEvent.wallet)
+                .filter(ChainEvent.contract == "LendingPool",
+                        ChainEvent.event.in_(["CollateralDeposited", "Borrowed"]),
+                        ChainEvent.wallet.isnot(None))
+                .distinct().all()
+            )
+            for (w,) in chain_wallets:
+                if w and w.lower() not in by_wallet:
+                    by_wallet[w.lower()] = None
+                    wallets.append(w)
+        except Exception as e:
+            print(f"Could not read indexed chain events for borrowers: {e}")
+
         result = []
-        for borrower in borrowers:
+        for idx, wallet in enumerate(wallets):
+            borrower = by_wallet.get(wallet.lower())
             try:
                 # Fetch on-chain data for each borrower
-                wallet = borrower.wallet_address
                 
                 # LendingPool v2 position (Chainlink-priced collateral, index-accrued debt)
                 pos = blockchain_service.get_account_position(wallet)
@@ -245,22 +257,22 @@ async def get_borrowers(db: Session = Depends(get_db)):
                 # Only include borrowers with collateral or debt
                 if collateral_eth > 0 or debt_tokens > 0:
                     result.append({
-                        "id": str(borrower.id),
+                        "id": str(borrower.id) if borrower else f"chain-{idx}",
                         "wallet": wallet,
-                        "collateral_value": round(collateral_eth, 6),  # ETH
+                        "collateral_value": round(collateral_eth, 6),  # SepoliaETH
                         "collateral_usd": round(pos["collateral_usd"], 2),
                         "debt_value": round(debt_tokens, 6),  # PLDM
                         "health_factor": round(health_factor, 4),
                         "max_ltv": pos["max_ltv"],
                         "at_risk": at_risk,
-                        "credit_score": borrower.credit_score or 500,
-                        "name": borrower.name,
-                        "email": borrower.email,
-                        "last_login": borrower.last_login.isoformat() if borrower.last_login else None,
+                        "credit_score": (borrower.credit_score if borrower else None) or 500,
+                        "name": borrower.name if borrower else None,
+                        "email": borrower.email if borrower else None,
+                        "last_login": borrower.last_login.isoformat() if borrower and borrower.last_login else None,
                     })
             except Exception as e:
                 # If blockchain call fails for a borrower, skip them
-                print(f"Error fetching data for borrower {borrower.wallet_address}: {e}")
+                print(f"Error fetching data for borrower {wallet}: {e}")
                 continue
         
         return {

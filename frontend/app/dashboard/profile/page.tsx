@@ -287,7 +287,7 @@ export default function DashboardProfilePage() {
                   )}
                 </div>
                 <div className="text-xl font-bold font-mono" style={{ color: '#22c55e' }}>
-                  {stats ? `${stats.collateralETH.toFixed(4)} ETH` : '—'}
+                  {stats ? `${stats.collateralETH.toFixed(4)} SepoliaETH` : '—'}
                 </div>
                 {stats && stats.collateralETH > 0 && (
                   <div className="text-[10px] text-text-tertiary mt-0.5">

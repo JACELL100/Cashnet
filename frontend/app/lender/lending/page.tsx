@@ -81,23 +81,29 @@ export default function LendingPage() {
     return () => clearInterval(interval);
   }, [fetchLendingData]);
 
-  const { liquidate, isConnected, isSigning } = useLendingActions();
+  const { liquidate, isConnected, isSigning, isConfirming, isConfirmed, txHash, error: txError, reset: resetTx } = useLendingActions();
   // Per-borrower PLDM repay amount for liquidation (blank = 50% of current debt, the max close factor)
   const [liqAmounts, setLiqAmounts] = useState<Record<string, string>>({});
+  const [liqTarget, setLiqTarget] = useState<string | null>(null);
 
   const handleLiquidate = async (wallet: string) => {
     if (!isConnected) return alert('Connect your wallet first');
-    liquidate(wallet, liqAmounts[wallet]);
-    addCascadeEvent({
-      timestamp: Date.now(),
-      borrower: wallet,
-      event: 'Liquidation triggered via MetaMask',
-    });
-    addToast({
-      message: 'Liquidation transaction sent to MetaMask',
-      severity: 'warning',
-    });
+    resetTx();
+    const hash = await liquidate(wallet, liqAmounts[wallet]);
+    if (!hash) return; // rejected, healthy position, or failed before signing (error shown below)
+    setLiqTarget(wallet);
+    addToast({ message: 'Liquidation submitted — waiting for confirmation', severity: 'warning' });
   };
+
+  // Record the liquidation only once it is mined
+  useEffect(() => {
+    if (isConfirmed && liqTarget) {
+      addCascadeEvent({ timestamp: Date.now(), borrower: liqTarget, event: 'Liquidated on-chain' });
+      addToast({ message: 'Liquidation confirmed on Sepolia', severity: 'success' });
+      setLiqTarget(null);
+      fetchLendingData();
+    }
+  }, [isConfirmed, liqTarget, addCascadeEvent, addToast, fetchLendingData]);
 
   const handleCascadeTest = () => {
     setCascadeTriggered(true);
@@ -315,7 +321,7 @@ export default function LendingPage() {
                   <input
                     type="number" min="0"
                     placeholder={`${(row.borrowed / 2).toFixed(2)}`}
-                    title="PLDM to repay (default / max: 50% of debt). You receive ETH worth repay + 5%."
+                    title="PLDM to repay (default / max: 50% of debt). You receive SepoliaETH collateral worth repay + 5%."
                     value={liqAmounts[row.wallet] ?? ''}
                     onChange={(e) => setLiqAmounts((m) => ({ ...m, [row.wallet]: e.target.value }))}
                     className="form-input w-20 text-xs font-mono py-1 px-2"
@@ -337,6 +343,22 @@ export default function LendingPage() {
           data={sortedBorrowers}
         />
       </div>
+
+      {/* Liquidation tx status */}
+      {(isSigning || isConfirming || isConfirmed || txError) && (
+        <div className={`rounded-lg border px-4 py-3 text-xs font-mono flex items-center justify-between gap-3 ${txError ? 'border-[#ff386055] text-[#ff3860] bg-[#ff386010]' : isConfirmed ? 'border-[#22c55e55] text-[#22c55e] bg-[#22c55e10]' : 'border-[#00d4ff55] text-[#00d4ff] bg-[#00d4ff10]'}`}>
+          <span>
+            {txError ? `✗ ${(txError as Error).message.split(String.fromCharCode(10))[0].slice(0, 200)}`
+              : isSigning ? '⏳ Confirm in your wallet…'
+              : isConfirming ? '⏳ Waiting for Sepolia confirmation…'
+              : '✓ Liquidation confirmed'}
+            {txHash && (
+              <a href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="ml-2 underline">view tx</a>
+            )}
+          </span>
+          {(txError || isConfirmed) && <button onClick={() => resetTx()} className="opacity-70 hover:opacity-100">✕</button>}
+        </div>
+      )}
 
       {/* Cascade Flow */}
       <div className="card space-y-4">

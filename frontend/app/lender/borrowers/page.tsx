@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { useAccount } from 'wagmi';
 import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 
@@ -17,10 +18,10 @@ const fmt = (v: number, dec = 2) =>
 
 const fmtETH = (v: number) =>
   v >= 1_000
-    ? `${(v / 1e3).toFixed(2)}K ETH`
+    ? `${(v / 1e3).toFixed(2)}K SepoliaETH`
     : v >= 1
-      ? `${v.toFixed(4)} ETH`
-      : `${v.toFixed(6)} ETH`;
+      ? `${v.toFixed(4)} SepoliaETH`
+      : `${v.toFixed(6)} SepoliaETH`;
 
 const shortAddr = (addr: string) =>
   addr ? `${addr.slice(0, 6)}…${addr.slice(-4)}` : '—';
@@ -36,7 +37,9 @@ interface LookupResult {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function BorrowersPage() {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress ?? '');
+  const storedWallet = useAuthStore((s) => s.user?.walletAddress ?? s.user?.id ?? '');
+  const { address: connectedWallet } = useAccount();
+  const walletAddress: string = connectedWallet ?? (storedWallet.startsWith('0x') ? storedWallet : '');
 
   const borrowers = useLendingStore((s) => s.borrowers);
   const totalBorrows = useLendingStore((s) => s.totalBorrows);
@@ -44,7 +47,7 @@ export default function BorrowersPage() {
   const setMetrics = useLendingStore((s) => s.setMetrics);
 
   const {
-    depositCollateral, borrow, approveRepay, repay, liquidate, reset,
+    depositCollateral, borrow, approveAndRepay, liquidate, reset,
     isConnected, isSigning, isConfirming, isConfirmed, txHash, error,
   } = useLendingActions();
 
@@ -98,11 +101,12 @@ export default function BorrowersPage() {
             liquidationPrice: b.liquidation_price ?? 0,
             creditScore: b.credit_score ?? 0,
             status:
-              (b.health_factor ?? 0) >= 1.5
-                ? 'healthy'
-                : (b.health_factor ?? 0) >= 1.2
-                  ? 'warning'
-                  : 'danger',
+              // "danger" only when the contract says the position is liquidatable (health factor < 1)
+              b.at_risk
+                ? 'danger'
+                : (b.health_factor ?? 0) >= 1.5
+                  ? 'healthy'
+                  : 'warning',
           })
         );
         setBorrowers(rows);
@@ -395,7 +399,7 @@ export default function BorrowersPage() {
                 {/* Deposit Collateral */}
                 <div className="mb-3">
                   <label className="text-xs mb-1 block" style={{ color: 'var(--color-text-secondary)' }}>
-                    Deposit Collateral (ETH)
+                    Deposit Collateral (SepoliaETH)
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -449,7 +453,7 @@ export default function BorrowersPage() {
                 {/* Repay */}
                 <div>
                   <label className="text-xs mb-1 block" style={{ color: 'var(--color-text-secondary)' }}>
-                    Repay PAL Tokens (2-step)
+                    Repay PLDM
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -463,15 +467,7 @@ export default function BorrowersPage() {
                       style={{ borderColor: 'var(--color-border)' }}
                     />
                     <button
-                      onClick={() => approveRepay(repayAmt)}
-                      disabled={!repayAmt || isSigning || isConfirming}
-                      className="text-xs px-3 py-1.5 rounded font-bold disabled:opacity-40"
-                      style={{ background: '#f0a500', color: '#000' }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => repay(repayAmt)}
+                      onClick={() => approveAndRepay(repayAmt)}
                       disabled={!repayAmt || isSigning || isConfirming}
                       className="text-xs px-3 py-1.5 rounded font-bold disabled:opacity-40"
                       style={{ background: '#b367ff', color: '#000' }}
@@ -480,7 +476,7 @@ export default function BorrowersPage() {
                     </button>
                   </div>
                   <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                    Step 1: Approve token spend → Step 2: Repay
+                    Your wallet asks to approve PLDM first (if needed), then sends the repayment.
                   </p>
                 </div>
               </>
@@ -743,7 +739,7 @@ function filteredSummary(rows: BorrowerPosition[]) {
   const totalBorrowed = rows.reduce((s, b) => s + b.borrowed, 0);
   const dangerCount = rows.filter((b) => b.status === 'danger').length;
   const fmtETH = (v: number) =>
-    v >= 1_000 ? `${(v / 1e3).toFixed(2)}K ETH` : v >= 1 ? `${v.toFixed(4)} ETH` : `${v.toFixed(6)} ETH`;
+    v >= 1_000 ? `${(v / 1e3).toFixed(2)}K SepoliaETH` : v >= 1 ? `${v.toFixed(4)} SepoliaETH` : `${v.toFixed(6)} SepoliaETH`;
 
   return (
     <div
