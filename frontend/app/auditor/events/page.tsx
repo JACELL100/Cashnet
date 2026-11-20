@@ -44,7 +44,7 @@ export default function EventLogPage() {
   // Fetch simulation activity feed
   const fetchActivityFeed = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com'}/api/sim/activity-feed?limit=100`;
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com'}/api/sim/activity-feed?limit=100`;
       const response = await fetch(url);
       
       if (response.ok) {
@@ -92,7 +92,7 @@ export default function EventLogPage() {
   // Fetch fraud alerts
   const fetchAlerts = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com'}/api/threats/alerts`;
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com'}/api/threats/alerts`;
       const response = await fetch(url);
       
       if (response.ok) {
@@ -117,7 +117,7 @@ export default function EventLogPage() {
   // Fetch system logs from backend
   const fetchSystemLogs = async () => {
     try {
-      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com'}/api/logs/?limit=200`;
+      const url = `${process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com'}/api/logs/?limit=200`;
       console.log('Fetching logs from:', url);
       const response = await fetch(url);
       console.log('Response status:', response.status);

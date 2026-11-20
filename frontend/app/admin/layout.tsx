@@ -45,7 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Poll threat unread count
   useEffect(() => {
-    const API = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+    const API = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
     const poll = async () => {
       try {
         const res = await fetch(`${API}/api/threats/unread-count`);

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/authStore';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 interface SystemStatus {
   connected: boolean;

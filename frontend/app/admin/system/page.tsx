@@ -6,7 +6,7 @@ import { useSystemControl } from '@/hooks/useSystemControl';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 export default function SystemControlPage() {
   const router = useRouter();

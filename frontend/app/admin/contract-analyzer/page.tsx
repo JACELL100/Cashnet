@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 
 const ContractFlowDiagram = dynamic(() => import('@/components/ContractFlowDiagram'), { ssr: false });
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Vulnerability {

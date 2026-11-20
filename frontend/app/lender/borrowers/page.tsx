@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 const SEPOLIA = 'https://sepolia.etherscan.io';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

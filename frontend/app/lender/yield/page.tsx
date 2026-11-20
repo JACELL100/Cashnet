@@ -2,7 +2,7 @@
 
 import React, { useEffect, useCallback, useState, useRef } from 'react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface PoolState {

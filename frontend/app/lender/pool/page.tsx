@@ -4,7 +4,7 @@ import React, { useEffect, useCallback, useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { usePoolActions } from '@/hooks/usePoolActions';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 const SEPOLIA = 'https://sepolia.etherscan.io';
 
 // ── Types ──────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 export interface ApiResponse<T> {
   success: boolean;

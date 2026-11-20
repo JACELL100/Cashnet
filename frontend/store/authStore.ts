@@ -17,7 +17,7 @@ export interface User {
 }
 
 // Use deployed backend by default, can override with env var
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 interface AuthState {
   user: User | null;

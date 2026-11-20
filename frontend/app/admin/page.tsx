@@ -6,7 +6,7 @@ import { useAgentStore } from '@/store/agentStore';
 import { useThreatStore } from '@/store/threatStore';
 import { useAuthStore } from '@/store/authStore';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cash-net.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
 // Real deployed contract addresses (Sepolia)
 const CONTRACTS = [
