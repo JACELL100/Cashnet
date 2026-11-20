@@ -85,81 +85,6 @@ _ohlc_cache: Dict[str, List[Dict]] = {}
 # CoinDesk live price fetcher
 # ---------------------------------------------------------------------------
 
-async def _fetch_coindesk_prices() -> Dict[str, Dict]:
-    """Fetch live crypto prices from CoinDesk Data API."""
-    api_key = _get_coindesk_key()
-    prices: Dict[str, Dict] = {}
-
-    try:
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        async with aiohttp.ClientSession(headers=headers) as session:
-            # Batch fetch: CoinDesk tick endpoint
-            instruments = ",".join(f"{s}-USD" for s in CRYPTO_ASSETS)
-            url = "https://data-api.coindesk.com/index/cc/v1/latest/tick"
-            params = {"market": "cadli", "instruments": instruments}
-
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    for tick in data.get("Data", []):
-                        instr = tick.get("INSTRUMENT", "")
-                        symbol = instr.replace("-USD", "")
-                        if symbol in CRYPTO_ASSETS:
-                            prices[symbol] = {
-                                "price": tick.get("VALUE", 0),
-                                "change_24h": tick.get("CHANGE_24H", 0),
-                                "change_pct": tick.get("CHANGE_PCT_24H", 0),
-                                "high_24h": tick.get("HIGH_24H", tick.get("VALUE", 0) * 1.02),
-                                "low_24h": tick.get("LOW_24H", tick.get("VALUE", 0) * 0.98),
-                                "volume": tick.get("VOLUME_24H", 0),
-                                "source": "coindesk",
-                            }
-    except Exception as e:
-        print(f"[MarketIntel] CoinDesk fetch error: {e}")
-
-    return prices
-
-
-async def _fetch_coingecko_fallback(symbols: List[str]) -> Dict[str, Dict]:
-    """Fallback: CoinGecko free API for missing crypto prices."""
-    id_map = {
-        "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
-        "AVAX": "avalanche-2", "LINK": "chainlink", "UNI": "uniswap",
-        "AAVE": "aave", "MATIC": "matic-network",
-    }
-    ids = ",".join(id_map[s] for s in symbols if s in id_map)
-    if not ids:
-        return {}
-
-    prices: Dict[str, Dict] = {}
-    try:
-        async with aiohttp.ClientSession() as session:
-            url = "https://api.coingecko.com/api/v3/simple/price"
-            params = {"ids": ids, "vs_currencies": "usd",
-                      "include_24hr_change": "true", "include_24hr_vol": "true"}
-            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    rev = {v: k for k, v in id_map.items()}
-                    for cid, vals in data.items():
-                        sym = rev.get(cid)
-                        if sym:
-                            p = vals.get("usd", 0)
-                            pct = vals.get("usd_24h_change", 0)
-                            prices[sym] = {
-                                "price": p,
-                                "change_24h": p * pct / 100,
-                                "change_pct": pct,
-                                "high_24h": p * 1.02,
-                                "low_24h": p * 0.98,
-                                "volume": vals.get("usd_24h_vol", 0),
-                                "source": "coingecko",
-                            }
-    except Exception as e:
-        print(f"[MarketIntel] CoinGecko fallback error: {e}")
-    return prices
-
-
 def _generate_mock_price(symbol: str, meta: Dict) -> Dict:
     """Generate realistic mock price with slight drift."""
     base = meta["base_price"]
@@ -186,15 +111,10 @@ async def _get_all_prices() -> Dict[str, Dict]:
 
     prices: Dict[str, Dict] = {}
 
-    # 1. Crypto from CoinDesk
-    cd = await _fetch_coindesk_prices()
-    prices.update(cd)
-
-    # 2. Fallback for missing crypto
-    missing = [s for s in CRYPTO_ASSETS if s not in prices]
-    if missing:
-        fb = await _fetch_coingecko_fallback(missing)
-        prices.update(fb)
+    # 1-2. Live crypto (CoinDesk, CoinGecko fallback) via the shared batched cache
+    from agents.market_data import fetch_live_crypto_prices
+    live = await fetch_live_crypto_prices(_get_coindesk_key())
+    prices.update({s: dict(p) for s, p in live.items() if s in CRYPTO_ASSETS})
 
     # 3. Mock remaining crypto
     for sym, meta in CRYPTO_ASSETS.items():

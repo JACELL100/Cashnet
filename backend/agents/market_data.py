@@ -63,6 +63,144 @@ class MarketCondition:
         }
 
 
+# ---------------------------------------------------------------------------
+# Shared live price fetch
+# ---------------------------------------------------------------------------
+# One batched upstream request serves every caller (simulation, /api/sim/market,
+# market-intel page) per TTL window. The old code made one CoinDesk call per
+# symbol on every request, which exhausted the CoinDesk free-tier quota.
+
+LIVE_SYMBOLS = ["BTC", "ETH", "SOL", "AVAX", "MATIC", "LINK", "UNI", "AAVE"]
+COINGECKO_IDS = {
+    "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "AVAX": "avalanche-2",
+    "MATIC": "matic-network", "LINK": "chainlink", "UNI": "uniswap", "AAVE": "aave",
+}
+COINDESK_TICK_URL = "https://data-api.coindesk.com/index/cc/v1/latest/tick"
+
+_LIVE_TTL = 180.0            # seconds between upstream fetches (~14k calls/month)
+_COINDESK_BACKOFF = 3600.0   # skip CoinDesk for 1h after a rate-limit / error
+_live_cache: Dict[str, Dict[str, Any]] = {}
+_live_ts: float = 0.0
+_coindesk_blocked_until: float = 0.0
+_live_lock: Optional[asyncio.Lock] = None
+
+
+def _first(d: Dict[str, Any], *keys: str, default: float = 0.0) -> float:
+    for k in keys:
+        v = d.get(k)
+        if v is not None:
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                pass
+    return default
+
+
+async def _coindesk_batch(session: aiohttp.ClientSession, api_key: str) -> Dict[str, Dict[str, Any]]:
+    params = {"market": "cadli", "instruments": ",".join(f"{s}-USD" for s in LIVE_SYMBOLS)}
+    headers = {"Authorization": f"Bearer {api_key}"}
+    async with session.get(COINDESK_TICK_URL, params=params, headers=headers,
+                           timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        data = await resp.json(content_type=None)
+    err = data.get("Err") or {}
+    if err.get("message"):
+        raise RuntimeError(err["message"][:160])
+
+    # CoinDesk returns Data as {"BTC-USD": {...}, ...}
+    ticks = data.get("Data") or {}
+    if isinstance(ticks, dict):
+        ticks = list(ticks.values())
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for t in ticks:
+        sym = str(t.get("INSTRUMENT", "")).replace("-USD", "")
+        price = _first(t, "VALUE")
+        if sym not in LIVE_SYMBOLS or price <= 0:
+            continue
+        out[sym] = {
+            "price": price,
+            "change_24h": _first(t, "MOVING_24_HOUR_CHANGE", "CURRENT_DAY_CHANGE", "CHANGE_24H"),
+            "change_pct": _first(t, "MOVING_24_HOUR_CHANGE_PERCENTAGE", "CURRENT_DAY_CHANGE_PERCENTAGE", "CHANGE_PCT_24H"),
+            "high_24h": _first(t, "MOVING_24_HOUR_HIGH", "CURRENT_DAY_HIGH", "HIGH_24H", default=price * 1.02),
+            "low_24h": _first(t, "MOVING_24_HOUR_LOW", "CURRENT_DAY_LOW", "LOW_24H", default=price * 0.98),
+            "volume": _first(t, "MOVING_24_HOUR_QUOTE_VOLUME", "CURRENT_DAY_QUOTE_VOLUME", "VOLUME_24H"),
+            "source": "coindesk",
+        }
+    return out
+
+
+async def _coingecko_batch(session: aiohttp.ClientSession, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+    ids = {COINGECKO_IDS[s]: s for s in symbols if s in COINGECKO_IDS}
+    if not ids:
+        return {}
+    params = {"ids": ",".join(ids), "vs_currencies": "usd",
+              "include_24hr_change": "true", "include_24hr_vol": "true"}
+    async with session.get("https://api.coingecko.com/api/v3/simple/price", params=params,
+                           timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        if resp.status != 200:
+            raise RuntimeError(f"CoinGecko HTTP {resp.status}")
+        data = await resp.json(content_type=None)
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for cid, vals in data.items():
+        sym = ids.get(cid)
+        price = _first(vals, "usd")
+        if not sym or price <= 0:
+            continue
+        pct = _first(vals, "usd_24h_change")
+        out[sym] = {
+            "price": price,
+            "change_24h": price * pct / 100,
+            "change_pct": pct,
+            "high_24h": price * 1.02,
+            "low_24h": price * 0.98,
+            "volume": _first(vals, "usd_24h_vol"),
+            "source": "coingecko",
+        }
+    return out
+
+
+async def fetch_live_crypto_prices(api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Live prices for LIVE_SYMBOLS, cached for _LIVE_TTL seconds and shared by all callers.
+    CoinDesk first (one batched call), CoinGecko for anything missing.
+    Returns the last good data (possibly stale) or {} if nothing has ever succeeded.
+    """
+    global _live_cache, _live_ts, _coindesk_blocked_until, _live_lock
+    if _live_lock is None:
+        _live_lock = asyncio.Lock()
+
+    async with _live_lock:
+        now = time.time()
+        if now - _live_ts < _LIVE_TTL:
+            return dict(_live_cache)
+
+        api_key = api_key or os.getenv("COINDESK_API_KEY", "")
+        prices: Dict[str, Dict[str, Any]] = {}
+        async with aiohttp.ClientSession() as session:
+            if api_key and now >= _coindesk_blocked_until:
+                try:
+                    prices = await _coindesk_batch(session, api_key)
+                except Exception as e:
+                    _coindesk_blocked_until = now + _COINDESK_BACKOFF
+                    print(f"[MarketData] CoinDesk unavailable, backing off 1h: {e}")
+
+            missing = [s for s in LIVE_SYMBOLS if s not in prices]
+            if missing:
+                try:
+                    prices.update(await _coingecko_batch(session, missing))
+                except Exception as e:
+                    print(f"[MarketData] CoinGecko fallback failed: {e}")
+
+        if prices:
+            _live_cache = prices
+            _live_ts = now
+        else:
+            # Nothing worked: keep stale data, retry in 30s instead of a full TTL
+            _live_ts = now - _LIVE_TTL + 30
+        return dict(_live_cache)
+
+
 class MarketDataService:
     """
     Fetches and caches real-time market data from CoinDesk API.
@@ -109,112 +247,27 @@ class MarketDataService:
     # ------------------------------------------------------------------
 
     async def fetch_price(self, symbol: str = "BTC") -> Optional[PriceData]:
-        """Fetch current price for a single asset from CoinDesk."""
-        try:
-            session = await self._get_session()
-            
-            # CoinDesk Index API endpoint
-            url = f"{self.COINDESK_BASE_URL}/latest/tick"
-            params = {
-                "market": "cadli",
-                "instruments": f"{symbol}-USD",
-            }
-            
-            async with session.get(url, params=params, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    # Parse CoinDesk response
-                    if "Data" in data and len(data["Data"]) > 0:
-                        tick = data["Data"][0]
-                        price = tick.get("VALUE", 0)
-                        
-                        # Get 24h data from a separate call or estimate
-                        change_24h = tick.get("CHANGE_24H", 0)
-                        change_pct = tick.get("CHANGE_PCT_24H", 0)
-                        high_24h = tick.get("HIGH_24H", price * 1.02)
-                        low_24h = tick.get("LOW_24H", price * 0.98)
-                        volume_24h = tick.get("VOLUME_24H", 0)
-                        
-                        price_data = PriceData(
-                            symbol=symbol,
-                            price=price,
-                            change_24h=change_24h,
-                            change_pct_24h=change_pct,
-                            high_24h=high_24h,
-                            low_24h=low_24h,
-                            volume_24h=volume_24h,
-                            timestamp=time.time(),
-                            source="coindesk",
-                        )
-                        
-                        self._cache[symbol] = price_data
-                        self._update_history(symbol, price)
-                        return price_data
-                        
-                # Fallback to alternative endpoint
-                return await self._fetch_price_fallback(symbol)
-                
-        except Exception as e:
-            print(f"[MarketData] Error fetching {symbol}: {e}")
-            return await self._fetch_price_fallback(symbol)
+        """Current price for one asset, served from the shared batched cache."""
+        prices = await self.fetch_all_prices()
+        return prices.get(symbol)
 
-    async def _fetch_price_fallback(self, symbol: str) -> Optional[PriceData]:
-        """Fallback price fetcher using CoinGecko free API."""
-        try:
-            session = await self._get_session()
-            
-            # Map symbol to CoinGecko ID
-            symbol_map = {
-                "BTC": "bitcoin",
-                "ETH": "ethereum",
-                "SOL": "solana",
-                "AVAX": "avalanche-2",
-                "MATIC": "matic-network",
-                "LINK": "chainlink",
-                "UNI": "uniswap",
-                "AAVE": "aave",
-            }
-            
-            coin_id = symbol_map.get(symbol, symbol.lower())
-            url = f"https://api.coingecko.com/api/v3/simple/price"
-            params = {
-                "ids": coin_id,
-                "vs_currencies": "usd",
-                "include_24hr_change": "true",
-                "include_24hr_vol": "true",
-            }
-            
-            async with session.get(url, params=params, timeout=10) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if coin_id in data:
-                        coin_data = data[coin_id]
-                        price = coin_data.get("usd", 0)
-                        change_pct = coin_data.get("usd_24h_change", 0)
-                        volume = coin_data.get("usd_24h_vol", 0)
-                        
-                        price_data = PriceData(
-                            symbol=symbol,
-                            price=price,
-                            change_24h=price * change_pct / 100,
-                            change_pct_24h=change_pct,
-                            high_24h=price * 1.02,
-                            low_24h=price * 0.98,
-                            volume_24h=volume,
-                            timestamp=time.time(),
-                            source="coingecko",
-                        )
-                        
-                        self._cache[symbol] = price_data
-                        self._update_history(symbol, price)
-                        return price_data
-                        
-        except Exception as e:
-            print(f"[MarketData] Fallback error for {symbol}: {e}")
-            
-        # Return cached or generate mock
-        return self._get_cached_or_mock(symbol)
+    def _apply_live(self, live: Dict[str, Dict[str, Any]]) -> None:
+        """Copy shared live prices into this service's cache and price history."""
+        for sym, p in live.items():
+            prev = self._cache.get(sym)
+            self._cache[sym] = PriceData(
+                symbol=sym,
+                price=p["price"],
+                change_24h=p["change_24h"],
+                change_pct_24h=p["change_pct"],
+                high_24h=p["high_24h"],
+                low_24h=p["low_24h"],
+                volume_24h=p["volume"],
+                timestamp=time.time(),
+                source=p["source"],
+            )
+            if prev is None or prev.price != p["price"]:
+                self._update_history(sym, p["price"])
 
     def _get_cached_or_mock(self, symbol: str) -> PriceData:
         """Return cached data or generate realistic mock if unavailable."""
@@ -256,19 +309,21 @@ class MarketDataService:
         )
 
     async def fetch_all_prices(self) -> Dict[str, PriceData]:
-        """Fetch prices for all supported assets."""
-        tasks = [self.fetch_price(symbol) for symbol in self.SUPPORTED_ASSETS]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        prices = {}
-        for symbol, result in zip(self.SUPPORTED_ASSETS, results):
-            if isinstance(result, PriceData):
-                prices[symbol] = result
-            elif symbol in self._cache:
+        """Prices for all supported assets: shared live data, cached/mock values fill gaps."""
+        live = await fetch_live_crypto_prices(self.api_key)
+        if live:
+            self._apply_live(live)
+
+        prices: Dict[str, PriceData] = {}
+        for symbol in self.SUPPORTED_ASSETS:
+            if symbol in live:
                 prices[symbol] = self._cache[symbol]
-                
+            else:
+                prices[symbol] = self._get_cached_or_mock(symbol)
+
         self._last_fetch = time.time()
         return prices
+
 
     def _update_history(self, symbol: str, price: float):
         """Track price history for volatility calculations."""
@@ -512,7 +567,8 @@ class MarketDataService:
             "prices": {k: v.to_dict() for k, v in self._cache.items()},
             "condition": self.get_market_condition().to_dict(),
             "last_update": self._last_fetch,
-            "source": "coindesk" if self.api_key else "mock",
+            # Report where BTC actually came from (coindesk / coingecko / mock)
+            "source": self._cache["BTC"].source if "BTC" in self._cache else "mock",
         }
 
 
