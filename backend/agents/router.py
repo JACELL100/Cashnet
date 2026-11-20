@@ -5,12 +5,13 @@ Direct endpoints under /agents-sim/* for the simulation engine.
 The api_adapter will also proxy /api/* routes to these.
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from pydantic import BaseModel
 
 from agents.simulation_runner import simulation_runner
 from agents.market_data import market_data_service
+from routers.auth import get_current_admin
 
 router = APIRouter(prefix="/agents-sim", tags=["Agents & Simulation"])
 
@@ -42,7 +43,7 @@ class StressEventRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @router.post("/simulation/start")
-async def start_simulation(req: StartSimulationRequest = StartSimulationRequest()):
+async def start_simulation(req: StartSimulationRequest = StartSimulationRequest(), _admin=Depends(get_current_admin)):
     """Start the multi-agent simulation."""
     
     custom_agents = None
@@ -58,28 +59,28 @@ async def start_simulation(req: StartSimulationRequest = StartSimulationRequest(
 
 
 @router.post("/simulation/pause")
-async def pause_simulation():
+async def pause_simulation(_admin=Depends(get_current_admin)):
     """Pause a running simulation."""
     result = await simulation_runner.pause()
     return {"success": True, "data": result}
 
 
 @router.post("/simulation/resume")
-async def resume_simulation():
+async def resume_simulation(_admin=Depends(get_current_admin)):
     """Resume a paused simulation."""
     result = await simulation_runner.resume()
     return {"success": True, "data": result}
 
 
 @router.post("/simulation/stop")
-async def stop_simulation():
+async def stop_simulation(_admin=Depends(get_current_admin)):
     """Stop the simulation."""
     result = await simulation_runner.stop()
     return {"success": True, "data": result}
 
 
 @router.post("/simulation/stress")
-async def trigger_stress_event(req: StressEventRequest):
+async def trigger_stress_event(req: StressEventRequest, _admin=Depends(get_current_admin)):
     """Trigger a live stress event in the simulation."""
     if simulation_runner.status != "running":
         raise HTTPException(status_code=400, detail="Simulation must be running to trigger test.")

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { authHeaders } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
@@ -280,7 +281,7 @@ export default function SimulationPage() {
     try {
       const res = await fetch(`${API_URL}/api/simulation/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ max_steps: maxSteps, tick_delay: tickDelay }),
       });
       const j = await res.json();
@@ -291,7 +292,7 @@ export default function SimulationPage() {
   async function stopSimulation() {
     setLoading('stop');
     try {
-      await fetch(`${API_URL}/api/simulation/stop`, { method: 'POST' });
+      await fetch(`${API_URL}/api/simulation/stop`, { method: 'POST', headers: authHeaders() });
       setActiveScenarioJob(null);
       clearInterval(jobPollRef.current!);
       await fetchAll();
@@ -302,7 +303,7 @@ export default function SimulationPage() {
     const isPaused = simStatus?.status === 'paused';
     setLoading('pause');
     try {
-      await fetch(`${API_URL}/api/simulation/${isPaused ? 'resume' : 'pause'}`, { method: 'POST' });
+      await fetch(`${API_URL}/api/simulation/${isPaused ? 'resume' : 'pause'}`, { method: 'POST', headers: authHeaders() });
       await fetchAll();
     } finally { setLoading(null); }
   }
@@ -315,14 +316,14 @@ export default function SimulationPage() {
       if (simStatus?.status !== 'running') {
         await fetch(`${API_URL}/api/simulation/start`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ max_steps: maxSteps, tick_delay: tickDelay }),
         });
         await new Promise(r => setTimeout(r, 800));
       }
       const res = await fetch(`${API_URL}/api/scenarios/run`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ scenario_type: selectedScenario, intensity: scenarioIntensity, tick_delay: 0.05 }),
       });
       const j = await res.json();
@@ -338,7 +339,7 @@ export default function SimulationPage() {
     try {
       await fetch(`${API_URL}/agents-sim/simulation/stress`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ event_type: eventType, magnitude: 1.5 }),
       });
       await fetchAll();
@@ -1032,7 +1033,7 @@ export default function SimulationPage() {
                 ) : (
                   <div className="space-y-2 max-h-[450px] overflow-y-auto">
                     {txHistory.map((tx: any, i: number) => {
-                      const isReal = tx.args?.on_chain;
+                      const isReal = tx.on_chain ?? tx.args?.on_chain;
                       const statusColor = tx.status === 'success' ? '#22c55e' : tx.status === 'pending' ? '#f0a500' : '#ff3860';
                       return (
                         <div key={i} className={`rounded border p-2.5 text-xs font-mono ${isReal ? 'border-[#22c55e33] bg-[#22c55e08]' : 'border-(--color-border)'}`}>
@@ -1045,6 +1046,7 @@ export default function SimulationPage() {
                             <span>·</span>
                             <span>{(tx.gas_used ?? 0).toLocaleString()} gas</span>
                             {isReal && <span className="text-[#22c55e] font-bold">● REAL</span>}
+                            {!isReal && <span className="text-[#f0a500] font-bold">SIMULATED</span>}
                           </div>
                           {isReal && (
                             <a href={`https://sepolia.etherscan.io/tx/${tx.tx_hash}`} target="_blank" rel="noopener noreferrer"

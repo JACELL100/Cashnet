@@ -305,7 +305,7 @@ export default function DashboardProfilePage() {
                   )}
                 </div>
                 <div className="text-xl font-bold font-mono" style={{ color: '#f0a500' }}>
-                  {stats ? `${stats.totalBorrowed.toFixed(2)} BADM` : '—'}
+                  {stats ? `${stats.totalBorrowed.toFixed(2)} PLDM` : '—'}
                 </div>
               </div>
 

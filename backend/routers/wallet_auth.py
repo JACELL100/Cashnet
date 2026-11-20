@@ -14,6 +14,8 @@ from web3 import Web3
 
 from database import get_db
 from models import Borrower
+from blockchain_service import schedule_credit_score_sync
+from routers.auth import get_current_admin_or_auditor
 from schemas import NonceRequest, NonceResponse, AuthVerifyRequest, AuthResponse, BorrowerResponse
 
 router = APIRouter(prefix="/api/auth", tags=["Wallet Authentication"])
@@ -111,6 +113,10 @@ async def verify_signature_and_login(request: AuthVerifyRequest, db: Session = D
     db.commit()
     db.refresh(borrower)
 
+    # Mirror DB credit score (default 500 for new borrowers) to CreditRegistry so borrow() works.
+    # Done after signature verification (not at nonce time) so random addresses can't burn gas.
+    schedule_credit_score_sync(borrower.wallet_address, borrower.credit_score)
+
     token = create_jwt_token(wallet_address, borrower.id)
     return AuthResponse(
         wallet_address=borrower.wallet_address,
@@ -142,7 +148,12 @@ async def list_all_borrowers(db: Session = Depends(get_db)):
 
 
 @router.put("/borrowers/{wallet}/score", tags=["Admin"])
-async def update_borrower_score(wallet: str, payload: dict, db: Session = Depends(get_db)):
+async def update_borrower_score(
+    wallet: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_admin_or_auditor),  # score is pushed on-chain → must be authenticated
+):
     """Admin endpoint: Update credit score for a borrower (300-850)"""
     try:
         checksum_wallet = w3.to_checksum_address(wallet)
@@ -164,6 +175,7 @@ async def update_borrower_score(wallet: str, payload: dict, db: Session = Depend
     borrower.credit_score = score
     db.commit()
     db.refresh(borrower)
+    schedule_credit_score_sync(borrower.wallet_address, borrower.credit_score)
     return {"wallet": wallet, "score": borrower.credit_score}
  
  

@@ -9,7 +9,7 @@ import asyncio
 import uuid
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from agents.scenario_engine import (
@@ -19,6 +19,7 @@ from agents.scenario_engine import (
     get_scenario_engine,
 )
 from agents.simulation_runner import simulation_runner
+from routers.auth import get_current_admin
 from agents.demo_attack_scenario import run_protocol_stress_test_demo
 
 
@@ -96,7 +97,7 @@ async def get_scenario_status():
 
 
 @router.post("/run")
-async def run_scenario(body: ScenarioRunRequest):
+async def run_scenario(body: ScenarioRunRequest, _admin=Depends(get_current_admin)):
     """
     Start a real-world attack scenario as a background job.
     Returns immediately with a job_id. Poll /job/{job_id} for result.
@@ -407,7 +408,7 @@ async def get_attack_status():
 
 
 @router.post("/demo-attack")
-async def run_demo_attack():
+async def run_demo_attack(_admin=Depends(get_current_admin)):
     """
     Execute Continuous Protocol Stress Test with Palladium & Badassium tokens.
     Performs continuous on-chain swaps until STOP is pressed.
@@ -478,7 +479,7 @@ async def run_demo_attack():
 
 
 @router.post("/stop-attack")
-async def stop_attack():
+async def stop_attack(_admin=Depends(get_current_admin)):
     """Stop the ongoing continuous attack."""
     global _continuous_attack_task, _attack_running
     

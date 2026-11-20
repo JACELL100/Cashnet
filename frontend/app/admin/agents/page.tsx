@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Terminal from '@/components/Terminal';
 import DataTable from '@/components/DataTable';
 import Badge from '@/components/Badge';
+import { authHeaders } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
@@ -132,8 +133,8 @@ const AGENT_RISK_BADGE: Record<string, 'critical' | 'high' | 'medium' | 'success
 async function api<T>(path: string, opts?: RequestInit): Promise<T | null> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...opts?.headers },
       ...opts,
+      headers: { 'Content-Type': 'application/json', ...authHeaders(), ...opts?.headers },
     });
     const json = await res.json();
     return json?.data ?? json;

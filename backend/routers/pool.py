@@ -50,26 +50,6 @@ _ERC20_ABI = [
     },
 ]
 
-# ── Request bodies ─────────────────────────────────────────────────────────────
-
-class AddLiquidityRequest(BaseModel):
-    wallet: str
-    amount_a: float  # PAL
-    amount_b: float  # BAD
-
-
-class RemoveLiquidityRequest(BaseModel):
-    wallet: str
-    amount: float    # LP shares (18-decimal human units)
-
-
-class SwapRequest(BaseModel):
-    wallet: str
-    token_in: str    # 'PAL' | 'BAD' | raw address
-    token_out: str   # 'PAL' | 'BAD' | raw address
-    amount_in: float
-
-
 # ── Internal helpers ───────────────────────────────────────────────────────────
 
 def _pool_contract():
@@ -90,15 +70,6 @@ def _token_contract(name: str, address: str):
     if name not in blockchain_service.contracts:
         blockchain_service.load_contract(name, address, _ERC20_ABI)
     return blockchain_service.contracts[name]
-
-
-def _ensure_approval(token_name: str, token_address: str, spender: str, amount_wei: int):
-    """Send approve tx only if current allowance is insufficient."""
-    token = _token_contract(token_name, token_address)
-    owner = blockchain_service.account.address
-    spender_cs = Web3.to_checksum_address(spender)
-    if token.functions.allowance(owner, spender_cs).call() < amount_wei:
-        blockchain_service.send_transaction(token_name, "approve", spender_cs, amount_wei)
 
 
 def _resolve_token_address(identifier: str) -> str:
@@ -275,9 +246,10 @@ async def depth_chart(
 @router.get("/transactions")
 async def get_transactions(
     limit: int = Query(default=20, le=100),
+    include_lending: bool = Query(default=False, description="Also include indexed LendingPool events"),
     db: Session = Depends(get_db),
 ):
-    """Recent pool transactions logged to the DB from on-chain operations."""
+    """Recent pool transactions: indexed on-chain events (on_chain=true) + legacy DB-logged rows."""
     try:
         txs = (
             db.query(models.Transaction)
@@ -290,163 +262,68 @@ async def get_transactions(
             .limit(limit)
             .all()
         )
+        data = []
+        seen = set()
+        # Real events indexed from Sepolia (chain_indexer.py)
+        try:
+            from chain_indexer import query_events, serialize_event
+            contract = None if include_lending else "LiquidityPool"
+            for ev in query_events(db, contract=contract, limit=limit):
+                e = serialize_event(ev)
+                if ev.event == "Swap":
+                    token_in = (e["args"].get("tokenIn") or "").lower()
+                    token = "PAL" if token_in == (settings.palladium_address or "").lower() else "BAD"
+                    amount = e["amounts"].get("amountIn")
+                elif ev.event in ("LiquidityAdded", "LiquidityRemoved"):
+                    token, amount = "PAL", e["amounts"].get("amountA")
+                elif ev.event == "CollateralDeposited":
+                    token, amount = "ETH", e["amounts"].get("amount")
+                elif ev.event == "Liquidated":
+                    token, amount = "PLDM", e["amounts"].get("debtRecovered")
+                else:  # Borrowed / Repaid -> LendingPool.borrowToken (PLDM)
+                    token, amount = "PLDM", e["amounts"].get("amount")
+                seen.add(e["tx_hash"].lower())
+                data.append({
+                    "hash":      e["tx_hash"],
+                    "type":      e["type"],
+                    "wallet":    e["wallet"],
+                    "amount":    amount,
+                    "token":     token,
+                    "timestamp": ev.timestamp.timestamp() if ev.timestamp else None,
+                    "metadata":  {**e["args"], "event": ev.event, "contract": ev.contract, "block_number": ev.block_number},
+                    "on_chain":  True,
+                    "simulated": False,
+                })
+        except Exception as ex:
+            print(f"/pool/transactions: indexed events unavailable: {ex}")
+
+        for t in txs:
+            if (t.hash or "").lower() in seen:
+                continue
+            data.append({
+                "hash":      t.hash,
+                "type":      t.type.value,
+                "wallet":    t.wallet,
+                "amount":    t.amount,
+                "token":     t.token,
+                "timestamp": t.timestamp.timestamp() if t.timestamp else None,
+                "metadata":  json.loads(t.tx_metadata) if t.tx_metadata else {},
+                # liquidity_engine logs simulated rows with "0xsim_" hashes; others were real server-signed txs
+                "on_chain":  not (t.hash or "").startswith("0xsim_"),
+                "simulated": (t.hash or "").startswith("0xsim_"),
+            })
+        data.sort(key=lambda d: d["timestamp"] or 0, reverse=True)
         return {
             "success": True,
-            "data": [
-                {
-                    "hash":      t.hash,
-                    "type":      t.type.value,
-                    "wallet":    t.wallet,
-                    "amount":    t.amount,
-                    "token":     t.token,
-                    "timestamp": t.timestamp.timestamp() if t.timestamp else None,
-                    "metadata":  json.loads(t.tx_metadata) if t.tx_metadata else {},
-                }
-                for t in txs
-            ],
+            "data": data[:limit],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/add-liquidity", dependencies=[Depends(check_system_not_paused)])
-async def add_liquidity(
-    request: AddLiquidityRequest,
-    db: Session = Depends(get_db),
-):
-    """
-    Add liquidity to the on-chain LiquidityPool.
-    Flow: approve PAL → approve BAD → addLiquidity(amountA, amountB)
-    LP tokens are minted to the operator account by the contract.
-    """
-    try:
-        pool_address = settings.liquidity_pool_address
-        amount_a_wei = _to_wei(request.amount_a)
-        amount_b_wei = _to_wei(request.amount_b)
-
-        _ensure_approval("TokenA", settings.palladium_address,  pool_address, amount_a_wei)
-        _ensure_approval("TokenB", settings.badassium_address, pool_address, amount_b_wei)
-
-        tx_hash = blockchain_service.send_transaction(
-            "LiquidityPool", "addLiquidity", amount_a_wei, amount_b_wei
-        )
-        _log_tx(db, models.TransactionTypeEnum.ADD_LIQUIDITY,
-                request.wallet, request.amount_a, "PAL", tx_hash,
-                {"amount_a": request.amount_a, "amount_b": request.amount_b})
-
-        pool = _pool_contract()
-        return {
-            "status":      "success",
-            "tx_hash":     tx_hash,
-            "sepolia_url": f"https://sepolia.etherscan.io/tx/{tx_hash}",
-            "message":     f"Added {request.amount_a} PAL + {request.amount_b} BAD on-chain",
-            "wallet":      request.wallet,
-            "reserve_a":   _from_wei(pool.functions.reserveA().call()),
-            "reserve_b":   _from_wei(pool.functions.reserveB().call()),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/remove-liquidity", dependencies=[Depends(check_system_not_paused)])
-async def remove_liquidity(
-    request: RemoveLiquidityRequest,
-    db: Session = Depends(get_db),
-):
-    """Remove liquidity from the pool"""
-    try:
-        shares_wei = _to_wei(request.amount)
-
-        tx_hash = blockchain_service.send_transaction(
-            "LiquidityPool", "removeLiquidity", shares_wei
-        )
-        _log_tx(db, models.TransactionTypeEnum.REMOVE_LIQUIDITY,
-                request.wallet, request.amount, "LP", tx_hash,
-                {"lp_shares": request.amount})
-
-        pool = _pool_contract()
-        return {
-            "status":      "success",
-            "tx_hash":     tx_hash,
-            "sepolia_url": f"https://sepolia.etherscan.io/tx/{tx_hash}",
-            "message":     f"Burned {request.amount} LP shares, received PAL + BAD",
-            "wallet":      request.wallet,
-            "reserve_a":   _from_wei(pool.functions.reserveA().call()),
-            "reserve_b":   _from_wei(pool.functions.reserveB().call()),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/swap", dependencies=[Depends(check_system_not_paused)])
-async def swap_tokens(
-    request: SwapRequest,
-    db: Session = Depends(get_db),
-):
-    """
-    Swap PAL ↔ BAD via the on-chain constant-product AMM (0.3 % fee).
-    Flow: approve token_in → swap(tokenIn, amountIn)
-    """
-    try:
-        pool         = _pool_contract()
-        pool_address = settings.liquidity_pool_address
-
-        token_in_addr  = _resolve_token_address(request.token_in)
-        token_out_addr = _resolve_token_address(request.token_out)
-
-        pal_addr  = Web3.to_checksum_address(settings.palladium_address)
-        is_pal_in = Web3.to_checksum_address(token_in_addr) == pal_addr
-
-        amount_in_wei = _to_wei(request.amount_in)
-
-        # Pre-calculate expected output (mirrors Solidity math)
-        ra_wei = pool.functions.reserveA().call()
-        rb_wei = pool.functions.reserveB().call()
-        ri = ra_wei if is_pal_in else rb_wei
-        ro = rb_wei if is_pal_in else ra_wei
-
-        fee_in       = amount_in_wei * 997
-        amount_out_wei = (fee_in * ro) // (ri * 1000 + fee_in)
-
-        mid          = ro / ri if ri > 0 else 0
-        expected_out = amount_in_wei * mid
-        impact_pct   = ((expected_out - amount_out_wei) / expected_out * 100) if expected_out > 0 else 0.0
-
-        token_in_name = "TokenA" if is_pal_in else "TokenB"
-        _ensure_approval(token_in_name, token_in_addr, pool_address, amount_in_wei)
-
-        tx_hash = blockchain_service.send_transaction(
-            "LiquidityPool", "swap",
-            Web3.to_checksum_address(token_in_addr),
-            amount_in_wei,
-        )
-
-        token_in_sym  = "PAL" if is_pal_in else "BAD"
-        token_out_sym = "BAD" if is_pal_in else "PAL"
-
-        _log_tx(db, models.TransactionTypeEnum.SWAP,
-                request.wallet, request.amount_in, token_in_sym, tx_hash,
-                {
-                    "token_in":     token_in_addr,
-                    "token_out":    token_out_addr,
-                    "amount_in":    request.amount_in,
-                    "amount_out":   _from_wei(amount_out_wei),
-                    "price_impact": round(impact_pct, 4),
-                })
-
-        return {
-            "status":       "success",
-            "tx_hash":      tx_hash,
-            "sepolia_url":  f"https://sepolia.etherscan.io/tx/{tx_hash}",
-            "token_in":     token_in_sym,
-            "token_out":    token_out_sym,
-            "amount_in":    request.amount_in,
-            "amount_out":   _from_wei(amount_out_wei),
-            "price_impact": round(impact_pct, 4),
-            "wallet":       request.wallet,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# NOTE: POST /pool/add-liquidity, /pool/remove-liquidity and /pool/swap were removed.
+# They signed with the SERVER wallet on behalf of any caller (LP tokens/output went to the server).
+# Users sign these directly via MetaMask (frontend/hooks/usePoolActions.ts).
 
 
 @router.post("/stress-test")

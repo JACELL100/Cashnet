@@ -11,6 +11,9 @@ export const CREDIT_REGISTRY_ADDRESS = '0x9449a34A5Cdeb02480936B605960b22aE04990
 export const PALLADIUM_ADDRESS = '0x983A613d5f224459D2919e0d9E9e77C72E032042' as const;
 export const BADASSIUM_ADDRESS = '0x2960e22Ed3256E2bAfF233F5d03A20f597f14e07' as const;
 export const LIQUIDITY_POOL_ADDRESS = '0x4dE122297CbB79287f826822F68ce77146956b75' as const;
+// Token lent by LendingPool (borrow / repay). MUST equal LendingPool.borrowToken() on-chain — currently Palladium (PLDM).
+export const BORROW_TOKEN_ADDRESS = PALLADIUM_ADDRESS;
+export const BORROW_TOKEN_SYMBOL = 'PLDM' as const;
 
 // Minimal ABIs for frontend interactions (only the functions we call)
 export const LENDING_POOL_ABI = [

@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
 import { useBalance } from 'wagmi';
 import { formatEther } from 'viem';
-import { BADASSIUM_ADDRESS } from '@/lib/contracts';
+import { BORROW_TOKEN_ADDRESS } from '@/lib/contracts';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 const SEPOLIA = 'https://sepolia.etherscan.io';
@@ -26,12 +26,12 @@ const fmtETH = (v: number) =>
     : v > 0 ? `${v.toExponential(2)} ETH`
     : '0 ETH';
 
-const fmtBADM = (v: number) =>
-  v >= 1_000_000 ? `${(v / 1e6).toFixed(2)}M BADM`
-    : v >= 1_000 ? `${(v / 1e3).toFixed(1)}K BADM`
-    : v >= 1 ? `${v.toFixed(2)} BADM`
-    : v > 0 ? `${v.toFixed(4)} BADM`
-    : '0 BADM';
+const fmtPLDM = (v: number) =>
+  v >= 1_000_000 ? `${(v / 1e6).toFixed(2)}M PLDM`
+    : v >= 1_000 ? `${(v / 1e3).toFixed(1)}K PLDM`
+    : v >= 1 ? `${v.toFixed(2)} PLDM`
+    : v > 0 ? `${v.toFixed(4)} PLDM`
+    : '0 PLDM';
 
 const scoreColor = (s: number) =>
   s >= 750 ? '#22c55e' : s >= 700 ? '#00d4ff' : s >= 650 ? '#f0a500' : '#ff3860';
@@ -72,7 +72,7 @@ export default function DashboardBorrowerPage() {
 
   // Fetch wallet balances dynamically
   const { data: ethBalance } = useBalance({ address });
-  const { data: badmBalance } = useBalance({ address, token: BADASSIUM_ADDRESS });
+  const { data: pldmBalance } = useBalance({ address, token: BORROW_TOKEN_ADDRESS });
 
   const [position, setPosition] = useState<Position | null>(null);
   const [creditScore, setCreditScore] = useState(0);
@@ -91,10 +91,11 @@ export default function DashboardBorrowerPage() {
 
   // Available balances
   const availableETH = ethBalance ? parseFloat(formatEther(ethBalance.value)) : 0;
-  const availableBADM = badmBalance ? parseFloat(formatEther(badmBalance.value)) : 0;
+  const availablePLDM = pldmBalance ? parseFloat(formatEther(pldmBalance.value)) : 0;
   
-  // Max borrowable amount based on collateral
-  const maxBorrowable = position ? (position.collateral_value * 0.75) - position.debt_value : 0;
+  // Max borrowable amount based on collateral and the credit-score LTV tiers of CreditRegistry.getMaxLTV
+  const maxLtv = creditScore >= 800 ? 0.8 : creditScore >= 600 ? 0.6 : creditScore >= 400 ? 0.4 : 0;
+  const maxBorrowable = position ? Math.max(0, (position.collateral_value * maxLtv) - position.debt_value) : 0;
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -270,8 +271,8 @@ export default function DashboardBorrowerPage() {
             <div className="text-sm font-bold text-text-primary">How Borrowing Works</div>
             <div className="text-xs text-text-tertiary leading-relaxed">
               <span className="text-[#00d4ff] font-bold">1. Deposit ETH</span> as collateral → 
-              <span className="text-[#b367ff] font-bold"> 2. Borrow BADASSIUM</span> tokens (up to 75% of collateral value) → 
-              <span className="text-[#22c55e] font-bold"> 3. Repay BADASSIUM</span> to unlock collateral.
+              <span className="text-[#b367ff] font-bold"> 2. Borrow PALLADIUM (PLDM)</span> tokens (up to your credit-based max LTV: 40-80% of collateral value) → 
+              <span className="text-[#22c55e] font-bold"> 3. Repay PALLADIUM (PLDM)</span> to unlock collateral.
               <span className="block mt-1 text-[#f0a500]">⚠️ Recommended: Start with small amounts like 0.1 ETH for testing.</span>
             </div>
           </div>
@@ -336,8 +337,8 @@ export default function DashboardBorrowerPage() {
             <>
               <div className="text-3xl font-bold text-text-primary">
                 {position && position.debt_value !== undefined
-                  ? fmtBADM(position.debt_value)
-                  : fmtBADM(totalBorrowed)}
+                  ? fmtPLDM(position.debt_value)
+                  : fmtPLDM(totalBorrowed)}
               </div>
               <div className="text-xs text-text-tertiary">
                 {position && position.debt_value > 0
@@ -534,13 +535,13 @@ export default function DashboardBorrowerPage() {
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-[#b367ff] uppercase tracking-wider">Borrow</div>
                 <div className="text-xs text-text-tertiary">
-                  Max: {maxBorrowable > 0 ? `${maxBorrowable.toFixed(2)} BADM` : '0.00 BADM'}
+                  Max: {maxBorrowable > 0 ? `${maxBorrowable.toFixed(2)} PLDM` : '0.00 PLDM'}
                 </div>
               </div>
               <div className="flex gap-2">
                 <input
                   type="number"
-                  placeholder="BADM amount"
+                  placeholder="PLDM amount"
                   value={borrowAmt}
                   onChange={(e) => setBorrowAmt(e.target.value)}
                   className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#b367ff] transition-colors"
@@ -570,12 +571,12 @@ export default function DashboardBorrowerPage() {
                   const amt = parseFloat(borrowAmt);
                   if (!borrowAmt || amt <= 0) return alert('Enter a valid amount');
                   if (!position || position.collateral_eth === 0) return alert('Deposit collateral first');
-                  if (amt > maxBorrowable) return alert(`Exceeds borrowing limit. Max: ${maxBorrowable.toFixed(2)} BADM`);
+                  if (amt > maxBorrowable) return alert(`Exceeds borrowing limit. Max: ${maxBorrowable.toFixed(2)} PLDM`);
                   if (maxBorrowable <= 0) return alert('Insufficient collateral to borrow');
-                  console.log('🔵 Attempting to borrow:', amt, 'BADM');
+                  console.log('🔵 Attempting to borrow:', amt, 'PLDM');
                   console.log('   - Collateral:', position?.collateral_eth, 'ETH');
                   console.log('   - Credit Score:', creditScore);
-                  console.log('   - Max Borrowable:', maxBorrowable, 'BADM');
+                  console.log('   - Max Borrowable:', maxBorrowable, 'PLDM');
                   borrow(borrowAmt);
                 }}
                 disabled={!isConnected || isSigning || isConfirming || !borrowAmt || parseFloat(borrowAmt) <= 0 || parseFloat(borrowAmt) > maxBorrowable}
@@ -590,34 +591,34 @@ export default function DashboardBorrowerPage() {
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-[#22c55e] uppercase tracking-wider">Repay</div>
                 <div className="text-xs text-text-tertiary">
-                  {availableBADM > 0 ? `${availableBADM.toFixed(2)} BADM` : '0.00 BADM'}
+                  {availablePLDM > 0 ? `${availablePLDM.toFixed(2)} PLDM` : '0.00 PLDM'}
                 </div>
               </div>
               <div className="flex gap-2">
                 <input
                   type="number"
-                  placeholder="BADM amount"
+                  placeholder="PLDM amount"
                   value={repayAmt}
                   onChange={(e) => setRepayAmt(e.target.value)}
                   className="flex-1 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#22c55e] transition-colors"
                 />
                 <button
-                  onClick={() => setRepayAmt(Math.min(availableBADM, position?.debt_value || 0).toFixed(2))}
+                  onClick={() => setRepayAmt(Math.min(availablePLDM, position?.debt_value || 0).toFixed(2))}
                   disabled={(position?.debt_value || 0) <= 0}
                   className="px-3 py-2 rounded text-xs font-bold border border-[#22c55e55] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   MAX
                 </button>
               </div>
-              {parseFloat(repayAmt) > availableBADM && (
-                <div className="text-xs text-[#ff3860]">⚠ Insufficient BADM balance</div>
+              {parseFloat(repayAmt) > availablePLDM && (
+                <div className="text-xs text-[#ff3860]">⚠ Insufficient PLDM balance</div>
               )}
               {parseFloat(repayAmt) > (position?.debt_value || 0) && (
                 <div className="text-xs text-[#f0a500]">⚠ Exceeds total debt</div>
               )}
               {(position?.debt_value || 0) > 0 && (
                 <div className="text-xs text-[#00d4ff] bg-[rgba(0,212,255,0.05)] border border-[#00d4ff33] rounded p-2">
-                  ℹ️ <span className="font-bold">Two steps:</span> (1) Click "Approve" to allow LendingPool to spend BADM → (2) Click "Repay" to repay loan and unlock collateral
+                  ℹ️ <span className="font-bold">Two steps:</span> (1) Click "Approve" to allow LendingPool to spend PLDM → (2) Click "Repay" to repay loan and unlock collateral
                 </div>
               )}
               <div className="flex gap-2">
@@ -625,10 +626,10 @@ export default function DashboardBorrowerPage() {
                   onClick={() => {
                     const amt = parseFloat(repayAmt);
                     if (!repayAmt || amt <= 0) return alert('Enter a valid amount');
-                    if (amt > availableBADM) return alert(`Insufficient BADM. Available: ${availableBADM.toFixed(2)} BADM`);
+                    if (amt > availablePLDM) return alert(`Insufficient PLDM. Available: ${availablePLDM.toFixed(2)} PLDM`);
                     approveRepay(repayAmt);
                   }}
-                  disabled={!isConnected || isSigning || isConfirming || !repayAmt || parseFloat(repayAmt) <= 0 || parseFloat(repayAmt) > availableBADM}
+                  disabled={!isConnected || isSigning || isConfirming || !repayAmt || parseFloat(repayAmt) <= 0 || parseFloat(repayAmt) > availablePLDM}
                   className="flex-1 py-2 rounded text-xs font-bold border border-[#22c55e] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {isSigning ? 'Signing…' : 'Approve'}
@@ -637,11 +638,11 @@ export default function DashboardBorrowerPage() {
                   onClick={() => {
                     const amt = parseFloat(repayAmt);
                     if (!repayAmt || amt <= 0) return alert('Enter a valid amount');
-                    if (amt > availableBADM) return alert(`Insufficient BADM. Available: ${availableBADM.toFixed(2)} BADM`);
-                    if (amt > (position?.debt_value || 0)) return alert(`Cannot repay more than debt: ${position?.debt_value.toFixed(2)} BADM`);
+                    if (amt > availablePLDM) return alert(`Insufficient PLDM. Available: ${availablePLDM.toFixed(2)} PLDM`);
+                    if (amt > (position?.debt_value || 0)) return alert(`Cannot repay more than debt: ${position?.debt_value.toFixed(2)} PLDM`);
                     repay(repayAmt);
                   }}
-                  disabled={!isConnected || isSigning || isConfirming || !repayAmt || parseFloat(repayAmt) <= 0 || parseFloat(repayAmt) > availableBADM}
+                  disabled={!isConnected || isSigning || isConfirming || !repayAmt || parseFloat(repayAmt) <= 0 || parseFloat(repayAmt) > availablePLDM}
                   className="flex-1 py-2 rounded text-xs font-bold bg-[#22c55e] text-[color:var(--color-bg-primary)] hover:bg-[#16a34a] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {isSigning ? 'Signing…' : 'Repay'}

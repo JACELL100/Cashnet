@@ -159,7 +159,7 @@ const Sidebar: React.FC = () => {
                 <div className="bg-(--color-bg-accent) rounded p-2">
                   <div className="text-text-tertiary text-[10px] mb-0.5">Borrowed</div>
                   <div className="text-text-primary font-bold">
-                    {position.debt_value.toFixed(2)} BADM
+                    {position.debt_value.toFixed(2)} PLDM
                   </div>
                 </div>
               )}

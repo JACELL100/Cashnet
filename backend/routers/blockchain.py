@@ -21,9 +21,10 @@ async def get_blockchain_transactions(
     contract: Optional[str] = Query(None, description="Filter by contract name"),
 ) -> Dict[str, Any]:
     """
-    Get blockchain transaction history from simulation.
-    
-    Returns both real on-chain transactions and simulated transaction records.
+    Get blockchain transaction history, newest first.
+
+    Merges real indexed on-chain events (on_chain=true) with the simulation's
+    records (simulated=true for mock-hash records that never hit the chain).
     """
     try:
         integrator = await get_blockchain_integrator()
@@ -32,7 +33,37 @@ async def get_blockchain_transactions(
             transactions = integrator.get_tx_by_contract(contract)
         else:
             transactions = integrator.get_tx_history(limit)
-        
+        for t in transactions:
+            t.setdefault("timestamp", t.get("args", {}).get("timestamp"))
+
+        # Real LendingPool / LiquidityPool events indexed from Sepolia (chain_indexer.py)
+        try:
+            from database import SessionLocal
+            from chain_indexer import query_events, serialize_event
+            db = SessionLocal()
+            try:
+                for ev in query_events(db, contract=contract, limit=limit):
+                    e = serialize_event(ev)
+                    transactions.append({
+                        "tx_hash": e["tx_hash"],
+                        "contract": e["contract"],
+                        "function": e["event"],
+                        "args": {**e["args"], "on_chain": True},
+                        "block_number": e["block_number"],
+                        "gas_used": None,
+                        "status": "success",
+                        "on_chain": True,
+                        "simulated": False,
+                        "wallet": e["wallet"],
+                        "timestamp": int(ev.timestamp.timestamp()) if ev.timestamp else None,
+                    })
+            finally:
+                db.close()
+        except Exception as ex:
+            print(f"/blockchain/transactions: indexed events unavailable: {ex}")
+
+        transactions.sort(key=lambda t: t.get("timestamp") or 0, reverse=True)
+        transactions = transactions[:limit]
         return {
             "success": True,
             "transaction_count": len(transactions),
@@ -162,7 +193,7 @@ async def get_transaction_details(tx_hash: str) -> Dict[str, Any]:
         return {
             "success": True,
             "transaction": tx,
-            "explorer_url": f"https://sepolia.etherscan.io/tx/{tx_hash}",
+            "explorer_url": f"https://sepolia.etherscan.io/tx/{tx_hash}" if tx.get("on_chain") else None,
         }
     except HTTPException:
         raise

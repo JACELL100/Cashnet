@@ -14,8 +14,10 @@ interface BlockchainTransaction {
   function: string;
   args: Record<string, any>;
   block_number: number;
-  gas_used: number;
+  gas_used: number | null;
   status: string;
+  on_chain?: boolean;
+  simulated?: boolean;
 }
 
 interface BlockchainStats {
@@ -294,16 +296,21 @@ export default function BlockchainMonitorPage() {
                     <Badge className={`${getStatusColor(tx.status)} text-white`}>
                       {tx.status}
                     </Badge>
-                    {tx.args.on_chain && (
+                    {(tx.on_chain ?? tx.args.on_chain) && (
                       <Badge variant="default" className="bg-green-600">
                         <TrendingUp className="h-3 w-3 mr-1" />
                         On-Chain
                       </Badge>
                     )}
+                    {tx.simulated && (
+                      <Badge variant="outline" className="border-yellow-500 text-yellow-500">
+                        SIMULATED
+                      </Badge>
+                    )}
                   </div>
                   <div className="text-right text-sm text-(--muted-foreground)">
                     <div>Block #{tx.block_number}</div>
-                    <div>{(tx.gas_used / 1000).toFixed(1)}k gas</div>
+                    {tx.gas_used ? <div>{(tx.gas_used / 1000).toFixed(1)}k gas</div> : null}
                   </div>
                 </div>
 
@@ -311,7 +318,7 @@ export default function BlockchainMonitorPage() {
                   <code className="text-xs bg-(--muted) px-2 py-1 rounded flex-1 truncate">
                     {tx.tx_hash}
                   </code>
-                  {tx.tx_hash.startsWith("0x") && tx.tx_hash.length === 66 && (
+                  {!tx.simulated && tx.tx_hash.startsWith("0x") && tx.tx_hash.length === 66 && (
                     <a
                       href={`https://sepolia.etherscan.io/tx/${tx.tx_hash}`}
                       target="_blank"

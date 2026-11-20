@@ -57,17 +57,30 @@ export async function loginWithWallet(
   };
 }
 
+/** Bearer header from the persisted auth store (admin/auditor JWT). Read from storage to avoid a store import cycle. */
+export function authHeaders(): Record<string, string> {
+  try {
+    if (typeof window === 'undefined') return {};
+    const raw = window.localStorage.getItem('auth-store');
+    const token = raw ? JSON.parse(raw)?.state?.token : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function apiRequest<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   try {
     const response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(),
         ...options?.headers,
       },
-      ...options,
     });
 
     if (!response.ok) {
@@ -142,11 +155,7 @@ export const lendingApi = {
   getBorrowers: () => apiRequest('/api/lending/borrowers'),
   getMetrics: () => apiRequest('/api/lending/metrics'),
   getCascadeEvents: () => apiRequest('/api/lending/cascade-events'),
-  triggerLiquidation: (borrowerId: string) =>
-    apiRequest('/api/lending/liquidate', {
-      method: 'POST',
-      body: JSON.stringify({ borrowerId }),
-    }),
+  // Liquidation is signed by the user via MetaMask: useLendingActions().liquidate()
 };
 
 /* === THREAT API === */

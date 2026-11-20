@@ -9,8 +9,27 @@ except ImportError:
     # Fallback for older web3.py versions
     from web3.middleware import geth_poa_middleware
 from config import settings
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
+import threading
+import time
+
+# Process-wide lock serialising nonce fetch + sign + send for the server wallet.
+# Module-level (not per-instance) because several BlockchainService instances exist
+# (e.g. agents/blockchain_integrator.py creates its own) but share one wallet.
+_TX_LOCK = threading.Lock()
+_last_nonce: Dict[str, tuple] = {}  # address -> (nonce, monotonic time sent)
+
+
+def _next_nonce(w3, address: str) -> int:
+    """Next nonce for `address`; must be called with _TX_LOCK held."""
+    pending = w3.eth.get_transaction_count(address, "pending")
+    last = _last_nonce.get(address)
+    # RPC "pending" count can lag right after a send; never reuse a nonce we just used.
+    # Only trust our cached value briefly so a dropped tx can't leave a permanent gap.
+    if last is not None and pending <= last[0] and time.monotonic() - last[1] < 120:
+        return last[0] + 1
+    return pending
 
 
 class BlockchainService:
@@ -114,31 +133,34 @@ class BlockchainService:
         contract = self.contracts[contract_name]
         function = getattr(contract.functions, function_name)
         
-        # Build transaction
-        transaction = function(*args).build_transaction({
-            'from': self.account.address,
-            'nonce': self.w3.eth.get_transaction_count(self.account.address, "pending"),
-            'gas': 2000000,
-            'gasPrice': self.w3.eth.gas_price,
-            'value': value
-        })
-        
-        # Sign transaction
-        signed_txn = self.w3.eth.account.sign_transaction(
-            transaction, 
-            private_key=self.account.key
-        )
-        
-        # Send transaction (handle both old and new web3.py versions)
-        raw_tx = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
-        if raw_tx is None:
-            raise ValueError("Could not extract raw transaction from signed transaction")
-        tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
-        
-        # Wait for receipt
+        with _TX_LOCK:
+            nonce = _next_nonce(self.w3, self.account.address)
+            # Build transaction
+            transaction = function(*args).build_transaction({
+                'from': self.account.address,
+                'nonce': nonce,
+                'gas': 2000000,
+                'gasPrice': self.w3.eth.gas_price,
+                'value': value
+            })
+
+            # Sign transaction
+            signed_txn = self.w3.eth.account.sign_transaction(
+                transaction,
+                private_key=self.account.key
+            )
+
+            # Send transaction (handle both old and new web3.py versions)
+            raw_tx = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
+            if raw_tx is None:
+                raise ValueError("Could not extract raw transaction from signed transaction")
+            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+            _last_nonce[self.account.address] = (nonce, time.monotonic())
+
+        # Wait for receipt (outside the lock so other txs aren't blocked)
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
         
-        return receipt['transactionHash'].hex()
+        return Web3.to_hex(receipt['transactionHash'])  # always 0x-prefixed
     
     def send_raw_transaction_dict(self, transaction_dict: Dict) -> str:
         """
@@ -148,22 +170,28 @@ class BlockchainService:
         if not self.account:
             raise ValueError("No account configured")
         
-        # Sign the transaction
-        signed_txn = self.w3.eth.account.sign_transaction(
-            transaction_dict,
-            private_key=self.account.key
-        )
-        
-        # Send the raw transaction (handle both old and new web3.py versions)
-        raw_tx = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
-        if raw_tx is None:
-            raise ValueError("Could not extract raw transaction from signed transaction")
-        tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
-        
-        # Wait for receipt
+        with _TX_LOCK:
+            # Re-assign the nonce under the lock (caller-supplied nonce may be stale)
+            nonce = _next_nonce(self.w3, self.account.address)
+            transaction_dict = {**transaction_dict, 'nonce': nonce}
+
+            # Sign the transaction
+            signed_txn = self.w3.eth.account.sign_transaction(
+                transaction_dict,
+                private_key=self.account.key
+            )
+
+            # Send the raw transaction (handle both old and new web3.py versions)
+            raw_tx = getattr(signed_txn, 'rawTransaction', None) or getattr(signed_txn, 'raw_transaction', None)
+            if raw_tx is None:
+                raise ValueError("Could not extract raw transaction from signed transaction")
+            tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+            _last_nonce[self.account.address] = (nonce, time.monotonic())
+
+        # Wait for receipt (outside the lock)
         receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         
-        return receipt['transactionHash'].hex()
+        return Web3.to_hex(receipt['transactionHash'])  # always 0x-prefixed
     
     def get_transaction_receipt(self, tx_hash: str) -> Dict:
         """Get transaction receipt"""
@@ -185,5 +213,42 @@ class BlockchainService:
         return event.create_filter(fromBlock=from_block)
 
 
+    def sync_credit_score_onchain(self, wallet: str, score) -> Optional[str]:
+        """
+        Push a borrower's DB credit score to CreditRegistry.updateScore (server wallet has ORACLE_ROLE).
+        Skips invalid wallets and unchanged scores. Never raises; returns tx hash or None.
+        """
+        try:
+            if not wallet or score is None or not Web3.is_address(wallet):
+                return None
+            if "CreditRegistry" not in self.contracts or not self.account:
+                return None
+            wallet_cs = Web3.to_checksum_address(wallet)
+            score = int(score)
+            if score < 0:
+                return None
+            current = int(self.call_contract_function("CreditRegistry", "creditScores", wallet_cs))
+            if current == score:
+                return None
+            tx_hash = self.send_transaction("CreditRegistry", "updateScore", wallet_cs, score)
+            print(f"[credit-sync] {wallet_cs}: {current} -> {score} tx={tx_hash}")
+            return tx_hash
+        except Exception as e:
+            print(f"[credit-sync] failed for {wallet}: {e}")
+            return None
+
+
 # Global blockchain service instance
 blockchain_service = BlockchainService()
+
+
+def schedule_credit_score_sync(wallet: str, score) -> None:
+    """Fire-and-forget on-chain credit score sync (runs in a daemon thread, never blocks the request)."""
+    try:
+        threading.Thread(
+            target=blockchain_service.sync_credit_score_onchain,
+            args=(wallet, score),
+            daemon=True,
+        ).start()
+    except Exception as e:
+        print(f"[credit-sync] could not schedule sync for {wallet}: {e}")

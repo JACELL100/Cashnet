@@ -7,6 +7,8 @@ from database import get_db
 from models import Participant
 from schemas import ParticipantCreate, ParticipantResponse
 from typing import List
+from blockchain_service import schedule_credit_score_sync
+from routers.auth import get_current_admin_or_auditor
 
 router = APIRouter(prefix="/participants", tags=["Participants"])
 
@@ -64,7 +66,12 @@ async def get_participant(wallet: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{wallet}/score")
-async def update_participant_score(wallet: str, payload: dict, db: Session = Depends(get_db)):
+async def update_participant_score(
+    wallet: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_admin_or_auditor),  # score is pushed on-chain → must be authenticated
+):
     """Update credit score for a participant (300-850)"""
     participant = db.query(Participant).filter(
         Participant.wallet == wallet
@@ -80,6 +87,7 @@ async def update_participant_score(wallet: str, payload: dict, db: Session = Dep
     participant.score = score
     db.commit()
     db.refresh(participant)
+    schedule_credit_score_sync(participant.wallet, participant.score)
     return {"wallet": wallet, "score": participant.score}
 
 

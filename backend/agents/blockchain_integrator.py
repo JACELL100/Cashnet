@@ -36,6 +36,12 @@ class OnChainTx:
     gas_used: int
     status: str  # "success" | "failed" | "pending"
 
+    @property
+    def on_chain(self) -> bool:
+        # Only real swaps (execute_real_swap) set args["on_chain"]=True; everything else
+        # (liquidations, borrows, flash-loan / scenario logs) uses a mock hash and never hit the chain.
+        return bool(self.args.get("on_chain"))
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "tx_hash": self.tx_hash,
@@ -45,6 +51,8 @@ class OnChainTx:
             "block_number": self.block_number,
             "gas_used": self.gas_used,
             "status": self.status,
+            "on_chain": self.on_chain,
+            "simulated": not self.on_chain,
         }
 
 
@@ -413,6 +421,7 @@ class BlockchainIntegrator:
             "price_impact_pct": price_impact,
             "timestamp": self._current_timestamp(),
             "on_chain": real_tx_hash is not None,
+            "simulated": real_tx_hash is None,
         }
 
         # Create transaction record
@@ -451,6 +460,8 @@ class BlockchainIntegrator:
             "collateral_seized": collateral_seized,
             "bonus_pct": bonus_pct,
             "timestamp": self._current_timestamp(),
+            "on_chain": False,
+            "simulated": True,
         }
 
         tx = OnChainTx(
@@ -482,6 +493,8 @@ class BlockchainIntegrator:
             "collateral": collateral,
             "interest_rate_pct": interest_rate,
             "timestamp": self._current_timestamp(),
+            "on_chain": False,
+            "simulated": True,
         }
 
         tx = OnChainTx(
@@ -515,6 +528,8 @@ class BlockchainIntegrator:
             "liquidations": liquidations_triggered,
             "attack_type": attack_type,
             "timestamp": self._current_timestamp(),
+            "on_chain": False,
+            "simulated": True,
         }
 
         tx = OnChainTx(
@@ -548,6 +563,8 @@ class BlockchainIntegrator:
             "damage": damage,
             "severity": severity,
             "timestamp": self._current_timestamp(),
+            "on_chain": False,
+            "simulated": True,
         }
 
         tx = OnChainTx(

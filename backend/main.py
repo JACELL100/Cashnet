@@ -12,6 +12,7 @@ from config import settings
 from agents.router import router as agents_router
 from agents.scenario_router import router as scenario_router
 from routers import participants, pool, lending, alerts, simulations, api_adapter, auth, wallet_auth, system_control, blockchain, logs
+from routers import chain_events
 from routers.contract_analyzer import router as contract_analyzer_router
 from routers.market_intelligence import router as market_intel_router
 from liquidity_engine.router import router as liquidity_engine_router
@@ -50,6 +51,7 @@ app.include_router(system_control.router) # System pause/unpause → /system/*
 app.include_router(blockchain.router)    # Blockchain transactions → /blockchain/*
 app.include_router(logs.router)          # System logs → /api/logs/*
 app.include_router(api_adapter.router)   # Frontend API adapter → /api/*
+app.include_router(chain_events.router)  # Indexed on-chain events → /api/chain/*
 app.include_router(participants.router)
 app.include_router(pool.router)
 app.include_router(lending.router)
@@ -157,6 +159,13 @@ async def startup_event():
             print("⚠️  BlockchainIntegrator running in simulation mode")
     except Exception as e:
         print(f"⚠️  BlockchainIntegrator init failed: {e}")
+
+    # Start on-chain event indexer (LendingPool / LiquidityPool logs -> chain_events table)
+    try:
+        from chain_indexer import start_indexer
+        start_indexer()
+    except Exception as e:
+        print(f"⚠️  Chain indexer failed to start: {e}")
 
     # Verify Groq LLM connectivity
     try:

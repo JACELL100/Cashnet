@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
 from routers import participants, pool, lending, alerts, simulations
+from routers.auth import get_current_admin
 from typing import Dict, Any, Optional
 from agents.simulation_runner import simulation_runner
 from agents.fraud_monitor import FraudMonitor
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/api", tags=["API Adapter"])
 # ============================================================================
 
 @router.post("/simulation/start")
-async def start_simulation(body: Dict[str, Any] = None):
+async def start_simulation(body: Dict[str, Any] = None, _admin=Depends(get_current_admin)):
     """Start the real multi-agent simulation with blockchain integration."""
     if body is None:
         body = {}
@@ -41,19 +42,19 @@ async def get_simulation_status():
 
 
 @router.post("/simulation/pause")
-async def pause_simulation():
+async def pause_simulation(_admin=Depends(get_current_admin)):
     result = await simulation_runner.pause()
     return {"success": True, "data": result}
 
 
 @router.post("/simulation/resume")
-async def resume_simulation():
+async def resume_simulation(_admin=Depends(get_current_admin)):
     result = await simulation_runner.resume()
     return {"success": True, "data": result}
 
 
 @router.post("/simulation/stop")
-async def stop_simulation(db: Session = Depends(get_db)):
+async def stop_simulation(db: Session = Depends(get_db), _admin=Depends(get_current_admin)):
     """Stop the simulation engine"""
     from models import Simulation
     from datetime import datetime
@@ -287,80 +288,8 @@ async def get_borrowers(db: Session = Depends(get_db)):
         }
 
 
-@router.post("/lending/request-borrower-role")
-async def request_borrower_role(body: Dict[str, Any], db: Session = Depends(get_db)):
-    """
-    Request BORROWER_ROLE for a wallet address.
-    This endpoint auto-grants the role (simpler than requiring admin approval).
-    """
-    from blockchain_service import blockchain_service
-    from models import Borrower
-    
-    wallet_address = body.get("wallet_address")
-    if not wallet_address:
-        return {
-            "success": False,
-            "error": "wallet_address is required"
-        }
-    
-    try:
-        # Check if borrower exists in database
-        borrower = db.query(Borrower).filter(Borrower.wallet_address == wallet_address).first()
-        if not borrower:
-            # Create borrower if doesn't exist
-            from secrets import token_hex
-            borrower = Borrower(
-                wallet_address=wallet_address,
-                nonce=token_hex(16),
-                is_active=1,
-                credit_score=500
-            )
-            db.add(borrower)
-            db.commit()
-        
-        # Get the BORROWER_ROLE hash from contract
-        role_hash = blockchain_service.call_contract_function("AccessControl", "BORROWER_ROLE")
-        
-        # Check if user already has the role
-        has_role = blockchain_service.call_contract_function(
-            "AccessControl",
-            "hasRole",
-            role_hash,
-            wallet_address
-        )
-        
-        if has_role:
-            return {
-                "success": True,
-                "message": "Wallet already has BORROWER role",
-                "has_role": True
-            }
-        
-        # Grant the BORROWER_ROLE
-        print(f"🔑 Auto-granting BORROWER_ROLE to {wallet_address}")
-        tx_hash = blockchain_service.send_transaction(
-            "AccessControl",
-            "grantRole",
-            role_hash,
-            wallet_address
-        )
-        
-        print(f"✅ BORROWER_ROLE granted to {wallet_address}, tx: {tx_hash}")
-        
-        return {
-            "success": True,
-            "message": "BORROWER role granted successfully",
-            "tx_hash": tx_hash,
-            "has_role": True
-        }
-    except Exception as e:
-        print(f"❌ Error granting BORROWER_ROLE to {wallet_address}: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Failed to grant BORROWER role. Please contact administrator.",
-            "has_role": False
-        }
+# NOTE: POST /lending/request-borrower-role (server-signed AccessControl.grantRole) was removed:
+# LendingPool.borrow() no longer checks BORROWER_ROLE and no frontend called it.
 
 
 @router.get("/lending/check-borrower-role/{wallet_address}")
@@ -417,7 +346,7 @@ async def get_borrower_position(wallet: str):
         # Read debt from LendingPool.loans mapping
         loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
         debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
-        print(f"   - Debt: {debt_tokens} BADM (principal: {loan_data[0]}, interest: {loan_data[1]})")
+        print(f"   - Debt: {debt_tokens} PLDM (principal: {loan_data[0]}, interest: {loan_data[1]})")
         
         # Read max LTV from CreditRegistry
         max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
@@ -516,41 +445,44 @@ async def get_cascade_events(db: Session = Depends(get_db)):
         Transaction.type == "LIQUIDATE"
     ).order_by(Transaction.timestamp.desc()).limit(10).all()
     
+    data = [
+        {
+            "id": str(liq.id),
+            "wallet": liq.wallet,
+            "amount": liq.amount,
+            "timestamp": liq.timestamp.isoformat(),
+            "on_chain": False,
+        }
+        for liq in liquidations
+    ]
+
+    # Real LendingPool.Liquidated events indexed from Sepolia
+    try:
+        from chain_indexer import query_events, serialize_event
+        for ev in query_events(db, contract="LendingPool", events=["Liquidated"], limit=10):
+            e = serialize_event(ev)
+            data.append({
+                "id": f"chain-{e['id']}",
+                "wallet": e["wallet"],
+                "liquidator": e["args"].get("liquidator"),
+                "amount": e["amounts"].get("debtRecovered", 0.0),
+                "timestamp": e["timestamp"],
+                "tx_hash": e["tx_hash"],
+                "block_number": e["block_number"],
+                "on_chain": True,
+            })
+    except Exception as ex:
+        print(f"cascade-events: indexed events unavailable: {ex}")
+
+    data.sort(key=lambda d: d.get("timestamp") or "", reverse=True)
     return {
         "success": True,
-        "data": [
-            {
-                "id": str(liq.id),
-                "wallet": liq.wallet,
-                "amount": liq.amount,
-                "timestamp": liq.timestamp.isoformat()
-            }
-            for liq in liquidations
-        ]
+        "data": data[:20]
     }
 
 
-@router.post("/lending/liquidate")
-async def trigger_liquidation(user_wallet: str):
-    """Trigger liquidation for a borrower on-chain"""
-    from blockchain_service import blockchain_service
-    
-    try:
-        tx_hash = blockchain_service.send_transaction("LendingPool", "liquidate", user_wallet)
-        
-        return {
-            "success": True,
-            "data": {
-                "message": "Liquidation transaction submitted to Sepolia",
-                "target_wallet": user_wallet,
-                "tx_hash": tx_hash
-            }
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+# NOTE: POST /lending/liquidate (server-signed LendingPool.liquidate) was removed —
+# liquidations are user actions signed via MetaMask (frontend/hooks/useLendingActions.ts liquidate()).
 
 
 # ============================================================================
@@ -981,8 +913,8 @@ async def get_loans(wallet: str, db: Session = Depends(get_db)):
         collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
         collateral_eth = collateral_wei / 1e18
         
-        print(f"   - Principal: {principal} BADM")
-        print(f"   - Interest: {interest} BADM")
+        print(f"   - Principal: {principal} PLDM")
+        print(f"   - Interest: {interest} PLDM")
         print(f"   - Collateral: {collateral_eth} ETH")
         
         loans = []
@@ -1401,54 +1333,7 @@ async def get_token_balance(token: str, wallet: str):
         return {"success": False, "error": str(e)}
 
 
-@router.post("/blockchain/execute-swap")
-async def execute_blockchain_swap(body: Dict[str, Any]):
-    """
-    Execute a REAL on-chain swap via LiquidityPool contract.
-    Requires ENABLE_BLOCKCHAIN_TXS=true in .env.local.
-    Body: { token_in, token_out, amount }
-    """
-    from agents.blockchain_integrator import get_blockchain_integrator
-    try:
-        integrator = await get_blockchain_integrator()
-        
-        if not integrator.enable_real_txs:
-            return {
-                "success": False,
-                "error": "On-chain transactions disabled. Set ENABLE_BLOCKCHAIN_TXS=true in .env.local"
-            }
-        
-        token_in = body.get("token_in", "PALLADIUM")
-        token_out = body.get("token_out", "BADASSIUM")
-        amount = float(body.get("amount", 0))
-        
-        if amount <= 0:
-            return {"success": False, "error": "Amount must be greater than 0"}
-        
-        # Use the configured wallet from PRIVATE_KEY
-        tx_hash = await integrator.execute_real_swap(
-            agent_wallet=None,  # Will use default from PRIVATE_KEY
-            token_in=token_in,
-            token_out=token_out,
-            amount_in=amount,
-        )
-        
-        if tx_hash:
-            return {
-                "success": True,
-                "data": {
-                    "tx_hash": tx_hash,
-                    "etherscan": f"https://sepolia.etherscan.io/tx/{tx_hash}",
-                    "token_in": token_in,
-                    "token_out": token_out,
-                    "amount": amount,
-                }
-            }
-        else:
-            return {"success": False, "error": "Swap transaction failed"}
-            
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+# NOTE: POST /blockchain/execute-swap (server-signed swap, unauthenticated, no frontend caller) was removed.
 
 
 @router.post("/blockchain/record-agent-action")
@@ -1541,7 +1426,7 @@ async def get_contract_addresses():
 
 
 @router.post("/blockchain/toggle-real-txs")
-async def toggle_real_blockchain_txs(body: Dict[str, Any]):
+async def toggle_real_blockchain_txs(body: Dict[str, Any], _admin=Depends(get_current_admin)):
     """
     Toggle real on-chain transaction execution at runtime.
     Body: { enabled: bool }

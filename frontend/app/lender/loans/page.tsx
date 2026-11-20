@@ -48,6 +48,8 @@ interface TxRecord {
   token: string;
   timestamp: number | null;
   metadata?: Record<string, unknown>;
+  on_chain?: boolean;
+  simulated?: boolean;
 }
 
 interface CascadeEvent {
@@ -100,7 +102,7 @@ export default function LoanPortfolioPage() {
       const [bRes, mRes, tRes, cRes, rRes] = await Promise.allSettled([
         fetch(`${API_URL}/api/lending/borrowers`),
         fetch(`${API_URL}/api/lending/metrics`),
-        fetch(`${API_URL}/pool/transactions?limit=50`),
+        fetch(`${API_URL}/pool/transactions?limit=50&include_lending=true`),
         fetch(`${API_URL}/api/lending/cascade-events`),
         fetch(`${API_URL}/api/credit/dynamic-rates`),
       ]);
@@ -745,15 +747,21 @@ export default function LoanPortfolioPage() {
                         }}
                       >
                         <td className="px-4 py-3">
-                          <a
-                            href={`${SEPOLIA}/tx/${tx.hash}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline"
-                            style={{ color: '#00d4ff' }}
-                          >
-                            {shortAddr(tx.hash)}
-                          </a>
+                          {tx.simulated ? (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ color: '#f0a500', border: '1px solid #f0a500' }}>
+                              SIMULATED
+                            </span>
+                          ) : (
+                            <a
+                              href={`${SEPOLIA}/tx/${tx.hash}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline"
+                              style={{ color: '#00d4ff' }}
+                            >
+                              {shortAddr(tx.hash)}
+                            </a>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span

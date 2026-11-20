@@ -285,7 +285,7 @@ export default function SystemControlPage() {
         <div className="space-y-2">
           {[
             { name: 'LendingPool', desc: 'Loan creation, repayment, and liquidations', endpoints: '/lending/*' },
-            { name: 'LiquidityPool', desc: 'Token swaps and liquidity provision/removal', endpoints: '/pool/swap, /pool/add-liquidity, /pool/remove-liquidity' },
+            { name: 'LiquidityPool', desc: 'Token swaps and liquidity provision/removal', endpoints: '/pool/state, /pool/transactions (writes via MetaMask)' },
             { name: 'CollateralVault', desc: 'Collateral deposits and withdrawals', endpoints: '/lending/deposit-collateral' },
           ].map((contract) => (
             <div

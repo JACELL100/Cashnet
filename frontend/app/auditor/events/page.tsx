@@ -440,7 +440,10 @@ export default function EventLogPage() {
                   {event.message}
                   
                   {/* Show transaction hash if available */}
-                  {event.metadata?.tx_hash && (
+                  {event.metadata?.tx_hash && event.metadata?.simulated && (
+                    <span className="ml-2 text-[#f0a500] font-bold">[SIMULATED]</span>
+                  )}
+                  {event.metadata?.tx_hash && !event.metadata?.simulated && (
                     <a 
                       href={`https://sepolia.etherscan.io/tx/${event.metadata.tx_hash}`}
                       target="_blank"

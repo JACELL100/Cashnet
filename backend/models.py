@@ -1,7 +1,7 @@
 """
 SQLAlchemy database models for Rust-eze Simulation Lab
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Enum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Enum, BigInteger, UniqueConstraint
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -158,3 +158,28 @@ class SystemLog(Base):
     log_metadata = Column(Text)  # JSON string for additional data (renamed from metadata to avoid SQLAlchemy conflict)
     user_id = Column(String)  # Optional: wallet address or email
     request_id = Column(String)  # Optional: for request tracing
+
+
+class ChainEvent(Base):
+    """On-chain contract events indexed from Sepolia (LendingPool / LiquidityPool) by chain_indexer.py"""
+    __tablename__ = "chain_events"
+    __table_args__ = (UniqueConstraint("tx_hash", "log_index", name="uq_chain_events_tx_log"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tx_hash = Column(String(66), nullable=False, index=True)
+    log_index = Column(Integer, nullable=False)
+    block_number = Column(BigInteger, nullable=False, index=True)
+    contract = Column(String, nullable=False, index=True)   # LendingPool | LiquidityPool
+    event = Column(String, nullable=False, index=True)      # Borrowed, Repaid, Swap, ...
+    wallet = Column(String(42), index=True)                 # primary actor (user/provider), checksum
+    args = Column(Text)                                     # JSON; uint256 values stored as decimal strings
+    timestamp = Column(DateTime(timezone=True), index=True) # block timestamp
+
+
+class KeyValueState(Base):
+    """Tiny key/value store for background job cursors (e.g. chain indexer last block)."""
+    __tablename__ = "kv_state"
+
+    key = Column(String, primary_key=True)
+    value = Column(String)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
