@@ -1,6 +1,6 @@
 'use client';
 
-import { useWriteContract, useWaitForTransactionReceipt, useAccount } from 'wagmi';
+import { useWriteContract, useWaitForTransactionReceipt, useAccount, usePublicClient } from 'wagmi';
 import { parseUnits } from 'viem';
 import { sepolia } from 'wagmi/chains';
 import {
@@ -14,9 +14,11 @@ import {
  */
 export function usePoolActions() {
     const { address, isConnected } = useAccount();
+    const publicClient = usePublicClient({ chainId: sepolia.id });
 
     const {
         writeContract,
+        writeContractAsync,
         data: txHash,
         isPending: isSigning,
         error: writeError,
@@ -92,17 +94,37 @@ export function usePoolActions() {
         });
     };
 
-    const swap = (tokenIn: 'PAL' | 'BAD', amount: string) => {
+    /** Quote via LiquidityPool.getAmountOut (0.3% fee included). */
+    const quoteSwap = async (tokenIn: 'PAL' | 'BAD', amount: string): Promise<bigint> => {
+        if (!publicClient) throw new Error('No RPC client');
         const tokenAddr = tokenIn === 'PAL' ? PALLADIUM_ADDRESS : BADASSIUM_ADDRESS;
-        if (!isConnected) return alert('Connect your wallet first');
-        writeContract({
-            chainId: sepolia.id,
+        return (await publicClient.readContract({
             address: LIQUIDITY_POOL_ADDRESS,
             abi: LIQUIDITY_POOL_ABI,
-            functionName: 'swap',
+            functionName: 'getAmountOut',
             args: [tokenAddr, parseUnits(amount, 18)],
-            gas: BigInt(500000),
-        });
+        })) as bigint;
+    };
+
+    /** Swap with slippage protection: minAmountOut = on-chain quote - `slippageBps` (default 0.5%). */
+    const swap = async (tokenIn: 'PAL' | 'BAD', amount: string, slippageBps = 50) => {
+        const tokenAddr = tokenIn === 'PAL' ? PALLADIUM_ADDRESS : BADASSIUM_ADDRESS;
+        if (!isConnected) return alert('Connect your wallet first');
+        try {
+            const quote = await quoteSwap(tokenIn, amount);
+            if (quote === BigInt(0)) return alert('Swap amount too small or pool empty');
+            const minAmountOut = (quote * BigInt(10000 - slippageBps)) / BigInt(10000);
+            await writeContractAsync({
+                chainId: sepolia.id,
+                address: LIQUIDITY_POOL_ADDRESS,
+                abi: LIQUIDITY_POOL_ABI,
+                functionName: 'swap',
+                args: [tokenAddr, parseUnits(amount, 18), minAmountOut],
+                gas: BigInt(500000),
+            });
+        } catch (e) {
+            console.error('swap failed', e);
+        }
     };
 
     return {
@@ -111,6 +133,7 @@ export function usePoolActions() {
         addLiquidity,
         removeLiquidity,
         approveSwapToken,
+        quoteSwap,
         swap,
         reset,
 

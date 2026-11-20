@@ -10,10 +10,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrende
 
 // Real deployed contract addresses (Sepolia)
 const CONTRACTS = [
-  { name: 'LendingPool', address: '0x21ef825C55Ad215cD1BD438A64B59ec5C2028A3f' },
+  { name: 'LendingPool', address: '0x1D549DB252Ff426f921c6b7855E32796d63b939A' },
   { name: 'CollateralVault', address: '0x4dA93A5782aE7eb5a36314CF818604283DA87875' },
   { name: 'CreditRegistry', address: '0x9449a34A5Cdeb02480936B605960b22aE049909b' },
-  { name: 'LiquidityPool', address: '0x4dE122297CbB79287f826822F68ce77146956b75' },
+  { name: 'LiquidityPool', address: '0x6E1359e90a30607F54D8DdBb312E9Cb5dfF0C954' },
   { name: 'Palladium (PAL)', address: '0x983A613d5f224459D2919e0d9E9e77C72E032042' },
   { name: 'Badassium (BAD)', address: '0x2960e22Ed3256E2bAfF233F5d03A20f597f14e07' },
 ];

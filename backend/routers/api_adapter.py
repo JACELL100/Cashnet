@@ -235,35 +235,23 @@ async def get_borrowers(db: Session = Depends(get_db)):
                 # Fetch on-chain data for each borrower
                 wallet = borrower.wallet_address
                 
-                # Read collateral from Vault
-                collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
-                collateral_eth = collateral_wei / 1e18
-                
-                # Read debt from LendingPool.loans mapping
-                loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
-                debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
-                
-                # Read max LTV from CreditRegistry
-                max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
-                
-                # Calculate health factor using ETH values directly
-                if debt_tokens == 0:
-                    health_factor = 999.0
-                    at_risk = False
-                else:
-                    # Health factor = (collateral * LTV) / debt
-                    health_factor = (collateral_eth * (max_ltv / 100.0)) / debt_tokens
-                    liquidation_threshold = (collateral_eth * ((max_ltv + 5) / 100.0))
-                    at_risk = debt_tokens > liquidation_threshold
-                
+                # LendingPool v2 position (Chainlink-priced collateral, index-accrued debt)
+                pos = blockchain_service.get_account_position(wallet)
+                collateral_eth = pos["collateral_eth"]
+                debt_tokens = pos["debt"]
+                health_factor = pos["health_factor"]
+                at_risk = pos["at_risk"]
+
                 # Only include borrowers with collateral or debt
                 if collateral_eth > 0 or debt_tokens > 0:
                     result.append({
                         "id": str(borrower.id),
                         "wallet": wallet,
-                        "collateral_value": round(collateral_eth, 6),
-                        "debt_value": round(debt_tokens, 6),
+                        "collateral_value": round(collateral_eth, 6),  # ETH
+                        "collateral_usd": round(pos["collateral_usd"], 2),
+                        "debt_value": round(debt_tokens, 6),  # PLDM
                         "health_factor": round(health_factor, 4),
+                        "max_ltv": pos["max_ltv"],
                         "at_risk": at_risk,
                         "credit_score": borrower.credit_score or 500,
                         "name": borrower.name,
@@ -338,42 +326,23 @@ async def get_borrower_position(wallet: str):
         if "LendingPool" not in blockchain_service.contracts:
             raise Exception("Contracts not loaded")
         
-        # Read collateral from Vault
-        collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
-        collateral_eth = collateral_wei / 1e18
-        print(f"   - Collateral: {collateral_eth} ETH ({collateral_wei} wei)")
-        
-        # Read debt from LendingPool.loans mapping
-        loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
-        debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
-        print(f"   - Debt: {debt_tokens} PLDM (principal: {loan_data[0]}, interest: {loan_data[1]})")
-        
-        # Read max LTV from CreditRegistry
-        max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
-        print(f"   - Max LTV: {max_ltv}%")
-        
-        # Calculate health factor (mock eth price is 2000 in the contract)
-        collateral_value_usd = collateral_eth * 2000
-        
-        if debt_tokens == 0:
-            health_factor = 999.0
-            is_liquidatable = False
-        else:
-            health_factor = (collateral_value_usd * (max_ltv / 100.0)) / debt_tokens
-            liquidation_threshold = (collateral_value_usd * ((max_ltv + 5) / 100.0))
-            is_liquidatable = debt_tokens > liquidation_threshold
-        
-        print(f"   - Health Factor: {health_factor}")
-        
+        # LendingPool v2 getAccountData: Chainlink ETH/USD price, index-accrued debt
+        pos = blockchain_service.get_account_position(wallet)
+        print(f"   - Collateral: {pos['collateral_eth']} ETH (${pos['collateral_usd']:.2f}), "
+              f"debt {pos['debt']} PLDM, maxLTV {pos['max_ltv']}%, HF {pos['health_factor']}")
+
         result = {
             "success": True,
             "data": {
                 "wallet": wallet,
-                "collateral_eth": round(collateral_eth, 6),
-                "collateral_value": round(collateral_value_usd, 2),
-                "debt_value": round(debt_tokens, 2),
-                "health_factor": round(health_factor, 4),
-                "at_risk": is_liquidatable
+                "collateral_eth": round(pos["collateral_eth"], 6),
+                "collateral_value": round(pos["collateral_usd"], 2),  # USD
+                "debt_value": round(pos["debt"], 6),  # PLDM (~USD)
+                "health_factor": round(pos["health_factor"], 4),
+                "max_ltv": pos["max_ltv"],
+                "max_borrowable": round(pos["max_borrowable"], 6),
+                "eth_price": round(pos["eth_price"], 2),
+                "at_risk": pos["at_risk"]
             }
         }
         print(f"✅ Returning: {result['data']}")
@@ -402,27 +371,31 @@ async def get_lending_metrics():
     from config import settings
     
     try:
-        # Get from contracts
-        total_borrowed_wei = blockchain_service.call_contract_function("LendingPool", "totalBorrowed")
-        borrow_apr = blockchain_service.call_contract_function("LendingPool", "getCurrentInterestRate")
-        
-        # Get collateral in pool (Token A balance)
-        pool_collateral_wei = blockchain_service.call_contract_function("TokenA", "balanceOf", settings.lending_pool_address)
-        
-        total_borrowed = total_borrowed_wei / 1e18
-        pool_collateral = pool_collateral_wei / 1e18
-        
-        utilization = (total_borrowed / (total_borrowed + pool_collateral)) * 100 if (total_borrowed + pool_collateral) > 0 else 0
-        
+        # LendingPool v2: totalBorrowed = current total debt (index-accrued), cash = idle PLDM
+        call = blockchain_service.call_contract_function
+        total_borrowed = call("LendingPool", "totalBorrowed") / 1e18
+        pool_cash = call("LendingPool", "getAvailableLiquidity") / 1e18
+        borrow_apr_bps = call("LendingPool", "getBorrowRateBps")
+        supply_apr_bps = call("LendingPool", "getSupplyRateBps")
+        vault_eth = blockchain_service.w3.eth.get_balance(settings.collateral_vault_address) / 1e18
+        eth_price = blockchain_service.get_eth_price()
+
+        utilization = (total_borrowed / (total_borrowed + pool_cash)) * 100 if (total_borrowed + pool_cash) > 0 else 0
+
         return {
             "success": True,
             "data": {
-                "total_collateral": pool_collateral,
+                "total_collateral": pool_cash,  # idle PLDM liquidity (legacy field name)
+                "available_liquidity": pool_cash,
+                "collateral_eth": vault_eth,
+                "collateral_usd": vault_eth * eth_price,
+                "eth_price": eth_price,
                 "total_debt": total_borrowed,
-                "total_supplied": pool_collateral + total_borrowed,
+                "total_supplied": pool_cash + total_borrowed,
                 "utilization_rate": utilization,
                 "utilization_ratio": utilization / 100,
-                "borrow_apr": borrow_apr / 100,
+                "borrow_apr": borrow_apr_bps / 10000,
+                "supply_apr": supply_apr_bps / 10000,
                 "avg_health_factor": 0,
                 "at_risk_count": 0,
                 "liquidation_count": 0
@@ -465,7 +438,7 @@ async def get_cascade_events(db: Session = Depends(get_db)):
                 "id": f"chain-{e['id']}",
                 "wallet": e["wallet"],
                 "liquidator": e["args"].get("liquidator"),
-                "amount": e["amounts"].get("debtRecovered", 0.0),
+                "amount": e["amounts"].get("repaid", e["amounts"].get("debtRecovered", 0.0)),
                 "timestamp": e["timestamp"],
                 "tx_hash": e["tx_hash"],
                 "block_number": e["block_number"],
@@ -903,29 +876,23 @@ async def get_loans(wallet: str, db: Session = Depends(get_db)):
         wallet = Web3.to_checksum_address(wallet)
         print(f"📊 Fetching loans for wallet: {wallet}")
         
-        # Read loan data from LendingPool contract
-        loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
-        principal = loan_data[0] / 1e18
-        interest = loan_data[1] / 1e18
-        total_borrowed = principal + interest
-        
-        # Read collateral from Vault
-        collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
-        collateral_eth = collateral_wei / 1e18
-        
-        print(f"   - Principal: {principal} PLDM")
-        print(f"   - Interest: {interest} PLDM")
-        print(f"   - Collateral: {collateral_eth} ETH")
-        
+        # LendingPool v2: single position per wallet (index-accrued debt, Chainlink-priced collateral)
+        pos = blockchain_service.get_account_position(wallet)
+        total_borrowed = pos["debt"]
+        rate_bps = blockchain_service.call_contract_function("LendingPool", "getBorrowRateBps")
+        print(f"   - Debt: {total_borrowed} PLDM, collateral {pos['collateral_eth']} ETH")
+
         loans = []
         if total_borrowed > 0:
             loans.append({
                 "id": f"{wallet[:10]}...{wallet[-4:]}",
                 "borrowed": total_borrowed,
-                "collateral": collateral_eth * 2000,  # USD value
-                "interest_rate": 5.0,  # Mock rate
-                "status": "active",
-                "due_date": "2026-03-22"  # Mock date
+                "collateral": pos["collateral_usd"],  # USD value
+                "collateral_eth": pos["collateral_eth"],
+                "health_factor": pos["health_factor"],
+                "interest_rate": rate_bps / 10000,  # current variable borrow APR as a fraction (0.05 = 5%)
+                "status": "at_risk" if pos["at_risk"] else "active",
+                "due_date": None  # open-ended variable-rate loan
             })
         
         return {

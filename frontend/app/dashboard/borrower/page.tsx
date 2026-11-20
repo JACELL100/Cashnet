@@ -45,6 +45,10 @@ interface Position {
   debt_value: number;
   health_factor: number;
   at_risk: boolean;
+  // LendingPool v2 getAccountData (Chainlink-priced)
+  max_ltv?: number;
+  max_borrowable?: number;
+  eth_price?: number;
 }
 
 interface Loan {
@@ -53,7 +57,7 @@ interface Loan {
   collateral: number;
   interest_rate: number;
   status: 'active' | 'paid' | 'defaulted';
-  due_date: string;
+  due_date: string | null;
 }
 
 const loanStatusStyle: Record<string, { color: string }> = {
@@ -66,7 +70,7 @@ export default function DashboardBorrowerPage() {
   const user = useAuthStore((s) => s.user);
 
   const {
-    depositCollateral, borrow, approveRepay, repay, address,
+    depositCollateral, withdrawCollateral, borrow, approveRepay, repay, repayAll, address,
     isConnected, isSigning, isConfirming, isConfirmed, txHash, error, reset,
   } = useLendingActions();
 
@@ -82,6 +86,7 @@ export default function DashboardBorrowerPage() {
   const [minCreditScore, setMinCreditScore] = useState<number>(400);
 
   const [depositAmt, setDepositAmt] = useState('');
+  const [withdrawAmt, setWithdrawAmt] = useState('');
   const [borrowAmt, setBorrowAmt] = useState('');
   const [repayAmt, setRepayAmt] = useState('');
   const [tab, setTab] = useState<'overview' | 'loans' | 'credit'>('overview');
@@ -94,8 +99,19 @@ export default function DashboardBorrowerPage() {
   const availablePLDM = pldmBalance ? parseFloat(formatEther(pldmBalance.value)) : 0;
   
   // Max borrowable amount based on collateral and the credit-score LTV tiers of CreditRegistry.getMaxLTV
-  const maxLtv = creditScore >= 800 ? 0.8 : creditScore >= 600 ? 0.6 : creditScore >= 400 ? 0.4 : 0;
-  const maxBorrowable = position ? Math.max(0, (position.collateral_value * maxLtv) - position.debt_value) : 0;
+  const maxLtv = position?.max_ltv != null
+    ? position.max_ltv / 100
+    : creditScore >= 800 ? 0.8 : creditScore >= 600 ? 0.6 : creditScore >= 400 ? 0.4 : 0;
+  const maxBorrowable = position
+    ? (position.max_borrowable ?? Math.max(0, (position.collateral_value * maxLtv) - position.debt_value))
+    : 0;
+  // ETH that can be withdrawn while keeping debt <= collateral * maxLTV (on-chain rule)
+  const collateralEth = position?.collateral_eth ?? 0;
+  const ethPrice = position?.eth_price ?? (collateralEth > 0 ? (position?.collateral_value ?? 0) / collateralEth : 0);
+  const maxWithdrawable = !position ? 0
+    : position.debt_value <= 0 ? collateralEth
+    : maxLtv > 0 && ethPrice > 0 ? Math.max(0, collateralEth - position.debt_value / (ethPrice * maxLtv) * 1.001)
+    : 0;
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -174,6 +190,7 @@ export default function DashboardBorrowerPage() {
       
       // Clear input fields on successful transaction
       setDepositAmt('');
+      setWithdrawAmt('');
       setBorrowAmt('');
       setRepayAmt('');
       
@@ -366,7 +383,7 @@ export default function DashboardBorrowerPage() {
               <div className="text-3xl font-bold text-text-primary">
                 {position && position.collateral_eth !== undefined 
                   ? fmtETH(position.collateral_eth) 
-                  : fmtETH(totalCollateral / 2000)}
+                  : fmtETH(ethPrice > 0 ? totalCollateral / ethPrice : 0)}
               </div>
               <div className="text-xs text-text-tertiary">
                 {position && position.collateral_eth > 0
@@ -417,13 +434,15 @@ export default function DashboardBorrowerPage() {
             <div className="text-xs opacity-90">
               {error.message.includes('Credit score too low') && 'Your credit score is too low to borrow. Minimum 600 required.'}
               {error.message.includes('Not verified borrower') && 'You need BORROWER role. Contact admin to get verified.'}
-              {error.message.includes('Exceeds LTV limit') && 'Borrowing amount exceeds your collateral limit.'}
+              {error.message.includes('Exceeds LTV limit') && 'This would put your debt above your collateral limit (max LTV).'}
+              {error.message.includes('Stale price') && 'ETH price feed is stale. Try again shortly.'}
               {error.message.includes('Not enough liquidity') && 'Pool has insufficient liquidity for this borrow amount.'}
               {error.message.includes('System Paused') && 'System is currently paused. Try again later.'}
               {error.message.includes('gas limit') && 'Transaction may revert. Check: 1) Credit score ≥ 600, 2) Sufficient collateral deposited, 3) BORROWER role assigned'}
               {!error.message.includes('Credit score') && 
                !error.message.includes('Not verified') && 
                !error.message.includes('Exceeds LTV') &&
+               !error.message.includes('Stale price') &&
                !error.message.includes('Not enough liquidity') &&
                !error.message.includes('System Paused') &&
                !error.message.includes('gas limit') &&
@@ -528,6 +547,45 @@ export default function DashboardBorrowerPage() {
               >
                 {isSigning ? 'Signing…' : isConfirming ? 'Confirming…' : 'Deposit'}
               </button>
+
+              {/* Withdraw collateral */}
+              <div className="pt-3 border-t border-[color:var(--color-border)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold text-[#00d4ff] uppercase tracking-wider">Withdraw Collateral</div>
+                  <div className="text-xs text-text-tertiary">Max: {maxWithdrawable.toFixed(4)} ETH</div>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    placeholder="ETH amount"
+                    value={withdrawAmt}
+                    onChange={(e) => setWithdrawAmt(e.target.value)}
+                    className="flex-1 min-w-0 bg-[color:var(--color-bg-primary)] border border-[color:var(--color-border)] rounded px-3 py-2 text-sm text-text-primary outline-none focus:border-[#00d4ff] transition-colors"
+                  />
+                  <button
+                    onClick={() => setWithdrawAmt((Math.floor(maxWithdrawable * 1e6) / 1e6).toString())}
+                    disabled={maxWithdrawable <= 0}
+                    className="px-3 py-2 rounded text-xs font-bold border border-[#00d4ff55] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    MAX
+                  </button>
+                  <button
+                    onClick={() => {
+                      const amt = parseFloat(withdrawAmt);
+                      if (!withdrawAmt || amt <= 0) return alert('Enter a valid amount');
+                      if (amt > collateralEth) return alert(`Only ${collateralEth.toFixed(4)} ETH deposited`);
+                      withdrawCollateral(withdrawAmt);
+                    }}
+                    disabled={!isConnected || isSigning || isConfirming || !withdrawAmt || parseFloat(withdrawAmt) <= 0 || parseFloat(withdrawAmt) > collateralEth}
+                    className="px-3 py-2 rounded text-xs font-bold border border-[#00d4ff] text-[#00d4ff] hover:bg-[rgba(0,212,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Withdraw
+                  </button>
+                </div>
+                {parseFloat(withdrawAmt) > maxWithdrawable && parseFloat(withdrawAmt) <= collateralEth && (
+                  <div className="text-xs text-[#f0a500]">⚠ Would exceed your max LTV — repay first</div>
+                )}
+              </div>
             </div>
 
             {/* Borrow */}
@@ -618,7 +676,7 @@ export default function DashboardBorrowerPage() {
               )}
               {(position?.debt_value || 0) > 0 && (
                 <div className="text-xs text-[#00d4ff] bg-[rgba(0,212,255,0.05)] border border-[#00d4ff33] rounded p-2">
-                  ℹ️ <span className="font-bold">Two steps:</span> (1) Click "Approve" to allow LendingPool to spend PLDM → (2) Click "Repay" to repay loan and unlock collateral
+                  ℹ️ <span className="font-bold">Two steps:</span> (1) Click "Approve" to allow LendingPool to spend PLDM → (2) Click "Repay". Use "Repay all" to clear the full debt incl. accrued interest.
                 </div>
               )}
               <div className="flex gap-2">
@@ -648,6 +706,15 @@ export default function DashboardBorrowerPage() {
                   {isSigning ? 'Signing…' : 'Repay'}
                 </button>
               </div>
+              {(position?.debt_value || 0) > 0 && (
+                <button
+                  onClick={() => repayAll()}
+                  disabled={!isConnected || isSigning || isConfirming || availablePLDM < (position?.debt_value || 0)}
+                  className="w-full py-1.5 rounded text-xs font-bold border border-[#22c55e55] text-[#22c55e] hover:bg-[rgba(34,197,94,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Repay all ({(position?.debt_value || 0).toFixed(4)} PLDM + interest)
+                </button>
+              )}
             </div>
           </div>
 

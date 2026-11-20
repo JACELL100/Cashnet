@@ -42,7 +42,8 @@ def mint(contract, to, amount_tokens):
     print(f"  ✓ Minted {amount_tokens} tokens → {to}  [tx: {tx_hash.hex()[:20]}...]")
     return receipt
 
-# Mint to the LendingPool so it has liquidity to lend out
-mint(token_a, "0x21ef825C55Ad215cD1BD438A64B59ec5C2028A3f", 1_000_000)  # LendingPool
+# NOTE: LendingPool v2 (0x1D549DB252Ff426f921c6b7855E32796d63b939A) uses internal cash accounting,
+# so PLDM minted directly to it is NOT lendable. Seed lending liquidity with LendingPool.supply()
+# instead (see contracts/scripts/deploy_v2.py, which supplied 1,000,000 PLDM).
 mint(token_a, deployer.address, 100_000)   # your own wallet
 mint(token_b, deployer.address, 100_000)

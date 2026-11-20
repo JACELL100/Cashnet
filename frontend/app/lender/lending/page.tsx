@@ -7,6 +7,7 @@ import { useLendingStore, BorrowerPosition } from '@/store/lendingStore';
 import { useSimulationStore } from '@/store/simulationStore';
 import { useUIStore } from '@/store/uiStore';
 import { useLendingActions } from '@/hooks/useLendingActions';
+import LenderSupplyPanel from '@/components/LenderSupplyPanel';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://cashnet-hee7.onrender.com';
 
@@ -42,12 +43,13 @@ export default function LendingPage() {
         const items = (json.data ?? []).map((b: any) => ({
           id: b.id ?? b.wallet,
           wallet: b.wallet,
-          collateral: b.collateral_value ?? 0,
+          collateral: b.collateral_usd ?? 0, // USD (Chainlink-priced)
           borrowed: b.debt_value ?? 0,
           healthFactor: b.health_factor ?? 999,
           creditScore: b.credit_score ?? 500,
-          liquidationPrice: b.collateral_value && b.debt_value
-            ? Math.round(b.debt_value * 1.5 / (b.collateral_value / 2000))
+          // ETH price at which debt > collateral * (maxLTV + 5%) -> liquidatable (LendingPool v2 rule)
+          liquidationPrice: b.collateral_value && b.debt_value && b.max_ltv
+            ? Math.round((b.debt_value * 100) / (b.collateral_value * (b.max_ltv + 5)))
             : 0,
           status: b.at_risk
             ? 'danger' as const
@@ -80,13 +82,15 @@ export default function LendingPage() {
   }, [fetchLendingData]);
 
   const { liquidate, isConnected, isSigning } = useLendingActions();
+  // Per-borrower PLDM repay amount for liquidation (blank = 50% of current debt, the max close factor)
+  const [liqAmounts, setLiqAmounts] = useState<Record<string, string>>({});
 
-  const handleLiquidate = async (borrowerId: string) => {
+  const handleLiquidate = async (wallet: string) => {
     if (!isConnected) return alert('Connect your wallet first');
-    liquidate(borrowerId);
+    liquidate(wallet, liqAmounts[wallet]);
     addCascadeEvent({
       timestamp: Date.now(),
-      borrower: borrowerId,
+      borrower: wallet,
       event: 'Liquidation triggered via MetaMask',
     });
     addToast({
@@ -192,18 +196,19 @@ export default function LendingPage() {
         </div>
       </div>
 
+      {/* Lender supply / withdraw (cnPLDM shares) */}
+      <LenderSupplyPanel />
+
       {/* Interest Rate Chart & Health Heatmap */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 card space-y-4">
           <h3 className="text-sm font-mono font-bold text-text-primary uppercase">Interest Rate Model</h3>
           <div className="space-y-2">
-            {[
-              { utilization: '0%', rate: '2.0%' },
-              { utilization: '25%', rate: '2.5%' },
-              { utilization: '50%', rate: '3.2%' },
-              { utilization: '75%', rate: '6.5%' },
-              { utilization: '90%', rate: '15.0%' },
-            ].map((point) => (
+            {/* LendingPool v2: borrow APR = 5% + 15% x utilization */}
+            {[0, 25, 50, 75, 90].map((u) => ({
+              utilization: `${u}%`,
+              rate: `${(5 + 0.15 * u).toFixed(2)}%`,
+            })).map((point) => (
               <div key={point.utilization} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-text-secondary font-mono">{point.utilization}</span>
@@ -266,8 +271,8 @@ export default function LendingPage() {
         <DataTable
           columns={[
             { header: 'Wallet', accessor: 'wallet', className: 'font-mono text-xs' },
-            { header: 'Collateral', accessor: (row: any) => `$${(row.collateral / 1000).toFixed(0)}k`, className: 'text-xs' },
-            { header: 'Borrowed', accessor: (row: any) => `$${(row.borrowed / 1000).toFixed(0)}k`, className: 'text-xs' },
+            { header: 'Collateral', accessor: (row: any) => `$${row.collateral.toLocaleString(undefined, { maximumFractionDigits: 2 })}`, className: 'text-xs' },
+            { header: 'Borrowed', accessor: (row: any) => `${row.borrowed.toLocaleString(undefined, { maximumFractionDigits: 2 })} PLDM`, className: 'text-xs' },
             {
               header: 'Health Factor',
               accessor: (row: any) => (
@@ -305,14 +310,26 @@ export default function LendingPage() {
             },
             {
               header: 'Action',
-              accessor: (row: any) => (
-                <button
-                  onClick={() => handleLiquidate(row.id)}
-                  className={`text-xs font-mono ${row.status === 'danger' ? 'text-danger hover:underline' : 'text-text-tertiary'}`}
-                  disabled={row.status !== 'danger' && !isRunning}
-                >
-                  {row.status === 'danger' ? 'Liquidate' : '—'}
-                </button>
+              accessor: (row: any) => row.status === 'danger' ? (
+                <div className="flex items-center gap-1 justify-center">
+                  <input
+                    type="number" min="0"
+                    placeholder={`${(row.borrowed / 2).toFixed(2)}`}
+                    title="PLDM to repay (default / max: 50% of debt). You receive ETH worth repay + 5%."
+                    value={liqAmounts[row.wallet] ?? ''}
+                    onChange={(e) => setLiqAmounts((m) => ({ ...m, [row.wallet]: e.target.value }))}
+                    className="form-input w-20 text-xs font-mono py-1 px-2"
+                  />
+                  <button
+                    onClick={() => handleLiquidate(row.wallet)}
+                    className="text-xs font-mono text-danger hover:underline disabled:opacity-40"
+                    disabled={!isConnected || isSigning}
+                  >
+                    Liquidate
+                  </button>
+                </div>
+              ) : (
+                <span className="text-xs font-mono text-text-tertiary">—</span>
               ),
               className: 'text-center',
             },

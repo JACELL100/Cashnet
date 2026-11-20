@@ -24,7 +24,7 @@ interface Loan {
   collateral: number;
   interest_rate: number;
   status: 'active' | 'paid' | 'defaulted';
-  due_date: string;
+  due_date: string | null;
 }
 
 export default function CreditPage() {
@@ -197,7 +197,7 @@ export default function CreditPage() {
             },
             {
               header: 'Due Date',
-              accessor: (row: Loan) => new Date(row.due_date).toLocaleDateString(),
+              accessor: (row: Loan) => (row.due_date ? new Date(row.due_date).toLocaleDateString() : "Open-ended"),
               className: 'text-xs',
             },
             {

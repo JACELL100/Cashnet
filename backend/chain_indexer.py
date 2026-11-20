@@ -33,17 +33,31 @@ MAX_CHUNKS_PER_CYCLE = int(os.getenv("CHAIN_INDEX_MAX_CHUNKS_PER_CYCLE", "40"))
 DEFAULT_LOOKBACK = 50_000
 CONFIRMATIONS = 2
 CURSOR_KEY = "chain_indexer:last_block"
+ADDRESSES_KEY = "chain_indexer:addresses"
+# When the tracked contract addresses change (e.g. Phase 2 redeploy), rewind the cursor to this
+# block so the new contracts' events since deployment are picked up. Duplicates are skipped by
+# (tx_hash, log_index), and events already indexed for the old addresses stay in chain_events.
+# Default = block before the LendingPool/LiquidityPool v2 deployment (12175813).
+REWIND_ON_ADDRESS_CHANGE = int(os.getenv("CHAIN_INDEX_REWIND_BLOCK", "12175812"))
 
 _ABI_DIR = Path(__file__).parent.parent / "contracts" / "abi"
 
 EVENTS = {
-    "LendingPool": ["CollateralDeposited", "Borrowed", "Repaid", "Liquidated"],
+    # LendingPool v2. Liquidated is now (user, liquidator, repaid, collateralSeized); rows indexed
+    # from the v1 pool keep their old `debtRecovered` arg.
+    "LendingPool": [
+        "CollateralDeposited", "CollateralWithdrawn", "Borrowed", "Repaid", "Liquidated",
+        "Supplied", "Withdrawn",
+    ],
     "LiquidityPool": ["Swap", "LiquidityAdded", "LiquidityRemoved"],
 }
 
 # Map on-chain events to the TransactionTypeEnum-style labels the UI already understands
 EVENT_TX_TYPE = {
     "CollateralDeposited": "DEPOSIT_COLLATERAL",
+    "CollateralWithdrawn": "WITHDRAW_COLLATERAL",
+    "Supplied": "SUPPLY",
+    "Withdrawn": "WITHDRAW",
     "Borrowed": "BORROW",
     "Repaid": "REPAY",
     "Liquidated": "LIQUIDATE",
@@ -100,9 +114,22 @@ def _jsonable(v: Any) -> Any:
 def _get_cursor(db) -> Optional[int]:
     row = db.query(KeyValueState).filter(KeyValueState.key == CURSOR_KEY).first()
     try:
-        return int(row.value) if row and row.value is not None else None
+        cursor = int(row.value) if row and row.value is not None else None
     except ValueError:
-        return None
+        cursor = None
+    # Detect a change of tracked contract addresses and rewind so new contracts are backfilled
+    current = ",".join(sorted(c.address.lower() for c in _contracts.values()))
+    addr_row = db.query(KeyValueState).filter(KeyValueState.key == ADDRESSES_KEY).first()
+    if addr_row is None or addr_row.value != current:
+        if cursor is not None and cursor > REWIND_ON_ADDRESS_CHANGE:
+            print(f"[chain-indexer] contract addresses changed; rewinding cursor {cursor} -> {REWIND_ON_ADDRESS_CHANGE}")
+            cursor = REWIND_ON_ADDRESS_CHANGE
+        if addr_row is None:
+            db.add(KeyValueState(key=ADDRESSES_KEY, value=current))
+        else:
+            addr_row.value = current
+        # persisted together with the first chunk's cursor commit
+    return cursor
 
 
 def _set_cursor(db, block: int) -> None:
@@ -143,7 +170,7 @@ def fetch_events(from_block: int, to_block: int) -> List[Dict[str, Any]]:
             continue
         decoded = getattr(contract.events, ev_name)().process_log(log)
         args = {k: _jsonable(v) for k, v in dict(decoded["args"]).items()}
-        wallet = args.get("user") or args.get("provider")
+        wallet = args.get("user") or args.get("provider") or args.get("lender")
         bn = int(log["blockNumber"])
         if bn not in block_ts:
             block_ts[bn] = datetime.fromtimestamp(int(w3.eth.get_block(bn)["timestamp"]), tz=timezone.utc)

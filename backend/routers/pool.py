@@ -276,11 +276,12 @@ async def get_transactions(
                     amount = e["amounts"].get("amountIn")
                 elif ev.event in ("LiquidityAdded", "LiquidityRemoved"):
                     token, amount = "PAL", e["amounts"].get("amountA")
-                elif ev.event == "CollateralDeposited":
+                elif ev.event in ("CollateralDeposited", "CollateralWithdrawn"):
                     token, amount = "ETH", e["amounts"].get("amount")
                 elif ev.event == "Liquidated":
-                    token, amount = "PLDM", e["amounts"].get("debtRecovered")
-                else:  # Borrowed / Repaid -> LendingPool.borrowToken (PLDM)
+                    # v2: repaid (PLDM); v1 rows: debtRecovered
+                    token, amount = "PLDM", e["amounts"].get("repaid", e["amounts"].get("debtRecovered"))
+                else:  # Borrowed / Repaid / Supplied / Withdrawn -> LendingPool.borrowToken (PLDM)
                     token, amount = "PLDM", e["amounts"].get("amount")
                 seen.add(e["tx_hash"].lower())
                 data.append({

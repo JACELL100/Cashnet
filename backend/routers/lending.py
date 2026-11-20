@@ -70,34 +70,16 @@ async def get_health_factor(wallet: str):
         if "LendingPool" not in blockchain_service.contracts:
             raise Exception("Contracts not loaded")
         
-        # Read collateral from Vault
-        collateral_wei = blockchain_service.call_contract_function("CollateralVault", "ethCollateral", wallet)
-        collateral_eth = collateral_wei / 1e18
-        
-        # Read debt from LendingPool.loans mapping
-        loan_data = blockchain_service.call_contract_function("LendingPool", "loans", wallet)
-        debt_tokens = (loan_data[0] + loan_data[1]) / 1e18
-        
-        # Read max LTV from CreditRegistry
-        max_ltv = blockchain_service.call_contract_function("CreditRegistry", "getMaxLTV", wallet)
-        
-        # Calculate health factor using ETH values directly
-        if debt_tokens == 0:
-            health_factor = 999.0
-            is_liquidatable = False
-        else:
-            # Health factor = (collateral * LTV) / debt
-            health_factor = (collateral_eth * (max_ltv / 100.0)) / debt_tokens
-            liquidation_threshold = (collateral_eth * ((max_ltv + 5) / 100.0))
-            is_liquidatable = debt_tokens > liquidation_threshold
-            
+        # LendingPool v2 getAccountData (Chainlink-priced; HF < 1 => liquidatable)
+        pos = blockchain_service.get_account_position(wallet)
         return {
-            "wallet": wallet,
-            "collateral_value": round(collateral_eth, 6),
-            "debt_value": round(debt_tokens, 6),
-            "health_factor": round(health_factor, 4),
-            "liquidation_threshold": round(max_ltv / 100.0, 4),
-            "at_risk": is_liquidatable
+            "wallet": pos["wallet"],
+            "collateral_value": round(pos["collateral_eth"], 6),  # ETH (frontend shows it with fmtETH)
+            "collateral_usd": round(pos["collateral_usd"], 2),
+            "debt_value": round(pos["debt"], 6),  # PLDM (~USD)
+            "health_factor": round(pos["health_factor"], 4),
+            "liquidation_threshold": round((pos["max_ltv"] + 5) / 100.0, 4) if pos["max_ltv"] else 0.0,
+            "at_risk": pos["at_risk"]
         }
     except Exception as e:
         print(f"Error fetching health factor from chain: {e}")

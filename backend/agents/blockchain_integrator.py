@@ -316,9 +316,19 @@ class BlockchainIntegrator:
                     "timestamp": time.time()
                 })
             
+            # LiquidityPool v2: swap(tokenIn, amountIn, minAmountOut) — allow 2% slippage vs the quote
+            quoted_out = liquidity_pool.functions.getAmountOut(
+                Web3.to_checksum_address(token_in_addr), amount_in_wei
+            ).call()
+            if quoted_out == 0:
+                print("⚠️  Swap quote is zero (empty pool or tiny amount)")
+                return None
+            min_amount_out = quoted_out * 98 // 100
+
             swap_tx = liquidity_pool.functions.swap(
                 Web3.to_checksum_address(token_in_addr),
-                amount_in_wei
+                amount_in_wei,
+                min_amount_out
             ).build_transaction({
                 'from': wallet_address,
                 'gas': 300000,

@@ -515,7 +515,7 @@ export default function LiquidityPoolPage() {
               {!isConnected && (
                 <p className="text-xs font-mono text-[#f0a500]">⚠ Connect wallet to transact</p>
               )}
-              <p className="text-xs font-mono text-text-tertiary">Step 1: Approve token → Step 2: Swap</p>
+              <p className="text-xs font-mono text-text-tertiary">Step 1: Approve token → Step 2: Swap (0.5% max slippage vs on-chain quote)</p>
               <div className="flex gap-2">
                 <button
                   onClick={handleApproveSwap}

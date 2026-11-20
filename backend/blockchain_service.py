@@ -213,6 +213,42 @@ class BlockchainService:
         return event.create_filter(fromBlock=from_block)
 
 
+    def get_account_position(self, wallet: str) -> Dict[str, Any]:
+        """
+        Borrower position from LendingPool v2 getAccountData (Chainlink-priced).
+        health_factor = collateralUsd*(maxLtv+5)/100 / debt  (< 1.0 => liquidatable; 999 when no debt).
+        Raises if contracts are not loaded / the call fails.
+        """
+        if "LendingPool" not in self.contracts:
+            raise ValueError("Contract LendingPool not loaded")
+        wallet_cs = Web3.to_checksum_address(wallet)
+        lp = self.contracts["LendingPool"]
+        coll_wei, coll_usd, debt, max_ltv, hf, max_borrow = lp.functions.getAccountData(wallet_cs).call()
+        is_liq = lp.functions.isLiquidatable(wallet_cs).call()
+        collateral_eth = coll_wei / 1e18
+        collateral_usd = coll_usd / 1e18
+        return {
+            "wallet": wallet_cs,
+            "collateral_wei": coll_wei,
+            "collateral_eth": collateral_eth,
+            "collateral_usd": collateral_usd,
+            "eth_price": (collateral_usd / collateral_eth) if collateral_eth > 0 else self.get_eth_price(),
+            "debt_wei": debt,
+            "debt": debt / 1e18,
+            "max_ltv": int(max_ltv),
+            "health_factor": 999.0 if hf >= 2**255 else min(hf / 1e18, 999.0),
+            "max_borrowable": max_borrow / 1e18,
+            "at_risk": bool(is_liq),
+        }
+
+    def get_eth_price(self) -> float:
+        """ETH/USD from the LendingPool's Chainlink feed (latest answer, even if stale); 0.0 on failure."""
+        try:
+            price, _updated_at, _stale = self.contracts["LendingPool"].functions.latestEthPrice().call()
+            return price / 1e18
+        except Exception:
+            return 0.0
+
     def sync_credit_score_onchain(self, wallet: str, score) -> Optional[str]:
         """
         Push a borrower's DB credit score to CreditRegistry.updateScore (server wallet has ORACLE_ROLE).

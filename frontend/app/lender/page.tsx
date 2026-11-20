@@ -73,12 +73,13 @@ export default function LenderPage() {
         const items = (json.data ?? []).map((b: any) => ({
           id: b.id ?? b.wallet,
           wallet: b.wallet,
-          collateral: b.collateral_value ?? 0,
+          collateral: b.collateral_usd ?? 0, // USD (Chainlink-priced)
           borrowed: b.debt_value ?? 0,
           healthFactor: b.health_factor ?? 999,
           creditScore: b.credit_score ?? 500,
-          liquidationPrice: b.collateral_value && b.debt_value
-            ? Math.round(b.debt_value * 1.5 / (b.collateral_value / 2000))
+          // ETH price at which the position becomes liquidatable (debt > collateral * (maxLTV + 5%))
+          liquidationPrice: b.collateral_value && b.debt_value && b.max_ltv
+            ? Math.round((b.debt_value * 100) / (b.collateral_value * (b.max_ltv + 5)))
             : 0,
           status: b.at_risk
             ? 'danger' as const

@@ -1,0 +1,50 @@
+{
+  "txs": {
+    "deploy_LendingPool": {
+      "hash": "0x7227064381791829f5019473d989d6d9a73beef287ee4a0cdd529b35ed8c8ac8",
+      "block": 12175813,
+      "address": "0x1D549DB252Ff426f921c6b7855E32796d63b939A"
+    },
+    "deploy_LiquidityPool": {
+      "hash": "0x02610b54c69a7db3428c711f57e90f24bf75d28e6662e4c0455a76389992292d",
+      "block": 12175814,
+      "address": "0x6E1359e90a30607F54D8DdBb312E9Cb5dfF0C954"
+    },
+    "vault_setLendingPool": {
+      "hash": "0x130927671a8634175e537cbc3a928b2f7a0e91f3a72d85e779ec215cf9e69f9a",
+      "block": 12175815
+    },
+    "oldAMM_removeLiquidity": {
+      "hash": "0x56e0135e79df557573c356543133a94fa37c4ccf69dd3c3aed94d07035cd678b",
+      "block": 12175816
+    },
+    "approve_PLDM_amm": {
+      "hash": "0x8552194d2257f6cac5e5c627430a3d8514099ce1b5d2b45723030490e1fc4cef",
+      "block": 12175817
+    },
+    "approve_BADM_amm": {
+      "hash": "0x116f68547fbd7b3a437a7fed90d5e530ffbdb4a9310ee03c4d3372762e189ccb",
+      "block": 12175818
+    },
+    "amm_addLiquidity": {
+      "hash": "0x25b570ed0b1a7e12420c1b8507cf1148f13be5f3ea1572c7d9d37136fc912df5",
+      "block": 12175819
+    },
+    "mint_PLDM_lending": {
+      "hash": "0x06e00ef5f1f9adafdd1c598029bceb93d276228ca52e80b9fcc213c92398e28c",
+      "block": 12175821
+    },
+    "approve_PLDM_lending": {
+      "hash": "0x9c0c5887850168e14f2dabf9cb8271821393c19da923c6e758dcf276d5771769",
+      "block": 12175822
+    },
+    "lending_supply": {
+      "hash": "0xb75480970779be3ee6af0fd252fd29a2934f22a18e028bb94db78a37d1b235fe",
+      "block": 12175823
+    }
+  },
+  "LendingPool": "0x1D549DB252Ff426f921c6b7855E32796d63b939A",
+  "LiquidityPool": "0x6E1359e90a30607F54D8DdBb312E9Cb5dfF0C954",
+  "priceFeed": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+  "oldLiquidityPool": "0x4dE122297CbB79287f826822F68ce77146956b75"
+}
