@@ -129,6 +129,48 @@ async def _coindesk_batch(session: aiohttp.ClientSession, api_key: str) -> Dict[
     return out
 
 
+# Kraken public ticker: keyless, one batched call, not blocked from cloud IPs
+# (CoinGecko rate-limits Render's shared egress IPs with HTTP 429).
+KRAKEN_PAIRS = {
+    "BTC": ("XBTUSD", "XXBTZUSD"), "ETH": ("ETHUSD", "XETHZUSD"), "SOL": ("SOLUSD",),
+    "AVAX": ("AVAXUSD",), "LINK": ("LINKUSD",), "UNI": ("UNIUSD",), "AAVE": ("AAVEUSD",),
+    "MATIC": ("POLUSD",),  # Polygon rebranded MATIC -> POL
+}
+
+
+async def _kraken_batch(session: aiohttp.ClientSession, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+    wanted = [s for s in symbols if s in KRAKEN_PAIRS]
+    if not wanted:
+        return {}
+    params = {"pair": ",".join(KRAKEN_PAIRS[s][0] for s in wanted)}
+    async with session.get("https://api.kraken.com/0/public/Ticker", params=params,
+                           timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        data = await resp.json(content_type=None)
+    if data.get("error"):
+        raise RuntimeError(f"Kraken: {data['error']}")
+
+    result = data.get("result") or {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for sym in wanted:
+        t = next((result[k] for k in KRAKEN_PAIRS[sym] if k in result), None)
+        if not t:
+            continue
+        price = float(t["c"][0])
+        open_ = float(t["o"]) or price  # today's open (00:00 UTC)
+        if price <= 0:
+            continue
+        out[sym] = {
+            "price": price,
+            "change_24h": price - open_,
+            "change_pct": (price - open_) / open_ * 100,
+            "high_24h": float(t["h"][1]),
+            "low_24h": float(t["l"][1]),
+            "volume": float(t["v"][1]) * float(t["p"][1]),  # base volume * VWAP = USD volume
+            "source": "kraken",
+        }
+    return out
+
+
 async def _coingecko_batch(session: aiohttp.ClientSession, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
     ids = {COINGECKO_IDS[s]: s for s in symbols if s in COINGECKO_IDS}
     if not ids:
@@ -163,7 +205,7 @@ async def _coingecko_batch(session: aiohttp.ClientSession, symbols: List[str]) -
 async def fetch_live_crypto_prices(api_key: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
     """
     Live prices for LIVE_SYMBOLS, cached for _LIVE_TTL seconds and shared by all callers.
-    CoinDesk first (one batched call), CoinGecko for anything missing.
+    CoinDesk first (one batched call), then Kraken, then CoinGecko for anything missing.
     Returns the last good data (possibly stale) or {} if nothing has ever succeeded.
     """
     global _live_cache, _live_ts, _coindesk_blocked_until, _live_lock
@@ -185,12 +227,14 @@ async def fetch_live_crypto_prices(api_key: Optional[str] = None) -> Dict[str, D
                     _coindesk_blocked_until = now + _COINDESK_BACKOFF
                     print(f"[MarketData] CoinDesk unavailable, backing off 1h: {e}")
 
-            missing = [s for s in LIVE_SYMBOLS if s not in prices]
-            if missing:
+            for name, fetch in (("Kraken", _kraken_batch), ("CoinGecko", _coingecko_batch)):
+                missing = [s for s in LIVE_SYMBOLS if s not in prices]
+                if not missing:
+                    break
                 try:
-                    prices.update(await _coingecko_batch(session, missing))
+                    prices.update(await fetch(session, missing))
                 except Exception as e:
-                    print(f"[MarketData] CoinGecko fallback failed: {e}")
+                    print(f"[MarketData] {name} fallback failed: {e}")
 
         if prices:
             _live_cache = prices

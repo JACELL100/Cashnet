@@ -364,7 +364,7 @@ export default function AgentsPage() {
             <div className="flex items-center gap-2">
               <span className="text-lg">📡</span>
               <h3 className="font-mono font-bold text-text-primary text-sm">LIVE MARKET DATA</h3>
-              <Badge variant={simStatus.market_data.source === 'coindesk' ? 'success' : 'medium'}>
+              <Badge variant={simStatus.market_data.source !== 'mock' ? 'success' : 'medium'}>
                 {simStatus.market_data.source.toUpperCase()}
               </Badge>
             </div>

@@ -442,7 +442,7 @@ export default function MarketIntelligencePage() {
             <span className="text-[#00d4ff]">◈</span> Market Intelligence
           </h1>
           <p className="text-xs text-text-tertiary mt-1 font-mono">
-            Live crypto & stock data • CoinDesk API • Groq AI Analysis
+            Live crypto (CoinDesk / Kraken / CoinGecko) & simulated stock data • Groq AI Analysis
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -526,7 +526,7 @@ export default function MarketIntelligencePage() {
           <div>
             <h2 className="text-sm font-mono font-bold mb-3 flex items-center gap-2">
               <span className="text-[#00d4ff]">₿</span> Cryptocurrency Markets
-              <span className="text-xs text-text-tertiary font-normal">Live from CoinDesk</span>
+              <span className="text-xs text-text-tertiary font-normal">Live market data</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {CRYPTO_SYMBOLS.map(sym => {
@@ -561,10 +561,10 @@ export default function MarketIntelligencePage() {
                     {d.source && (
                       <div className="mt-1.5">
                         <span className="text-xs px-1 py-0.5 rounded" style={{
-                          background: d.source === 'coindesk' ? 'rgba(0,212,255,0.1)' : d.source === 'coingecko' ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)',
-                          color: d.source === 'coindesk' ? '#00d4ff' : d.source === 'coingecko' ? '#22c55e' : '#94a3b8',
+                          background: d.source === 'coindesk' ? 'rgba(0,212,255,0.1)' : (d.source === 'coingecko' || d.source === 'kraken') ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)',
+                          color: d.source === 'coindesk' ? '#00d4ff' : (d.source === 'coingecko' || d.source === 'kraken') ? '#22c55e' : '#94a3b8',
                         }}>
-                          {d.source === 'coindesk' ? '● CoinDesk' : d.source === 'coingecko' ? '● CoinGecko' : '○ Simulated'}
+                          {d.source === 'coindesk' ? '● CoinDesk' : d.source === 'coingecko' ? '● CoinGecko' : d.source === 'kraken' ? '● Kraken' : '○ Simulated'}
                         </span>
                       </div>
                     )}
@@ -665,7 +665,7 @@ export default function MarketIntelligencePage() {
                 </div>
                 <div className="text-xs text-text-tertiary font-mono">
                   <div>Volume: <span className="text-text-primary">{fmtUsd(d.volume || 0)}</span></div>
-                  <div>Source: <span style={{ color: d.source === 'coindesk' ? '#00d4ff' : '#94a3b8' }}>{d.source}</span></div>
+                  <div>Source: <span style={{ color: d.source !== 'mock' ? '#00d4ff' : '#94a3b8' }}>{d.source}</span></div>
                 </div>
               </div>
             );
