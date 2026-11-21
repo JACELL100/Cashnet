@@ -633,8 +633,7 @@ async def groq_deep_analysis():
     actionable recommendations for each active threat category.
     """
     try:
-        from agents.groq_advisor import _get_groq_key, _get_groq_model, GROQ_API_URL
-        import aiohttp
+        from agents.groq_advisor import _get_groq_key, _get_groq_model, groq_chat_json
         import json
 
         groq_key = _get_groq_key()
@@ -660,38 +659,24 @@ async def groq_deep_analysis():
             f'"recommended_actions": ["prioritized list of actions"]}}'
         )
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json",
+        report = await groq_chat_json({
+            "model": _get_groq_model(),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a senior DeFi security analyst specialized in on-chain threat detection, "
+                        "MEV analysis, and smart contract vulnerability assessment. Provide thorough, "
+                        "actionable security reports in JSON format."
+                    ),
                 },
-                json={
-                    "model": _get_groq_model(),
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a senior DeFi security analyst specialized in on-chain threat detection, "
-                                "MEV analysis, and smart contract vulnerability assessment. Provide thorough, "
-                                "actionable security reports in JSON format."
-                            ),
-                        },
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 800,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                if resp.status != 200:
-                    return {"success": False, "error": f"Groq API returned {resp.status}"}
-                data = await resp.json()
-                content = data["choices"][0]["message"]["content"]
-                report = json.loads(content)
-                return {"success": True, "data": report}
+                {"role": "user", "content": user_msg},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 800,
+            "response_format": {"type": "json_object"},
+        }, timeout=15)
+        return {"success": True, "data": report}
 
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -1222,8 +1207,9 @@ async def ai_analyze_threat():
 @router.get("/ai/status")
 async def get_ai_status():
     """Get Groq LLM and CoinDesk API connectivity status."""
-    from agents.groq_advisor import _get_groq_key, _get_groq_model
+    from agents.groq_advisor import _get_groq_key, _get_groq_model, _get_groq_keys
     groq_key = _get_groq_key()
+    groq_key_count = len(_get_groq_keys())
     coindesk_key = simulation_runner.market_data.api_key
     return {
         "success": True,
@@ -1232,6 +1218,7 @@ async def get_ai_status():
                 "configured": bool(groq_key),
                 "model": _get_groq_model(),
                 "key_suffix": f"...{groq_key[-8:]}" if groq_key else None,
+                "keys_configured": groq_key_count,  # >1 means a fallback key is available
             },
             "coindesk": {
                 "configured": bool(coindesk_key),

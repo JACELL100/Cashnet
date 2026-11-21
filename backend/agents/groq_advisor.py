@@ -1,9 +1,12 @@
 """
 Groq LLM Agent Advisor
 =======================
-Uses Groq/OpenRouter's openrouter/auto model to provide AI-powered decision making
-for simulation agents. Agents query this advisor to determine trade actions,
-attack strategies, and risk assessments based on real market data.
+Uses Groq's OpenAI-compatible chat API (model from GROQ_MODEL) to provide AI-powered
+decision making for simulation agents, market narration and threat analysis.
+
+All Groq calls in the backend go through `groq_completion()`, which tries GROQ_API_KEY
+first and falls back to GROQ_API_KEY_2 when the first key is rate-limited, out of quota,
+revoked, or Groq returns a server error.
 
 Each agent type has a dedicated system prompt that matches its role.
 """
@@ -16,11 +19,26 @@ from typing import Any, Dict, Optional
 import aiohttp
 
 
-GROQ_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+# HTTP statuses meaning "this key can't serve requests right now" -> try the next key
+_KEY_FALLBACK_STATUSES = {401, 403, 429, 498}
+# Keys that recently hit a rate/quota limit are tried last until this time (monotonic seconds)
+_key_cooldown_until: Dict[str, float] = {}
+_DEFAULT_KEY_COOLDOWN = 60.0
+
+
+class GroqError(Exception):
+    """Raised when every configured Groq key failed. `status` is the last HTTP status (0 = network/config)."""
+
+    def __init__(self, status: int, detail: str):
+        super().__init__(f"Groq API error {status}: {detail}")
+        self.status = status
+        self.detail = detail
 
 
 def _get_groq_keys() -> list[str]:
-    """Return all configured Groq API keys (up to 2), filtering out empty ones."""
+    """Return configured Groq API keys in priority order (primary first), without blanks or duplicates."""
     try:
         from config import settings
         keys = [
@@ -28,10 +46,13 @@ def _get_groq_keys() -> list[str]:
             settings.groq_api_key_2 or os.getenv("GROQ_API_KEY_2", ""),
         ]
     except Exception:
-        keys = [
-            os.getenv("OPENROUTER_API_KEY", "")
-        ]
-    return [k for k in keys if k]
+        keys = [os.getenv("GROQ_API_KEY", ""), os.getenv("GROQ_API_KEY_2", "")]
+    seen: list[str] = []
+    for k in keys:
+        k = (k or "").strip()
+        if k and k not in seen:
+            seen.append(k)
+    return seen
 
 
 def _get_groq_key() -> str:
@@ -43,9 +64,67 @@ def _get_groq_key() -> str:
 def _get_groq_model() -> str:
     try:
         from config import settings
-        return settings.groq_model or "openrouter/auto"
+        return settings.groq_model or "openai/gpt-oss-120b"
     except Exception:
-        return os.getenv("GROQ_MODEL", "openrouter/auto")
+        return os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+
+def _ordered_keys() -> list[str]:
+    """Primary key first, unless it is cooling down after a rate/quota limit."""
+    now = time.monotonic()
+    keys = _get_groq_keys()
+    return [k for k in keys if _key_cooldown_until.get(k, 0) <= now] + \
+           [k for k in keys if _key_cooldown_until.get(k, 0) > now]
+
+
+async def groq_completion(payload: Dict[str, Any], timeout: float = 15.0) -> Dict[str, Any]:
+    """
+    POST a chat completion to Groq and return the response JSON.
+    Tries each configured key in turn; raises GroqError if all of them fail.
+    """
+    keys = _ordered_keys()
+    if not keys:
+        raise GroqError(0, "Groq API key not configured")
+
+    last = GroqError(0, "no request made")
+    for i, key in enumerate(keys):
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    GROQ_API_URL,
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as resp:
+                    if resp.status == 200:
+                        if i > 0:
+                            print(f"[Groq] served by fallback key ...{key[-4:]}")
+                        return await resp.json()
+                    text = (await resp.text())[:500]
+                    last = GroqError(resp.status, text)
+                    if resp.status in _KEY_FALLBACK_STATUSES or resp.status >= 500:
+                        if resp.status in (429, 498):
+                            try:
+                                wait = float(resp.headers.get("retry-after", _DEFAULT_KEY_COOLDOWN))
+                            except ValueError:
+                                wait = _DEFAULT_KEY_COOLDOWN
+                            _key_cooldown_until[key] = time.monotonic() + max(wait, 5.0)
+                        print(f"[Groq] key ...{key[-4:]} returned {resp.status}; trying next key")
+                        continue
+                    raise last  # request problem (400/413/...): another key won't help
+        except GroqError:
+            raise
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            last = GroqError(0, f"{type(e).__name__}: {e}")
+            continue
+    raise last
+
+
+async def groq_chat_json(payload: Dict[str, Any], timeout: float = 15.0) -> Dict[str, Any]:
+    """groq_completion() + parse the assistant message as JSON."""
+    data = await groq_completion(payload, timeout)
+    return json.loads(data["choices"][0]["message"]["content"])
+
 
 # Minimum seconds between Groq calls per agent (rate-limit control)
 _ADVISOR_COOLDOWN = 30.0
@@ -168,29 +247,14 @@ async def get_agent_advice(
         "response_format": {"type": "json_object"},
     }
 
-    for key in _get_groq_keys():
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status == 429 or resp.status >= 500:
-                        continue  # rate-limited or server error — try next key
-                    if resp.status != 200:
-                        return {}
-                    data = await resp.json()
-                    content = data["choices"][0]["message"]["content"]
-                    advice = json.loads(content)
-                    _advice_cache[agent_id] = advice
-                    _last_call_time[agent_id] = now
-                    return advice
-        except (aiohttp.ClientError, json.JSONDecodeError, KeyError, asyncio.TimeoutError):
-            continue  # try next key
-
-    return {}
+    try:
+        advice = await groq_chat_json(payload, timeout=10)
+    except (GroqError, json.JSONDecodeError, KeyError, TypeError) as e:
+        print(f"[Groq] agent advice failed: {e}")
+        return {}
+    _advice_cache[agent_id] = advice
+    _last_call_time[agent_id] = now
+    return advice
 
 
 # ---------------------------------------------------------------------------
@@ -224,25 +288,12 @@ async def get_market_narrative(market_context: Dict[str, Any]) -> Optional[str]:
         "max_tokens": 80,
     }
 
-    for key in _get_groq_keys():
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=8),
-                ) as resp:
-                    if resp.status == 429 or resp.status >= 500:
-                        continue
-                    if resp.status != 200:
-                        return None
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"].strip()
-        except Exception:
-            continue
-
-    return None
+    try:
+        data = await groq_completion(payload, timeout=8)
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        print(f"[Groq] market narrative failed: {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -279,23 +330,8 @@ async def analyze_threat(events: list, pool_state: Dict[str, Any]) -> Dict[str, 
         "response_format": {"type": "json_object"},
     }
 
-    for key in _get_groq_keys():
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
-                    if resp.status == 429 or resp.status >= 500:
-                        continue
-                    if resp.status != 200:
-                        return {}
-                    data = await resp.json()
-                    content = data["choices"][0]["message"]["content"]
-                    return json.loads(content)
-        except Exception:
-            continue
-
-    return {}
+    try:
+        return await groq_chat_json(payload, timeout=10)
+    except Exception as e:
+        print(f"[Groq] threat analysis failed: {e}")
+        return {}

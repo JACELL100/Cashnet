@@ -26,19 +26,13 @@ router = APIRouter(prefix="/api/market-intel", tags=["Market Intelligence"])
 # ---------------------------------------------------------------------------
 
 def _get_groq_key() -> str:
-    try:
-        from config import settings
-        return settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
-    except Exception:
-        return os.getenv("GROQ_API_KEY", "")
+    from agents.groq_advisor import _get_groq_key as _key
+    return _key()
 
 
 def _get_groq_model() -> str:
-    try:
-        from config import settings
-        return settings.groq_model or "openrouter/auto"
-    except Exception:
-        return os.getenv("GROQ_MODEL", "openrouter/auto")
+    from agents.groq_advisor import _get_groq_model as _model
+    return _model()
 
 
 def _get_coindesk_key() -> str:
@@ -49,7 +43,6 @@ def _get_coindesk_key() -> str:
         return os.getenv("COINDESK_API_KEY", "")
 
 
-GROQ_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Major crypto + stock index proxies
 CRYPTO_ASSETS = {
@@ -591,28 +584,18 @@ Based on this data, provide a comprehensive analysis. Your response MUST be vali
         return {"success": True, "data": {"analysis": default_analysis, "source": "fallback"}}
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={
-                    "model": _get_groq_model(),
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "temperature": 0.6,
-                    "max_tokens": 2000,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=aiohttp.ClientTimeout(total=20),
-            ) as resp:
-                if resp.status != 200:
-                    return {"success": True, "data": {"analysis": default_analysis, "source": "fallback"}}
-                data = await resp.json()
-                content = data["choices"][0]["message"]["content"]
-                analysis = json.loads(content)
-                return {"success": True, "data": {"analysis": analysis, "source": "groq"}}
+        from agents.groq_advisor import groq_chat_json
+        analysis = await groq_chat_json({
+            "model": _get_groq_model(),
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.6,
+            "max_tokens": 2000,
+            "response_format": {"type": "json_object"},
+        }, timeout=20)
+        return {"success": True, "data": {"analysis": analysis, "source": "groq"}}
     except Exception as e:
         print(f"[MarketIntel] Groq error: {e}")
         return {"success": True, "data": {"analysis": default_analysis, "source": "fallback"}}

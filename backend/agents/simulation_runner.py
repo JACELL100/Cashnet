@@ -35,7 +35,7 @@ from agents.borrower_agent import BorrowerAgent
 from agents.fraud_monitor import FraudMonitor
 from agents.market_data import MarketDataService, market_data_service, PriceData
 from agents.blockchain_integrator import get_blockchain_integrator, BlockchainIntegrator
-from agents.groq_advisor import get_agent_advice, get_market_narrative, analyze_threat
+from agents.groq_advisor import get_agent_advice, get_market_narrative, analyze_threat, _get_groq_model as _groq_model_name
 
 
 class SimulationRunner:
@@ -330,7 +330,7 @@ class SimulationRunner:
                             "agent_type": "ai",
                             "agent_name": "Groq Market Analyst",
                             "event_type": "ai_narrative",
-                            "data": {"narrative": narrative, "model": "openrouter/auto"},
+                            "data": {"narrative": narrative, "model": _groq_model_name()},
                             "timestamp": time.time(),
                         })
                 asyncio.create_task(_emit_narrative(market_ctx))
@@ -416,7 +416,7 @@ class SimulationRunner:
                             "agent_type": agent.agent_type.value,
                             "agent_name": agent.name,
                             "event_type": "ai_decision",
-                            "data": {"groq_advice": advice, "model": "openrouter/auto"},
+                            "data": {"groq_advice": advice, "model": _groq_model_name()},
                             "timestamp": time.time(),
                         })
 

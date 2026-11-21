@@ -667,7 +667,7 @@ async def groq_threat_predictions(
     import aiohttp
 
     try:
-        from agents.groq_advisor import _get_groq_key, _get_groq_model, GROQ_API_URL
+        from agents.groq_advisor import _get_groq_key, _get_groq_model, groq_chat_json
     except ImportError:
         return {"error": "Groq advisor not available"}
 
@@ -703,39 +703,24 @@ async def groq_threat_predictions(
     )
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={
-                    "Authorization": f"Bearer {groq_key}",
-                    "Content-Type": "application/json",
+        return await groq_chat_json({
+            "model": _get_groq_model(),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a senior DeFi security analyst and threat intelligence expert. "
+                        "You analyze ML threat predictions alongside real-time alerts to provide "
+                        "actionable security intelligence. Be specific, technical, and concise. "
+                        "Reply only with valid JSON."
+                    ),
                 },
-                json={
-                    "model": _get_groq_model(),
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "You are a senior DeFi security analyst and threat intelligence expert. "
-                                "You analyze ML threat predictions alongside real-time alerts to provide "
-                                "actionable security intelligence. Be specific, technical, and concise. "
-                                "Reply only with valid JSON."
-                            ),
-                        },
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 700,
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                if resp.status != 200:
-                    return {"error": f"Groq API returned {resp.status}"}
-                data = await resp.json()
-                content = data["choices"][0]["message"]["content"]
-                return json.loads(content)
-
+                {"role": "user", "content": user_msg},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 700,
+            "response_format": {"type": "json_object"},
+        }, timeout=15)
     except Exception as e:
         return {"error": str(e)}
 

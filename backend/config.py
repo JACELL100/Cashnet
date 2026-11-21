@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # AI / LLM
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_api_key_2: str = os.getenv("GROQ_API_KEY_2", "")  # fallback when the first key is exhausted
     groq_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
     # Supabase Auth

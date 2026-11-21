@@ -13,8 +13,6 @@ from config import settings  # ensures .env.local is loaded via load_dotenv
 
 router = APIRouter(prefix="/api/contract", tags=["Contract Analyzer"])
 
-GROQ_API_KEY = settings.groq_api_key
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = settings.groq_model
 MAX_COMPLETION_TOKENS = 4096
 
@@ -97,28 +95,23 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no explanation outside the JSON.
 
 
 async def call_groq(prompt: str) -> dict:
-    """Call Groq API and return parsed JSON response"""
-    if not GROQ_API_KEY:
+    """Call Groq (primary key, then GROQ_API_KEY_2 if the first is exhausted) and return parsed JSON."""
+    from agents.groq_advisor import groq_completion, GroqError, _get_groq_keys
+    if not _get_groq_keys():
         raise HTTPException(status_code=500, detail="GROQ_API_KEY is not set in environment variables.")
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            GROQ_API_URL,
-            headers={
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": GROQ_MODEL,
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Analyze this smart contract:\n\n```solidity\n{prompt}\n```"},
-                ],
-                "temperature": 0.2,
-                "max_tokens": MAX_COMPLETION_TOKENS,
-                "response_format": {"type": "json_object"},
-            },
-        )
-        if response.status_code == 413:
+    try:
+        data = await groq_completion({
+            "model": GROQ_MODEL,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Analyze this smart contract:\n\n```solidity\n{prompt}\n```"},
+            ],
+            "temperature": 0.2,
+            "max_tokens": MAX_COMPLETION_TOKENS,
+            "response_format": {"type": "json_object"},
+        }, timeout=120.0)
+    except GroqError as e:
+        if e.status == 413:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -126,17 +119,12 @@ async def call_groq(prompt: str) -> dict:
                     "Please analyze a smaller contract or split it into focused sections."
                 ),
             )
-        if response.status_code != 200:
-            raise HTTPException(
-                status_code=502,
-                detail=f"Groq API error: {response.status_code} — {response.text}"
-            )
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=500, detail=f"Failed to parse Groq response as JSON: {e}")
+        raise HTTPException(status_code=502, detail=f"Groq API error: {e.status} — {e.detail}")
+    content = data["choices"][0]["message"]["content"]
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse Groq response as JSON: {e}")
 
 
 @router.post("/analyze", response_model=None)
