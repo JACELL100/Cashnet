@@ -30,12 +30,14 @@ export const metadata: Metadata = {
   generator: 'dotlocal',
   icons: {
     icon: [
-      {
-        url: '/logo.png', // Path from /public directory
-      },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
     ],
-   
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180' }],
   },
+  manifest: '/manifest.webmanifest',
 
 }
 
