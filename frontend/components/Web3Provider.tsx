@@ -9,7 +9,6 @@ import { ReactNode, useState, useEffect } from 'react';
 import { NetworkGuard } from '@/components/NetworkGuard';
 import {
   injectedWallet,
-  metaMaskWallet,
   coinbaseWallet,
   walletConnectWallet,
 } from '@rainbow-me/rainbowkit/wallets';
@@ -20,12 +19,14 @@ import {
 const wcProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 const hasValidProjectId = wcProjectId && wcProjectId !== 'demo-project-id' && wcProjectId !== 'YOUR_PROJECT_ID';
 
-// Prioritise the injected (browser-extension) connector so MetaMask opens
-// instantly without waiting for the WalletConnect relay handshake.
+// MetaMask (and Phantom, Rabby, ...) are discovered automatically through EIP-6963 and
+// connect straight to the extension's provider. RainbowKit's metaMaskWallet is left out on
+// purpose: it goes through the MetaMask SDK, which can hang on "Opening MetaMask..." even
+// after the extension has approved the connection. injectedWallet covers older wallets.
 const walletGroups = [
   {
     groupName: 'Installed',
-    wallets: [injectedWallet, metaMaskWallet, coinbaseWallet],
+    wallets: [injectedWallet, coinbaseWallet],
   },
   ...(hasValidProjectId
     ? [{ groupName: 'Others', wallets: [walletConnectWallet] }]
